@@ -1,0 +1,1364 @@
+import * as fs from 'fs';
+import {
+  getTasksPath,
+  getTaskPath,
+  getTaskStatusPath,
+  getTaskReportPath,
+  getPlanPath,
+  getFeatureJsonPath,
+  ensureDir,
+  readJson,
+  writeJson,
+  writeJsonLockedSync,
+  patchJsonLockedSync,
+  readText,
+  writeText,
+  fileExists,
+  sanitizeName,
+  LockOptions,
+} from '../utils/paths.js';
+import { FeatureJson, TaskStatus, TaskStatusType, TaskOrigin, TasksSyncResult, TaskInfo, WorkerSession, SpecData } from '../types.js';
+import type { BeadsMode, BeadsModeProvider } from '../types.js';
+import { BeadGateway } from './beads/BeadGateway.js';
+import { BeadsViewerGateway } from './beads/BeadsViewerGateway.js';
+import { ConfigService } from './configService.js';
+/** Current schema version for TaskStatus */
+export const TASK_STATUS_SCHEMA_VERSION = 1;
+
+/** Fields that can be updated by background workers without clobbering completion-owned fields */
+export interface BackgroundPatchFields {
+  idempotencyKey?: string;
+  workerSession?: Partial<WorkerSession>;
+}
+
+/** Fields owned by the completion flow (not to be touched by background patches) */
+export interface CompletionFields {
+  status?: TaskStatusType;
+  summary?: string;
+  completedAt?: string;
+}
+
+interface ParsedTask {
+  folder: string;
+  order: number;
+  name: string;
+  description: string;
+  /** Raw dependency numbers parsed from plan. null = not specified (use implicit), [] = explicit none */
+  dependsOnNumbers: number[] | null;
+}
+
+type TaskStateArtifact = TaskStatus & {
+  folder: string;
+};
+
+export interface RunnableTask {
+  folder: string;
+  name: string;
+  status: TaskStatusType;
+  beadId?: string;
+}
+
+export interface RunnableTasksResult {
+  /** Tasks that can be executed now (dependencies satisfied) */
+  runnable: RunnableTask[];
+  /** Tasks that are blocked by dependencies */
+  blocked: RunnableTask[];
+  /** Tasks already completed */
+  completed: RunnableTask[];
+  /** Tasks currently in progress */
+  inProgress: RunnableTask[];
+  /** Source of the result: 'beads' or 'filesystem' */
+  source: 'beads' | 'filesystem';
+}
+
+export class TaskService {
+  private readonly beadGateway: BeadGateway;
+  private readonly beadsViewerGateway: BeadsViewerGateway;
+  private readonly beadsModeProvider: BeadsModeProvider;
+
+  constructor(
+    private projectRoot: string,
+    beadGateway?: BeadGateway,
+    beadsModeProvider: BeadsModeProvider = new ConfigService(),
+    beadsViewerGateway?: BeadsViewerGateway,
+  ) {
+    this.beadGateway = beadGateway ?? new BeadGateway(projectRoot);
+    this.beadsViewerGateway = beadsViewerGateway ?? new BeadsViewerGateway(
+      projectRoot,
+      beadsModeProvider.getBeadsMode() !== 'off',
+    );
+    this.beadsModeProvider = beadsModeProvider;
+  }
+
+  sync(featureName: string): TasksSyncResult {
+    const planPath = getPlanPath(this.projectRoot, featureName, this.getBeadsMode());
+    const planContent = readText(planPath);
+    
+    if (!planContent) {
+      throw new Error(`No plan.md found for feature '${featureName}'`);
+    }
+
+    const planTasks = this.parseTasksFromPlan(planContent);
+    
+    // Validate dependency graph before proceeding
+    this.validateDependencyGraph(planTasks, featureName);
+    const epicBeadId = this.getEpicBeadId(featureName);
+    
+    const existingTasks = this.list(featureName);
+    
+    const result: TasksSyncResult = {
+      created: [],
+      removed: [],
+      kept: [],
+      manual: [],
+    };
+
+    const existingByName = new Map(existingTasks.map(t => [t.folder, t]));
+
+    for (const existing of existingTasks) {
+      if (existing.origin === 'manual') {
+        result.manual.push(existing.folder);
+        continue;
+      }
+
+      if (existing.status === 'done' || existing.status === 'in_progress') {
+        result.kept.push(existing.folder);
+        continue;
+      }
+
+      if (existing.status === 'cancelled') {
+        this.deleteTask(featureName, existing.folder);
+        result.removed.push(existing.folder);
+        continue;
+      }
+
+      const stillInPlan = planTasks.some(p => p.folder === existing.folder);
+      if (!stillInPlan) {
+        this.deleteTask(featureName, existing.folder);
+        result.removed.push(existing.folder);
+      } else {
+        result.kept.push(existing.folder);
+      }
+    }
+
+    for (const planTask of planTasks) {
+      if (!existingByName.has(planTask.folder)) {
+        // Default priority for plan tasks is 3 (medium)
+        this.createFromPlan(featureName, planTask, planTasks, planContent, epicBeadId, 3);
+        result.created.push(planTask.folder);
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Create a manual task with auto-incrementing index.
+   * Folder format: "01-task-name", "02-task-name", etc.
+   * Index ensures alphabetical sort = chronological order.
+   */
+  create(featureName: string, name: string, order?: number, priority: number = 3): string {
+    name = sanitizeName(name);
+    const epicBeadId = this.getEpicBeadId(featureName);
+
+    // Validate priority
+    if (!Number.isInteger(priority) || priority < 1 || priority > 5) {
+      throw new Error(`Priority must be an integer between 1 and 5 (inclusive), got: ${priority}`);
+    }
+
+    // Determine folder name
+    let folder: string;
+    if (this.shouldSyncBeads()) {
+      // In beads mode, use provided order or auto-increment based on existing beads
+      const existingTasks = this.listFromBeads(featureName);
+      const nextOrder = order ?? this.getNextOrderFromTasks(existingTasks);
+      folder = `${String(nextOrder).padStart(2, '0')}-${name}`;
+    } else {
+      // In off mode, use filesystem-based order detection
+      const existingFolders = this.listFolders(featureName);
+      const nextOrder = order ?? this.getNextOrder(existingFolders);
+      folder = `${String(nextOrder).padStart(2, '0')}-${name}`;
+    }
+
+    const beadId = this.createChildBead(name, epicBeadId, priority);
+
+    const status: TaskStatus = {
+      status: 'pending',
+      origin: 'manual',
+      planTitle: name,
+      beadId,
+    };
+
+    if (this.shouldSyncBeads()) {
+      this.writeTaskStateByBeadId(beadId, {
+        ...status,
+        folder,
+      });
+    }
+
+    const taskPath = getTaskPath(this.projectRoot, featureName, folder, this.getBeadsMode());
+    ensureDir(taskPath);
+    writeJson(getTaskStatusPath(this.projectRoot, featureName, folder, this.getBeadsMode()), status);
+
+    return folder;
+  }
+
+  private createFromPlan(featureName: string, task: ParsedTask, allTasks: ParsedTask[], planContent: string, epicBeadId: string, priority: number = 3): void {
+    // Resolve dependencies: numbers -> folder names
+    const dependsOn = this.resolveDependencies(task, allTasks);
+
+    // Create child bead for the task
+    const beadId = this.createChildBead(task.name, epicBeadId, priority);
+
+    const status: TaskStatus = {
+      status: 'pending',
+      origin: 'plan',
+      planTitle: task.name,
+      beadId,
+      dependsOn,
+    };
+
+    if (this.shouldSyncBeads()) {
+      this.writeTaskStateByBeadId(beadId, {
+        ...status,
+        folder: task.folder,
+      });
+    }
+
+    const taskPath = getTaskPath(this.projectRoot, featureName, task.folder, this.getBeadsMode());
+    ensureDir(taskPath);
+    writeJson(getTaskStatusPath(this.projectRoot, featureName, task.folder, this.getBeadsMode()), status);
+
+    // Build and store spec in bead (works for both modes)
+    const specContent = this.buildSpecContent({
+      featureName,
+      task,
+      dependsOn,
+      allTasks,
+      planContent,
+    });
+
+    // Store spec as bead artifact
+    this.beadGateway.upsertArtifact(beadId, 'spec', specContent);
+    if (this.shouldSyncBeads()) {
+      this.beadGateway.flushArtifacts();
+    }
+  }
+
+  /**
+   * Build structured SpecData for a task.
+   * This separates data collection from markdown formatting.
+   */
+  buildSpecData(params: {
+    featureName: string;
+    task: { folder: string; name: string; order: number; description?: string };
+    dependsOn: string[];
+    allTasks: Array<{ folder: string; name: string; order: number }>;
+    planContent?: string | null;
+    contextFiles?: Array<{ name: string; content: string }>;
+    completedTasks?: Array<{ name: string; summary: string }>;
+  }): SpecData {
+    const { featureName, task, dependsOn, allTasks, planContent, contextFiles = [], completedTasks = [] } = params;
+
+    const planSection = this.extractPlanSection(planContent ?? null, task);
+
+    return {
+      featureName,
+      task: {
+        folder: task.folder,
+        name: task.name,
+        order: task.order,
+      },
+      dependsOn,
+      allTasks,
+      planSection,
+      contextFiles,
+      completedTasks,
+    };
+  }
+
+  buildSpecContent(params: {
+    featureName: string;
+    task: { folder: string; name: string; order: number; description?: string };
+    dependsOn: string[];
+    allTasks: Array<{ folder: string; name: string; order: number }>;
+    planContent?: string | null;
+    contextFiles?: Array<{ name: string; content: string }>;
+    completedTasks?: Array<{ name: string; summary: string }>;
+  }): string {
+    // Build structured data first, then format to markdown
+    const specData = this.buildSpecData(params);
+    return this.formatSpecDataToMarkdown(specData);
+  }
+
+  /**
+   * Format SpecData to markdown string.
+   * This is kept in core for backward compatibility.
+   * The plugin layer should use its own formatter for new code.
+   */
+  private formatSpecDataToMarkdown(data: SpecData): string {
+    const { featureName, task, dependsOn, allTasks, planSection, contextFiles, completedTasks } = data;
+
+    const getTaskType = (section: string | null, taskName: string): string | null => {
+      if (!section) {
+        return null;
+      }
+
+      const fileTypeMatches = Array.from(section.matchAll(/-\s*(Create|Modify|Test):/gi)).map(
+        match => match[1].toLowerCase()
+      );
+      const fileTypes = new Set(fileTypeMatches);
+
+      if (fileTypes.size === 0) {
+        return taskName.toLowerCase().includes('test') ? 'testing' : null;
+      }
+
+      if (fileTypes.size === 1) {
+        const onlyType = Array.from(fileTypes)[0];
+        if (onlyType === 'create') return 'greenfield';
+        if (onlyType === 'test') return 'testing';
+      }
+
+      if (fileTypes.has('modify')) {
+        return 'modification';
+      }
+
+      return null;
+    };
+
+    const specLines: string[] = [
+      `# Task: ${task.folder}`,
+      '',
+      `## Feature: ${featureName}`,
+      '',
+      '## Dependencies',
+      '',
+    ];
+
+    if (dependsOn.length > 0) {
+      for (const dep of dependsOn) {
+        const depTask = allTasks.find(t => t.folder === dep);
+        if (depTask) {
+          specLines.push(`- **${depTask.order}. ${depTask.name}** (${dep})`);
+        } else {
+          specLines.push(`- ${dep}`);
+        }
+      }
+    } else {
+      specLines.push('_None_');
+    }
+
+    specLines.push('', '## Plan Section', '');
+
+    if (planSection) {
+      specLines.push(planSection.trim());
+    } else {
+      specLines.push('_No plan section available._');
+    }
+
+    specLines.push('');
+
+    const taskType = getTaskType(planSection, task.name);
+    if (taskType) {
+      specLines.push('## Task Type', '', taskType, '');
+    }
+
+    if (contextFiles.length > 0) {
+      const contextCompiled = contextFiles
+        .map(f => `## ${f.name}\n\n${f.content}`)
+        .join('\n\n---\n\n');
+      specLines.push('## Context', '', contextCompiled, '');
+    }
+
+    if (completedTasks.length > 0) {
+      const completedLines = completedTasks.map(t => `- ${t.name}: ${t.summary}`);
+      specLines.push('## Completed Tasks', '', ...completedLines, '');
+    }
+
+    return specLines.join('\n');
+  }
+
+  private extractPlanSection(planContent: string | null, task: { name: string; order: number; folder: string }): string | null {
+    if (!planContent) return null;
+
+    const escapedTitle = task.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const titleRegex = new RegExp(`###\\s*\\d+\\.\\s*${escapedTitle}[\\s\\S]*?(?=###|$)`, 'i');
+    let taskMatch = planContent.match(titleRegex);
+
+    if (!taskMatch && task.order > 0) {
+      const orderRegex = new RegExp(`###\\s*${task.order}\\.\\s*[^\\n]+[\\s\\S]*?(?=###|$)`, 'i');
+      taskMatch = planContent.match(orderRegex);
+    }
+
+    return taskMatch ? taskMatch[0].trim() : null;
+  }
+
+  /**
+   * Resolve dependency numbers to folder names.
+   * - If dependsOnNumbers is null (not specified), apply implicit sequential default (N-1 for N > 1).
+   * - If dependsOnNumbers is [] (explicit "none"), return empty array.
+   * - Otherwise, map numbers to corresponding task folders.
+   */
+  private resolveDependencies(task: ParsedTask, allTasks: ParsedTask[]): string[] {
+    // Explicit "none" - no dependencies
+    if (task.dependsOnNumbers !== null && task.dependsOnNumbers.length === 0) {
+      return [];
+    }
+
+    // Explicit dependency numbers provided
+    if (task.dependsOnNumbers !== null) {
+      return task.dependsOnNumbers
+        .map(num => allTasks.find(t => t.order === num)?.folder)
+        .filter((folder): folder is string => folder !== undefined);
+    }
+
+    // Implicit sequential default: depend on previous task (N-1)
+    if (task.order === 1) {
+      return [];
+    }
+
+    const previousTask = allTasks.find(t => t.order === task.order - 1);
+    return previousTask ? [previousTask.folder] : [];
+  }
+
+  /**
+   * Validate the dependency graph for errors before creating tasks.
+   * Throws descriptive errors pointing the operator to fix plan.md.
+   * 
+   * Checks for:
+   * - Unknown task numbers in dependencies
+   * - Self-dependencies
+   * - Cycles (using DFS topological sort)
+   */
+  private validateDependencyGraph(tasks: ParsedTask[], featureName: string): void {
+    const taskNumbers = new Set(tasks.map(t => t.order));
+    
+    // Validate each task's dependencies
+    for (const task of tasks) {
+      if (task.dependsOnNumbers === null) {
+        // Implicit dependencies - no validation needed
+        continue;
+      }
+      
+      for (const depNum of task.dependsOnNumbers) {
+        // Check for self-dependency
+        if (depNum === task.order) {
+          throw new Error(
+            `Invalid dependency graph in plan.md: Self-dependency detected for task ${task.order} ("${task.name}"). ` +
+            `A task cannot depend on itself. Please fix the "Depends on:" line in plan.md.`
+          );
+        }
+        
+        // Check for unknown task number
+        if (!taskNumbers.has(depNum)) {
+          throw new Error(
+            `Invalid dependency graph in plan.md: Unknown task number ${depNum} referenced in dependencies for task ${task.order} ("${task.name}"). ` +
+            `Available task numbers are: ${Array.from(taskNumbers).sort((a, b) => a - b).join(', ')}. ` +
+            `Please fix the "Depends on:" line in plan.md.`
+          );
+        }
+      }
+    }
+    
+    // Check for cycles using DFS
+    this.detectCycles(tasks);
+  }
+
+  /**
+   * Detect cycles in the dependency graph using DFS.
+   * Throws a descriptive error if a cycle is found.
+   */
+  private detectCycles(tasks: ParsedTask[]): void {
+    // Build adjacency list: task order -> [dependency orders]
+    const taskByOrder = new Map(tasks.map(t => [t.order, t]));
+    
+    // Build dependency graph with resolved implicit dependencies
+    const getDependencies = (task: ParsedTask): number[] => {
+      if (task.dependsOnNumbers !== null) {
+        return task.dependsOnNumbers;
+      }
+      // Implicit sequential dependency
+      if (task.order === 1) {
+        return [];
+      }
+      return [task.order - 1];
+    };
+    
+    // Track visited state: 0 = unvisited, 1 = in current path, 2 = fully processed
+    const visited = new Map<number, number>();
+    const path: number[] = [];
+    
+    const dfs = (taskOrder: number): void => {
+      const state = visited.get(taskOrder);
+      
+      if (state === 2) {
+        // Already fully processed, no cycle through here
+        return;
+      }
+      
+      if (state === 1) {
+        // Found a cycle! Build the cycle path for the error message
+        const cycleStart = path.indexOf(taskOrder);
+        const cyclePath = [...path.slice(cycleStart), taskOrder];
+        const cycleDesc = cyclePath.join(' -> ');
+        
+        throw new Error(
+          `Invalid dependency graph in plan.md: Cycle detected in task dependencies: ${cycleDesc}. ` +
+          `Tasks cannot have circular dependencies. Please fix the "Depends on:" lines in plan.md.`
+        );
+      }
+      
+      // Mark as in current path
+      visited.set(taskOrder, 1);
+      path.push(taskOrder);
+      
+      const task = taskByOrder.get(taskOrder);
+      if (task) {
+        const deps = getDependencies(task);
+        for (const depOrder of deps) {
+          dfs(depOrder);
+        }
+      }
+      
+      // Mark as fully processed
+      path.pop();
+      visited.set(taskOrder, 2);
+    };
+    
+    // Run DFS from each node
+    for (const task of tasks) {
+      if (!visited.has(task.order)) {
+        dfs(task.order);
+      }
+    }
+  }
+
+  writeSpec(featureName: string, taskFolder: string, content: string): string {
+    return this.upsertTaskBeadArtifact(featureName, taskFolder, 'spec', content);
+  }
+
+  writeWorkerPrompt(featureName: string, taskFolder: string, content: string): string {
+    return this.upsertTaskBeadArtifact(featureName, taskFolder, 'worker_prompt', content);
+  }
+
+  readTaskBeadArtifact(
+    featureName: string,
+    taskFolder: string,
+    kind: 'spec' | 'worker_prompt',
+  ): string | null {
+    if (this.shouldSyncBeads()) {
+      this.beadGateway.importArtifacts();
+    }
+
+    const status = this.getRawStatus(featureName, taskFolder);
+    if (!status) {
+      return null;
+    }
+
+    const beadId = status.beadId;
+    if (!beadId) {
+      return null;
+    }
+
+    return this.beadGateway.readArtifact(beadId, kind);
+  }
+
+  /**
+   * Update task status with locked atomic write.
+   * Uses file locking to prevent race conditions between concurrent updates.
+   * 
+   * @param featureName - Feature name
+   * @param taskFolder - Task folder name
+   * @param updates - Fields to update (status, summary, baseCommit, blocker)
+   * @param lockOptions - Optional lock configuration
+   * @returns Updated TaskStatus
+   */
+  update(
+    featureName: string,
+    taskFolder: string,
+    updates: Partial<
+      Pick<TaskStatus, 'status' | 'summary' | 'baseCommit' | 'blocker'>
+    >,
+    lockOptions?: LockOptions
+  ): TaskStatus {
+    const beadsOn = this.shouldSyncBeads();
+    const statusPath = getTaskStatusPath(this.projectRoot, featureName, taskFolder, this.getBeadsMode());
+    const current = this.getRawStatus(featureName, taskFolder);
+    
+    if (!current) {
+      throw new Error(`Task '${taskFolder}' not found`);
+    }
+
+    const updated: TaskStatus = {
+      ...current,
+      ...updates,
+      schemaVersion: TASK_STATUS_SCHEMA_VERSION,
+    };
+
+    if (updates.status === 'in_progress' && !current.startedAt) {
+      updated.startedAt = new Date().toISOString();
+    }
+    if (updates.status === 'done' && !current.completedAt) {
+      updated.completedAt = new Date().toISOString();
+    }
+
+    if (beadsOn) {
+      if (updated.beadId) {
+        this.writeTaskStateByBeadId(updated.beadId, {
+          ...updated,
+          folder: taskFolder,
+        }, updates.status !== undefined);
+      }
+    }
+
+    // Keep local cache in sync in both modes
+    writeJsonLockedSync(statusPath, updated, lockOptions);
+
+    if (updates.status && updated.beadId && this.shouldSyncBeads()) {
+      this.syncTaskBeadStatus(updated.beadId, updates.status);
+      this.beadGateway.flushArtifacts();
+    }
+
+    return updated;
+  }
+
+  /**
+   * Patch only background-owned fields without clobbering completion-owned fields.
+   * Safe for concurrent use by background workers.
+   * 
+   * Uses deep merge for workerSession to allow partial updates like:
+   * - patchBackgroundFields(..., { workerSession: { lastHeartbeatAt: '...' } })
+   *   will update only lastHeartbeatAt, preserving other workerSession fields.
+   * 
+   * @param featureName - Feature name
+   * @param taskFolder - Task folder name
+   * @param patch - Background-owned fields to update
+   * @param lockOptions - Optional lock configuration
+   * @returns Updated TaskStatus
+   */
+  patchBackgroundFields(
+    featureName: string,
+    taskFolder: string,
+    patch: BackgroundPatchFields,
+    lockOptions?: LockOptions
+  ): TaskStatus {
+    if (this.shouldSyncBeads()) {
+      const status = this.getRawStatus(featureName, taskFolder);
+      if (!status) {
+        throw new Error(`Task '${taskFolder}' not found`);
+      }
+
+      const updated: TaskStatus = {
+        ...status,
+        schemaVersion: TASK_STATUS_SCHEMA_VERSION,
+      };
+
+      if (patch.idempotencyKey !== undefined) {
+        updated.idempotencyKey = patch.idempotencyKey;
+      }
+
+      if (patch.workerSession !== undefined) {
+        updated.workerSession = {
+          ...(status.workerSession ?? ({} as WorkerSession)),
+          ...patch.workerSession,
+        } as WorkerSession;
+      }
+
+      if (status.beadId) {
+        this.writeTaskStateByBeadId(status.beadId, {
+          ...updated,
+          folder: taskFolder,
+        }, false);
+      }
+
+      const statusPath = getTaskStatusPath(this.projectRoot, featureName, taskFolder, this.getBeadsMode());
+      writeJsonLockedSync(statusPath, updated, lockOptions);
+      return updated;
+    }
+
+    const statusPath = getTaskStatusPath(this.projectRoot, featureName, taskFolder, this.getBeadsMode());
+    
+    // Build the patch object, only including fields that are defined
+    const safePatch: Partial<TaskStatus> = {
+      schemaVersion: TASK_STATUS_SCHEMA_VERSION,
+    };
+    
+    if (patch.idempotencyKey !== undefined) {
+      safePatch.idempotencyKey = patch.idempotencyKey;
+    }
+    
+    if (patch.workerSession !== undefined) {
+      safePatch.workerSession = patch.workerSession as WorkerSession;
+    }
+    
+    // Use patchJsonLockedSync which does deep merge
+    return patchJsonLockedSync<TaskStatus>(statusPath, safePatch, lockOptions);
+  }
+
+  /**
+   * Get raw TaskStatus including all fields (for internal use or debugging).
+   */
+  getRawStatus(featureName: string, taskFolder: string): TaskStatus | null {
+    if (this.shouldSyncBeads()) {
+      const beadsTask = this.getFromBeads(featureName, taskFolder);
+      if (beadsTask?.beadId) {
+        const taskState = this.readTaskStateByBeadId(beadsTask.beadId);
+        if (taskState) {
+          return taskState;
+        }
+
+        const cached = readJson<TaskStatus>(
+          getTaskStatusPath(this.projectRoot, featureName, taskFolder, this.getBeadsMode()),
+        );
+        if (cached) {
+          return {
+            ...cached,
+            beadId: cached.beadId ?? beadsTask.beadId,
+          };
+        }
+
+        return {
+          status: beadsTask.status,
+          origin: beadsTask.origin,
+          planTitle: beadsTask.planTitle ?? beadsTask.name,
+          beadId: beadsTask.beadId,
+        };
+      }
+
+      const statusPath = getTaskStatusPath(this.projectRoot, featureName, taskFolder, this.getBeadsMode());
+      return readJson<TaskStatus>(statusPath);
+    }
+
+    const statusPath = getTaskStatusPath(this.projectRoot, featureName, taskFolder, this.getBeadsMode());
+    const existing = readJson<TaskStatus>(statusPath);
+    if (!existing) {
+      return null;
+    }
+
+    return existing;
+  }
+
+  get(featureName: string, taskFolder: string): TaskInfo | null {
+    // In beads mode, try to get task info from beads first
+    if (this.shouldSyncBeads()) {
+      const beadsTask = this.getFromBeads(featureName, taskFolder);
+      if (beadsTask) {
+        return beadsTask;
+      }
+
+      const status = readJson<TaskStatus>(
+        getTaskStatusPath(this.projectRoot, featureName, taskFolder, this.getBeadsMode()),
+      );
+      if (!status) {
+        return null;
+      }
+
+      return {
+        folder: taskFolder,
+        name: taskFolder.replace(/^\d+-/, ''),
+        beadId: status.beadId,
+        status: status.status,
+        origin: status.origin,
+        planTitle: status.planTitle,
+        summary: status.summary,
+      };
+    }
+
+    const statusPath = getTaskStatusPath(this.projectRoot, featureName, taskFolder, this.getBeadsMode());
+    const status = readJson<TaskStatus>(statusPath);
+
+    if (!status) return null;
+
+    return {
+      folder: taskFolder,
+      name: taskFolder.replace(/^\d+-/, ''),
+      beadId: status.beadId,
+      status: status.status,
+      origin: status.origin,
+      planTitle: status.planTitle,
+      summary: status.summary,
+    };
+  }
+
+  /**
+   * Get task info from beads in on-mode.
+   * Returns null if task not found via beads.
+   */
+  private getFromBeads(featureName: string, taskFolder: string): TaskInfo | null {
+    try {
+      const task = this.listFromBeads(featureName).find((entry) => entry.folder === taskFolder);
+      if (!task) {
+        return null;
+      }
+      return task;
+    } catch (error) {
+      // If beads query fails, return null to trigger fallback
+      return null;
+    }
+  }
+
+  /**
+   * Map bead status to task status.
+   */
+  private mapBeadStatusToTaskStatus(beadStatus: string): TaskStatusType {
+    switch (beadStatus.toLowerCase()) {
+      case 'closed':
+      case 'tombstone':
+        return 'done';
+      case 'in_progress':
+      case 'review':
+      case 'hooked':
+        return 'in_progress';
+      case 'blocked':
+      case 'deferred':
+        return 'blocked';
+      case 'open':
+      case 'pinned':
+      default:
+        return 'pending';
+    }
+  }
+
+  list(featureName: string): TaskInfo[] {
+    if (this.shouldSyncBeads()) {
+      const beadsTasks = this.listFromBeads(featureName);
+      if (beadsTasks.length > 0) {
+        return beadsTasks;
+      }
+    }
+
+    // Local filesystem fallback
+    const folders = this.listFolders(featureName);
+    return folders
+      .map(folder => this.get(featureName, folder))
+      .filter((t): t is TaskInfo => t !== null);
+  }
+
+  /**
+   * List tasks from beads in on-mode.
+   * Returns tasks by querying child beads of the feature's epic.
+   */
+  private listFromBeads(featureName: string): TaskInfo[] {
+    try {
+      const epicBeadId = this.getEpicBeadId(featureName);
+      const taskBeads = this.beadGateway.list({ type: 'task', parent: epicBeadId, status: 'all' });
+      const sortedTaskBeads = [...taskBeads].sort((a, b) => a.title.localeCompare(b.title));
+      const tasks = sortedTaskBeads.map((bead, index) => {
+        const beadStatus = this.mapBeadStatusToTaskStatus(bead.status);
+        const taskState = this.readTaskStateByBeadId(bead.id);
+        if (taskState) {
+          const cachePath = getTaskPath(this.projectRoot, featureName, taskState.folder, this.getBeadsMode());
+          ensureDir(cachePath);
+          writeJson(
+            getTaskStatusPath(this.projectRoot, featureName, taskState.folder, this.getBeadsMode()),
+            {
+              ...taskState,
+              beadId: bead.id,
+            },
+          );
+          return {
+            folder: taskState.folder,
+            name: taskState.folder.replace(/^\d+-/, ''),
+            beadId: bead.id,
+            status: taskState.status,
+            origin: taskState.origin,
+            planTitle: taskState.planTitle ?? bead.title,
+            summary: taskState.summary,
+          };
+        }
+
+        const order = index + 1;
+        const folderName = bead.title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+        const folder = `${String(order).padStart(2, '0')}-${folderName}`;
+
+        const cachedStatus = readJson<TaskStatus>(
+          getTaskStatusPath(this.projectRoot, featureName, folder, this.getBeadsMode()),
+        );
+        if (cachedStatus && beadStatus === 'pending') {
+          const cachePath = getTaskPath(this.projectRoot, featureName, folder, this.getBeadsMode());
+          ensureDir(cachePath);
+          writeJson(
+            getTaskStatusPath(this.projectRoot, featureName, folder, this.getBeadsMode()),
+            {
+              ...cachedStatus,
+              beadId: cachedStatus.beadId ?? bead.id,
+            },
+          );
+          return {
+            folder,
+            name: folderName,
+            beadId: cachedStatus.beadId ?? bead.id,
+            status: cachedStatus.status,
+            origin: cachedStatus.origin,
+            planTitle: cachedStatus.planTitle ?? bead.title,
+            summary: cachedStatus.summary,
+          };
+        }
+
+        const cachePath = getTaskPath(this.projectRoot, featureName, folder, this.getBeadsMode());
+        ensureDir(cachePath);
+        writeJson(
+          getTaskStatusPath(this.projectRoot, featureName, folder, this.getBeadsMode()),
+          {
+            status: beadStatus,
+            origin: 'plan',
+            planTitle: bead.title,
+            beadId: bead.id,
+          },
+        );
+
+        return {
+          folder,
+          name: folderName,
+          beadId: bead.id,
+          status: beadStatus,
+          origin: 'plan' as TaskOrigin,
+          planTitle: bead.title,
+        };
+      });
+
+      return tasks.sort((a, b) => {
+        const aOrder = parseInt(a.folder.split('-')[0], 10);
+        const bOrder = parseInt(b.folder.split('-')[0], 10);
+        return aOrder - bOrder;
+      });
+    } catch (error) {
+      // If beads query fails, return empty array to trigger fallback
+      return [];
+    }
+  }
+
+  /**
+   * Get next order number from existing bead tasks.
+   */
+  private getNextOrderFromTasks(tasks: TaskInfo[]): number {
+    if (tasks.length === 0) return 1;
+
+    const orders = tasks
+      .map(t => parseInt(t.folder.split('-')[0], 10))
+      .filter(n => !isNaN(n));
+
+    return Math.max(...orders, 0) + 1;
+  }
+
+  writeReport(featureName: string, taskFolder: string, report: string): string {
+    const reportPath = getTaskReportPath(this.projectRoot, featureName, taskFolder, this.getBeadsMode());
+    writeText(reportPath, report);
+
+    // In beads mode, also add report as bead comment
+    if (this.shouldSyncBeads()) {
+      const status = this.getRawStatus(featureName, taskFolder);
+      if (status?.beadId) {
+        try {
+          this.beadGateway.upsertArtifact(status.beadId, 'worker_prompt', report);
+          this.beadGateway.flushArtifacts();
+        } catch (error) {
+          const reason = error instanceof Error ? error.message : String(error);
+          console.warn(`[warcraft] Failed to add report as bead comment for '${taskFolder}': ${reason}`);
+        }
+      }
+    }
+
+    return reportPath;
+  }
+
+  /**
+   * Get tasks that are runnable (dependencies satisfied).
+   * In beadsMode 'on': uses BeadsViewerGateway (bv --robot-plan) for parallel execution planning.
+   * In beadsMode 'off': uses filesystem-based dependency resolution.
+   */
+  getRunnableTasks(featureName: string): RunnableTasksResult {
+    if (this.shouldSyncBeads()) {
+      const beadsResult = this.getRunnableTasksFromBeads(featureName);
+      if (beadsResult !== null) {
+        return beadsResult;
+      }
+      // Fall back to filesystem if beads query fails
+    }
+
+    return this.getRunnableTasksFromFilesystem(featureName);
+  }
+
+  /**
+   * Get runnable tasks from BeadsViewerGateway using bv --robot-plan.
+   */
+  private getRunnableTasksFromBeads(featureName: string): RunnableTasksResult | null {
+    try {
+      const planResult = this.beadsViewerGateway.getRobotPlan();
+      if (!planResult) {
+        return null;
+      }
+
+      // Use beads-based listing in on-mode
+      const allTasks = this.shouldSyncBeads()
+        ? this.listFromBeads(featureName)
+        : this.list(featureName);
+
+      // If beads listing returned empty and we're in on-mode, fall back
+      const tasksToUse = (this.shouldSyncBeads() && allTasks.length === 0)
+        ? this.list(featureName)
+        : allTasks;
+
+      const taskByBeadId = new Map<string, TaskInfo>(
+        tasksToUse
+          .filter((t): t is TaskInfo & { beadId: string } => t.beadId !== undefined)
+          .map(t => [t.beadId, t])
+      );
+
+      const runnable: RunnableTask[] = [];
+      const blocked: RunnableTask[] = [];
+      const completed: RunnableTask[] = [];
+      const inProgress: RunnableTask[] = [];
+
+      // Process tasks from robot plan tracks
+      for (const track of planResult.tracks) {
+        for (const beadId of track.tasks) {
+          const task = taskByBeadId.get(beadId);
+          if (!task) continue;
+
+          const runnableTask: RunnableTask = {
+            folder: task.folder,
+            name: task.name,
+            status: task.status,
+            beadId: task.beadId,
+          };
+
+          switch (task.status) {
+            case 'done':
+              completed.push(runnableTask);
+              break;
+            case 'in_progress':
+              inProgress.push(runnableTask);
+              break;
+            case 'pending':
+              // Tasks in robot plan tracks are considered runnable
+              runnable.push(runnableTask);
+              break;
+            case 'blocked':
+            case 'failed':
+            case 'cancelled':
+            case 'partial':
+              blocked.push(runnableTask);
+              break;
+          }
+        }
+      }
+
+      // Also include tasks not in the robot plan (fallback)
+      const plannedBeadIds = new Set(planResult.tracks.flatMap(t => t.tasks));
+      for (const task of tasksToUse) {
+        if (task.beadId && !plannedBeadIds.has(task.beadId)) {
+          const runnableTask: RunnableTask = {
+            folder: task.folder,
+            name: task.name,
+            status: task.status,
+            beadId: task.beadId,
+          };
+
+          switch (task.status) {
+            case 'done':
+              if (!completed.find(t => t.folder === task.folder)) {
+                completed.push(runnableTask);
+              }
+              break;
+            case 'in_progress':
+              if (!inProgress.find(t => t.folder === task.folder)) {
+                inProgress.push(runnableTask);
+              }
+              break;
+            case 'pending':
+              // Check if dependencies are satisfied
+              if (this.areDependenciesSatisfied(featureName, task.folder)) {
+                if (!runnable.find(t => t.folder === task.folder)) {
+                  runnable.push(runnableTask);
+                }
+              } else {
+                if (!blocked.find(t => t.folder === task.folder)) {
+                  blocked.push(runnableTask);
+                }
+              }
+              break;
+            default:
+              if (!blocked.find(t => t.folder === task.folder)) {
+                blocked.push(runnableTask);
+              }
+          }
+        }
+      }
+
+      return {
+        runnable,
+        blocked,
+        completed,
+        inProgress,
+        source: 'beads',
+      };
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      console.warn(`[warcraft] Failed to get runnable tasks from beads: ${reason}`);
+      return null;
+    }
+  }
+
+  /**
+   * Get runnable tasks from filesystem using dependency resolution.
+   */
+  private getRunnableTasksFromFilesystem(featureName: string): RunnableTasksResult {
+    const allTasks = this.list(featureName);
+
+    const runnable: RunnableTask[] = [];
+    const blocked: RunnableTask[] = [];
+    const completed: RunnableTask[] = [];
+    const inProgress: RunnableTask[] = [];
+
+    for (const task of allTasks) {
+      const runnableTask: RunnableTask = {
+        folder: task.folder,
+        name: task.name,
+        status: task.status,
+        beadId: task.beadId,
+      };
+
+      switch (task.status) {
+        case 'done':
+          completed.push(runnableTask);
+          break;
+        case 'in_progress':
+          inProgress.push(runnableTask);
+          break;
+        case 'pending':
+          if (this.areDependenciesSatisfied(featureName, task.folder)) {
+            runnable.push(runnableTask);
+          } else {
+            blocked.push(runnableTask);
+          }
+          break;
+        case 'blocked':
+        case 'failed':
+        case 'cancelled':
+        case 'partial':
+          blocked.push(runnableTask);
+          break;
+      }
+    }
+
+    return {
+      runnable,
+      blocked,
+      completed,
+      inProgress,
+      source: 'filesystem',
+    };
+  }
+
+  /**
+   * Check if all dependencies for a task are satisfied (completed).
+   */
+  private areDependenciesSatisfied(featureName: string, taskFolder: string): boolean {
+    const status = this.getRawStatus(featureName, taskFolder);
+    if (!status?.dependsOn || status.dependsOn.length === 0) {
+      return true;
+    }
+
+    for (const depFolder of status.dependsOn) {
+      const depStatus = this.getRawStatus(featureName, depFolder);
+      if (!depStatus || depStatus.status !== 'done') {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  private listFolders(featureName: string): string[] {
+    const tasksPath = getTasksPath(this.projectRoot, featureName, this.getBeadsMode());
+    if (!fileExists(tasksPath)) return [];
+
+    return fs.readdirSync(tasksPath, { withFileTypes: true })
+      .filter((d: { isDirectory: () => boolean }) => d.isDirectory())
+      .map((d: { name: string }) => d.name)
+      .sort();
+  }
+
+  private deleteTask(featureName: string, taskFolder: string): void {
+    const taskPath = getTaskPath(this.projectRoot, featureName, taskFolder, this.getBeadsMode());
+    if (fileExists(taskPath)) {
+      fs.rmSync(taskPath, { recursive: true });
+    }
+  }
+
+  private getNextOrder(existingFolders: string[]): number {
+    if (existingFolders.length === 0) return 1;
+    
+    const orders = existingFolders
+      .map(f => parseInt(f.split('-')[0], 10))
+      .filter(n => !isNaN(n));
+    
+    return Math.max(...orders, 0) + 1;
+  }
+
+  private getEpicBeadId(featureName: string): string {
+    const feature =
+      readJson<FeatureJson>(getFeatureJsonPath(this.projectRoot, featureName, this.getBeadsMode()))
+      ?? readJson<FeatureJson>(getFeatureJsonPath(this.projectRoot, featureName, 'off'));
+
+    if (feature?.epicBeadId) {
+      return feature.epicBeadId;
+    }
+
+    if (this.shouldSyncBeads()) {
+      const epics = this.beadGateway.list({ type: 'epic', status: 'all' });
+      const epic = epics.find((entry) => entry.title === featureName);
+      if (!epic?.id) {
+        throw new Error(`Feature '${featureName}' not found in beads`);
+      }
+      return epic.id;
+    }
+
+    if (!feature) {
+      throw new Error(`Feature '${featureName}' not found`);
+    }
+    if (!feature.epicBeadId) {
+      throw new Error(`Feature '${featureName}' is missing epicBeadId. Recreate the feature with warcraft_feature_create.`);
+    }
+    return feature.epicBeadId;
+  }
+
+  private createChildBead(title: string, epicBeadId: string, priority: number = 3): string {
+    return this.beadGateway.createTask(title, epicBeadId, priority);
+  }
+
+  private syncTaskBeadStatus(beadId: string, status: TaskStatusType): void {
+    try {
+      this.beadGateway.syncTaskStatus(beadId, status);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      console.warn(`[warcraft] Failed to sync bead status for '${beadId}' -> '${status}': ${reason}`);
+    }
+  }
+
+  private shouldSyncBeads(): boolean {
+    return this.getBeadsMode() !== 'off';
+  }
+
+  upsertTaskBeadArtifact(
+    featureName: string,
+    taskFolder: string,
+    kind: 'spec' | 'worker_prompt',
+    content: string,
+  ): string {
+    const taskStatus = this.getRawStatus(featureName, taskFolder);
+
+    if (!taskStatus) {
+      throw new Error(`Task '${taskFolder}' not found`);
+    }
+
+    if (!taskStatus.beadId) {
+      throw new Error(`Task '${taskFolder}' does not have beadId`);
+    }
+
+    this.beadGateway.upsertArtifact(taskStatus.beadId, kind, content);
+
+    if (this.shouldSyncBeads()) {
+      this.beadGateway.flushArtifacts();
+    }
+
+    return taskStatus.beadId;
+  }
+
+  private readTaskStateByBeadId(beadId: string): TaskStateArtifact | null {
+    try {
+      const raw = this.beadGateway.readArtifact(beadId, 'task_state');
+      if (!raw) {
+        return null;
+      }
+      return JSON.parse(raw) as TaskStateArtifact;
+    } catch {
+      return null;
+    }
+  }
+
+  private writeTaskStateByBeadId(beadId: string, state: TaskStateArtifact, shouldFlush: boolean = true): void {
+    this.beadGateway.upsertArtifact(beadId, 'task_state', JSON.stringify(state));
+    if (this.shouldSyncBeads() && shouldFlush) {
+      this.beadGateway.flushArtifacts();
+    }
+  }
+
+  private getBeadsMode(): BeadsMode {
+    return this.beadsModeProvider.getBeadsMode();
+  }
+
+  private parseTasksFromPlan(content: string): ParsedTask[] {
+    const tasks: ParsedTask[] = [];
+    const lines = content.split('\n');
+    
+    let currentTask: ParsedTask | null = null;
+    let descriptionLines: string[] = [];
+    
+    // Regex to match "Depends on:" or "**Depends on**:" with optional markdown
+    // Strips markdown formatting (**, *, etc.) and captures the value
+    const dependsOnRegex = /^\s*\*{0,2}Depends\s+on\*{0,2}\s*:\s*(.+)$/i;
+    
+    for (const line of lines) {
+      // Check for task header: ### N. Task Name
+      const taskMatch = line.match(/^###\s+(\d+)\.\s+(.+)$/);
+      
+      if (taskMatch) {
+        // Save previous task if exists
+        if (currentTask) {
+          currentTask.description = descriptionLines.join('\n').trim();
+          tasks.push(currentTask);
+        }
+        
+        const order = parseInt(taskMatch[1], 10);
+        const rawName = taskMatch[2].trim();
+        const folderName = rawName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+        const folder = `${String(order).padStart(2, '0')}-${folderName}`;
+        
+        currentTask = {
+          folder,
+          order,
+          name: rawName,
+          description: '',
+          dependsOnNumbers: null,  // null = not specified, use implicit
+        };
+        descriptionLines = [];
+      } else if (currentTask) {
+        // Check for end of task section (next ## header or ### without number)
+        if (line.match(/^##\s+/) || line.match(/^###\s+[^0-9]/)) {
+          currentTask.description = descriptionLines.join('\n').trim();
+          tasks.push(currentTask);
+          currentTask = null;
+          descriptionLines = [];
+        } else {
+          // Check for Depends on: annotation within task section
+          const dependsMatch = line.match(dependsOnRegex);
+          if (dependsMatch) {
+            const value = dependsMatch[1].trim().toLowerCase();
+            if (value === 'none') {
+              currentTask.dependsOnNumbers = [];
+            } else {
+              // Parse comma-separated numbers
+              const numbers = value
+                .split(/[,\s]+/)
+                .map(s => parseInt(s.trim(), 10))
+                .filter(n => !isNaN(n));
+              currentTask.dependsOnNumbers = numbers;
+            }
+          }
+          descriptionLines.push(line);
+        }
+      }
+    }
+    
+    // Don't forget the last task
+    if (currentTask) {
+      currentTask.description = descriptionLines.join('\n').trim();
+      tasks.push(currentTask);
+    }
+
+    return tasks;
+  }
+
+}

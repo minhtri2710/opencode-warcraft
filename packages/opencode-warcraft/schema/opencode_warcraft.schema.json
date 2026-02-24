@@ -1,0 +1,160 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/minhtri2710/opencode-warcraft/main/packages/opencode-warcraft/schema/opencode_warcraft.schema.json",
+  "title": "Project Warcraft Configuration",
+  "description": "Configuration schema for ~/.config/opencode/opencode_warcraft.json",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Schema reference for this config file"
+    },
+    "sandbox": {
+      "type": "string",
+      "enum": ["none", "docker"],
+      "default": "none",
+      "description": "Sandbox isolation mode. 'none' runs commands directly; 'docker' wraps bash commands in Docker containers."
+    },
+    "dockerImage": {
+      "type": "string",
+      "description": "Docker image to use for sandbox. Auto-detected from project files if omitted (e.g., node:22-slim for Node.js projects)."
+    },
+    "persistentContainers": {
+      "type": "boolean",
+      "default": true,
+      "description": "Reuse Docker containers per worktree (docker exec) instead of creating new ones per command (docker run --rm). Default: true when sandbox is 'docker'."
+    },
+    "enableToolsFor": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Enable warcraft tools for specific features"
+    },
+    "disableSkills": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Globally disable specific skills (e.g., ['brainstorming', 'writing-plans']). Disabled skills won't appear in warcraft_skill tool."
+    },
+    "disableMcps": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Globally disable specific MCP servers (e.g., ['websearch']). Available: websearch, context7, grep_app"
+    },
+    "beadsMode": {
+      "oneOf": [
+        {
+          "type": "boolean",
+          "description": "Simplified mode: true enables full beads_rust workflow (on), false disables beads (off)."
+        },
+        {
+          "type": "string",
+          "enum": ["on", "off"]
+        }
+      ],
+      "default": "on",
+      "description": "Enables the full beads_rust ('br') workflow with explicit import/flush lifecycle. When 'on': warcraft tools use 'br sync --import-only' at start and 'br sync --flush-only' at end. No CLI-driven git actions are performed by warcraft tools. Use boolean true/false for simple on/off shorthand. Boolean: true = 'on', false = 'off'. Legacy values 'dual-write' and 'beads-primary' are no longer supported."
+    },
+    "parallelExecution": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Controls parallel worker dispatch behavior for warcraft_batch_execute.",
+      "properties": {
+        "strategy": {
+          "type": "string",
+          "enum": ["unbounded", "bounded"],
+          "default": "unbounded",
+          "description": "Dispatch strategy. 'unbounded' preserves Promise.all behavior. 'bounded' limits concurrent worker dispatches."
+        },
+        "maxConcurrency": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 32,
+          "default": 4,
+          "description": "Maximum parallel worker dispatches when strategy is 'bounded'."
+        }
+      }
+    },
+    "agentMode": {
+      "type": "string",
+      "enum": [
+        "unified",
+        "dedicated"
+      ],
+      "default": "unified",
+      "description": "Agent specialization mode. 'unified' (default) uses a single hybrid agent for all roles; 'dedicated' uses specialized agents for each role."
+    },
+    "agents": {
+      "type": "object",
+      "description": "Agent model configuration overrides.",
+      "additionalProperties": false,
+      "properties": {
+        "khadgar": {
+          "$ref": "#/$defs/agentConfig",
+          "description": "Khadgar (hybrid planner + orchestrator)"
+        },
+        "mimiron": {
+          "$ref": "#/$defs/agentConfig",
+          "description": "Mimiron (planning-only)"
+        },
+        "saurfang": {
+          "$ref": "#/$defs/agentConfig",
+          "description": "Saurfang (orchestrator)"
+        },
+        "brann": {
+          "$ref": "#/$defs/agentConfig",
+          "description": "Brann (explorer/researcher)"
+        },
+        "mekkatorque": {
+          "$ref": "#/$defs/agentConfig",
+          "description": "Mekkatorque (worker/coder)"
+        },
+        "algalon": {
+          "$ref": "#/$defs/agentConfig",
+          "description": "Algalon (reviewer)"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "agentConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "type": "string",
+          "description": "Model to use (provider/model-id)"
+        },
+        "temperature": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 2,
+          "description": "Sampling temperature"
+        },
+        "skills": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Skills enabled for this agent"
+        },
+        "autoLoadSkills": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Skills to auto-load for this agent"
+        },
+        "variant": {
+          "type": "string",
+          "description": "Variant key for model reasoning/effort level (e.g., 'low', 'medium', 'high', 'max'). Must match a key in opencode.json provider.<provider>.models.<model>.variants"
+        }
+      }
+    }
+  }
+}

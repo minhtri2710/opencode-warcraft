@@ -1,0 +1,42 @@
+name: Workflow Guards
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build
+        run: bun run build
+
+      - name: Test
+        run: bun run test
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Install Beads CLI
+        run: |
+          curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/beads_rust/main/install.sh?$(date +%s)" | bash
+          export PATH="$HOME/.local/bin:$PATH"
+          br --version
+
+      - name: Verify beads artifacts
+        run: bun run beads:verify
+
+      - name: Verify PR evidence
+        if: github.event_name == 'pull_request'
+        run: bun run pr:evidence:verify

@@ -1,0 +1,28 @@
+{
+  "name": "warcraft",
+  "version": "1.0.1",
+  "description": "Context-Driven Development",
+  "dataPath": "../../.beads/artifacts",
+  "commands": [
+    {"name": "/warcraft", "description": "Create feature"}
+  ],
+  "tools": [
+    "warcraft_feature_create",
+    "warcraft_feature_complete",
+    "warcraft_plan_write",
+    "warcraft_plan_read",
+    "warcraft_plan_approve",
+    "warcraft_tasks_sync",
+    "warcraft_task_create",
+    "warcraft_task_update",
+    "warcraft_worktree_create",
+    "warcraft_worktree_commit",
+    "warcraft_worktree_discard",
+    "warcraft_merge",
+    "warcraft_batch_execute",
+    "warcraft_context_write",
+    "warcraft_agents_md",
+    "warcraft_status",
+    "warcraft_skill"
+  ]
+}

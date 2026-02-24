@@ -1,0 +1,11 @@
+# bv (beads viewer) local config and caches
+.bv/
+
+# local beads runtime/state (do not commit)
+.beads/.bv.lock
+.beads/beads.db
+.beads/issues.jsonl
+.beads/last-touched
+
+# warcraft worker worktrees are local scratch checkouts
+.beads/artifacts/.worktrees/

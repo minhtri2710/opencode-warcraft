@@ -1,0 +1,60 @@
+{
+  "name": "opencode-warcraft",
+  "version": "0.0.1",
+  "type": "module",
+  "description": "OpenCode plugin for Project Warcraft - from vibe coding to warcraft coding",
+  "license": "MIT WITH Commons-Clause",
+  "author": "minhtri2710",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/minhtri2710/opencode-warcraft.git",
+    "directory": "packages/opencode-warcraft"
+  },
+  "homepage": "https://github.com/minhtri2710/opencode-warcraft#readme",
+  "bugs": {
+    "url": "https://github.com/minhtri2710/opencode-warcraft/issues"
+  },
+  "keywords": [
+    "opencode",
+    "ai",
+    "warcraft",
+    "vibe-coding",
+    "workflow",
+    "planning",
+    "agent"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "clean": "rm -rf dist",
+    "generate-skills": "bun run scripts/generate-skills.ts",
+    "build": "bun run clean && bun run generate-skills && bun build src/index.ts --outdir dist --target node --format esm --packages=bundle && tsc --emitDeclarationOnly",
+    "dev": "opencode plugin dev",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@opencode-ai/plugin": ">=0.13.7"
+  },
+  "dependencies": {
+    "simple-git": "^3.27.0"
+  },
+  "optionalDependencies": {
+    "grep-mcp": "^1.1.0",
+    "@upstash/context7-mcp": "^2.1.0",
+    "exa-mcp-server": "^3.1.5"
+  },
+  "devDependencies": {
+    "warcraft-core": "workspace:*",
+    "@opencode-ai/plugin": "^1.0.143",
+    "@opencode-ai/sdk": "^0.13.0",
+    "@types/bun": "^1.2.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  },
+  "files": [
+    "dist/",
+    "skills/",
+    "README.md"
+  ]
+}

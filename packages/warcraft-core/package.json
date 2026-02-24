@@ -1,0 +1,50 @@
+{
+  "name": "warcraft-core",
+  "version": "0.0.1",
+  "type": "module",
+  "description": "Core services and types for Project Warcraft - shared by opencode-warcraft and related tooling",
+  "license": "MIT WITH Commons-Clause",
+  "author": "minhtri2710",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/minhtri2710/opencode-warcraft.git",
+    "directory": "packages/warcraft-core"
+  },
+  "homepage": "https://github.com/minhtri2710/opencode-warcraft#readme",
+  "bugs": {
+    "url": "https://github.com/minhtri2710/opencode-warcraft/issues"
+  },
+  "keywords": [
+    "warcraft",
+    "agent",
+    "workflow",
+    "planning",
+    "core"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "clean": "rm -rf dist",
+    "build": "bun run clean && bun build src/index.ts --outdir dist --target node --format esm && tsc --emitDeclarationOnly",
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "simple-git": "^3.27.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  },
+  "files": [
+    "dist/",
+    "README.md"
+  ]
+}
