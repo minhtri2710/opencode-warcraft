@@ -4,7 +4,6 @@ import type {
   PlanService,
   TaskService,
   WorktreeService,
-  TaskStatusType,
 } from 'warcraft-core';
 import {
   buildEffectiveDependencies,
@@ -14,15 +13,9 @@ import {
 import { validatePathSegment } from './index.js';
 import type { ContextFile, CompletedTask } from '../utils/worker-prompt.js';
 import {
-  calculatePromptMeta,
-  calculatePayloadMeta,
-  checkWarnings,
-} from '../utils/prompt-observability.js';
-import {
   applyTaskBudget,
   applyContextBudget,
   DEFAULT_BUDGET,
-  type TruncationEvent,
 } from '../utils/prompt-budgeting.js';
 import { buildWorkerPrompt } from '../utils/worker-prompt.js';
 
@@ -255,8 +248,6 @@ export class BatchTools {
         const rawPreviousTasks = allTaskInfos
           .filter((t) => t.status === 'done' && t.summary)
           .map((t) => ({ name: t.folder, summary: t.summary! }));
-
-        const results: TaskDispatchResult[] = [];
 
         const dispatchTask = async (task: string): Promise<TaskDispatchResult> => {
           const taskInfo = taskService.get(feature, task);

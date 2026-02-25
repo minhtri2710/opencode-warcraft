@@ -2,16 +2,6 @@ import * as fs from "fs/promises";
 import * as path from "path";
 import simpleGit, { SimpleGit } from "simple-git";
 import { acquireLock, getWarcraftPath, sanitizeName } from '../utils/paths.js';
-import type { BeadsModeProvider, TaskStatusType } from '../types.js';
-import { ConfigService } from './configService.js';
-import { BeadsRepository } from './beads/BeadsRepository.js';
-import { isBeadsEnabled } from './beads/beadsMode.js';
-
-
-interface WorktreeBeadClient {
-  syncTaskStatus(beadId: string, status: TaskStatusType): void;
-}
-
 export interface WorktreeInfo {
   path: string;
   branch: string;
@@ -57,21 +47,11 @@ export interface WorktreeConfig {
 
 export class WorktreeService {
   private config: WorktreeConfig;
-  private readonly beadsModeProvider: BeadsModeProvider;
-  private readonly worktreeBeadClient: WorktreeBeadClient;
 
   constructor(
     config: WorktreeConfig,
-    beadsModeProvider: BeadsModeProvider = new ConfigService(),
-    worktreeBeadClient?: WorktreeBeadClient,
-    repository?: BeadsRepository,
   ) {
     this.config = config;
-    this.beadsModeProvider = beadsModeProvider;
-    // Use provided client, or fall back to repository gateway, or create default
-    this.worktreeBeadClient = worktreeBeadClient
-      ?? repository?.getGateway()
-      ?? new BeadsRepository(config.baseDir, {}, beadsModeProvider.getBeadsMode()).getGateway();
   }
 
   private getGit(cwd?: string): SimpleGit {
@@ -630,15 +610,6 @@ export class WorktreeService {
     return conflicts;
   }
 
-  private async getTaskBeadId(feature: string, step: string): Promise<string | null> {
-    const statusPath = this.getStepStatusPath(feature, step);
-    try {
-      const status = JSON.parse(await fs.readFile(statusPath, 'utf-8')) as { beadId?: string };
-      return status.beadId ?? null;
-    } catch {
-      return null;
-    }
-  }
 }
 
 export function createWorktreeService(projectDir: string): WorktreeService {

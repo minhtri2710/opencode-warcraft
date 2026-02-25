@@ -1,8 +1,8 @@
 import * as path from "path";
 import * as fs from "fs";
 import * as os from "os";
-import { tool, type Plugin, type ToolDefinition } from "@opencode-ai/plugin";
-import { getFilteredSkills, loadBuiltinSkill } from "./skills/builtin.js";
+import { type Plugin } from "@opencode-ai/plugin";
+import { getFilteredSkills } from "./skills/builtin.js";
 import { loadFileSkill } from "./skills/file-loader.js";
 import { BUILTIN_SKILLS } from "./skills/registry.generated.js";
 // Warcraft agents (lean, focused)
@@ -101,43 +101,12 @@ import {
   DockerSandboxService,
   BeadsRepository,
   buildEffectiveDependencies,
-  computeRunnableAndBlocked,
   detectContext,
   getWarcraftPath,
   getFeaturePath,
-  type WorktreeInfo,
   type TaskStatusType,
 } from "warcraft-core";
 import {
-  buildWorkerPrompt,
-  type ContextFile,
-  type CompletedTask,
-} from "./utils/worker-prompt";
-import {
-  calculatePromptMeta,
-  calculatePayloadMeta,
-  checkWarnings,
-} from "./utils/prompt-observability";
-import {
-  applyTaskBudget,
-  applyContextBudget,
-  DEFAULT_BUDGET,
-  type TruncationEvent,
-} from "./utils/prompt-budgeting";
-import { validateDiscoverySection } from "./utils/discovery-gate";
-import {
-  formatPlanReviewChecklistIssues,
-  validatePlanReviewChecklist,
-} from './utils/plan-review-gate';
-import {
-  detectWorkflowPath,
-  validateLightweightPlan,
-} from './utils/workflow-path';
-import { formatRelativeTime } from "./utils/format";
-import {
-  WARCRAFT_AGENT_NAMES,
-  isWarcraftAgent,
-  normalizeVariant,
   createVariantHook,
 } from "./hooks/variant-hook.js";
 import {
@@ -250,7 +219,7 @@ type ToolContext = {
 };
 
 const plugin: Plugin = async (ctx) => {
-  const { directory, client } = ctx;
+  const { directory } = ctx;
 
   const configService = new ConfigService(); // User config at ~/.config/opencode/opencode_warcraft.json
   const beadsMode = configService.getBeadsMode();
@@ -267,30 +236,11 @@ const plugin: Plugin = async (ctx) => {
   // Get filtered skills (globally disabled skills removed)
   // Per-agent skill filtering could be added here based on agent context
   const filteredSkills = getFilteredSkills(disabledSkills);
-  const effectiveAutoLoadSkills =
-    configService.getAgentConfig("khadgar").autoLoadSkills ?? [];
   const worktreeService = new WorktreeService({
     baseDir: directory,
     warcraftDir: getWarcraftPath(directory, configService.getBeadsMode()),
-  }, configService, undefined, repository);
-
-  /**
-   * Check if OMO-Slim delegation is enabled via user config.
-   * Users enable this in ~/.config/opencode/opencode_warcraft.json
-   */
-  const isOmoSlimEnabled = (): boolean => {
-    return configService.isOmoSlimEnabled();
-  };
-
+  });
   const resolveFeature = (explicit?: string): string | null => {
-    const getFeatureSafe = (featureName: string) => {
-      try {
-        return featureService.get(featureName);
-      } catch {
-        return null;
-      }
-    };
-
     const listFeaturesSafe = (): string[] => {
       try {
         return featureService.list();
@@ -544,7 +494,7 @@ To unblock: Remove ${blockedPath}`;
 
   return {
     "experimental.chat.system.transform": async (
-      input: { agent?: string } | unknown,
+      _input: { agent?: string } | unknown,
       output: { system: string[] },
     ) => {
       output.system.push(WARCRAFT_SYSTEM_PROMPT);

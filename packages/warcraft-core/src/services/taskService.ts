@@ -98,7 +98,7 @@ export class TaskService {
     const planTasks = this.parseTasksFromPlan(planContent);
     
     // Validate dependency graph before proceeding
-    this.validateDependencyGraph(planTasks, featureName);
+    this.validateDependencyGraph(planTasks);
     const epicResult = this.repository.getEpicByFeatureName(featureName, true);
     if (epicResult.success === false) {
       throw new Error(`Failed to resolve epic for feature '${featureName}': ${epicResult.error.message}`);
@@ -443,7 +443,7 @@ export class TaskService {
    * - Self-dependencies
    * - Cycles (using DFS topological sort)
    */
-  private validateDependencyGraph(tasks: ParsedTask[], featureName: string): void {
+  private validateDependencyGraph(tasks: ParsedTask[]): void {
     const taskNumbers = new Set(tasks.map(t => t.order));
     
     // Validate each task's dependencies

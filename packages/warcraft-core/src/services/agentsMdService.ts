@@ -55,7 +55,7 @@ export class AgentsMdService {
     const proposals = this.generateProposals(findings, current);
 
     // 5. Return proposals for human review (P2 gate — no auto-apply)
-    return { proposals, diff: this.formatDiff(current, proposals) };
+    return { proposals, diff: this.formatDiff(proposals) };
   }
 
   apply(content: string): ApplyResult {
@@ -119,7 +119,7 @@ export class AgentsMdService {
     return proposals;
   }
 
-  private formatDiff(current: string, proposals: string[]): string {
+  private formatDiff(proposals: string[]): string {
     if (proposals.length === 0) return '';
 
     const lines = proposals.map(p => `+ ${p}`);

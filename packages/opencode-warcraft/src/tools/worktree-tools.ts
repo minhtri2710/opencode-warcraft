@@ -72,7 +72,7 @@ export class WorktreeTools {
       },
       async execute(
         { task, feature: explicitFeature, continueFrom, decision },
-        toolContext,
+        _toolContext,
       ) {
         if (explicitFeature) validatePathSegment(explicitFeature, 'feature');
         validatePathSegment(task, 'task');

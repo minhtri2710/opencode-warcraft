@@ -115,7 +115,6 @@ export class BeadsRepository {
   private readonly gateway: BeadGateway;
   private readonly viewerGateway: BeadsViewerGateway;
   private readonly syncPolicy: SyncPolicy;
-  private readonly projectRoot: string;
 
   // Short-lived memoization cache (cleared on each operation)
   private cache = new Map<string, unknown>();
@@ -125,7 +124,6 @@ export class BeadsRepository {
     syncPolicy: Partial<SyncPolicy> = {},
     beadsMode: 'on' | 'off' = 'on',
   ) {
-    this.projectRoot = projectRoot;
     this.syncPolicy = { ...DEFAULT_SYNC_POLICY, ...syncPolicy };
     this.gateway = new BeadGateway(projectRoot);
     this.viewerGateway = new BeadsViewerGateway(projectRoot, beadsMode === 'on');

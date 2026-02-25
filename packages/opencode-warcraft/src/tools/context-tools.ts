@@ -7,7 +7,6 @@ import type {
   WorktreeService,
   AgentsMdService,
 } from 'warcraft-core';
-import type { ToolContext } from '../types.js';
 import { validatePathSegment } from './index.js';
 import {
   buildEffectiveDependencies,

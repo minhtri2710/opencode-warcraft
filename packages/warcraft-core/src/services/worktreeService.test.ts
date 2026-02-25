@@ -4,15 +4,6 @@ import * as os from 'os';
 import * as path from 'path';
 import { WorktreeService } from './worktreeService';
 
-class FakeBeadsModeProvider {
-  constructor(private readonly mode: 'on' | 'off') {}
-
-  getBeadsMode(): 'on' | 'off' {
-    return this.mode;
-  }
-}
-
-
 let testRoot = '';
 
 beforeEach(() => {
@@ -26,8 +17,6 @@ afterEach(() => {
 function createService(mode: 'on' | 'off'): WorktreeService {
   return new WorktreeService(
     { baseDir: testRoot, warcraftDir: mode === 'off' ? path.join(testRoot, 'docs') : path.join(testRoot, '.beads', 'artifacts') },
-    new FakeBeadsModeProvider(mode),
-    { syncTaskStatus: () => {} } as any,
   );
 }
 

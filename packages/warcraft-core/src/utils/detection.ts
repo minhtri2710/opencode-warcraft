@@ -1,6 +1,6 @@
 import * as path from 'path';
 import * as fs from 'fs';
-import { getWarcraftPath, getFeaturePath, readJson, normalizePath, listFeatureDirectories } from './paths.js';
+import { getFeaturePath, readJson, normalizePath, listFeatureDirectories } from './paths.js';
 import { FeatureJson } from '../types.js';
 
 export interface DetectionResult {

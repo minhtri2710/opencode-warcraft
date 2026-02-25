@@ -7,7 +7,7 @@ import {
   writeText,
   fileExists,
 } from '../utils/paths.js';
-import { FeatureJson, CommentsJson, PlanComment, PlanReadResult } from '../types.js';
+import { FeatureJson, PlanComment, PlanReadResult } from '../types.js';
 import type { BeadsMode, BeadsModeProvider } from '../types.js';
 import * as fs from 'fs';
 import * as crypto from 'crypto';

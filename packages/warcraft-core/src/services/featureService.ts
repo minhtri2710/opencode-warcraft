@@ -15,7 +15,7 @@ import {
   fileExists,
   deriveTaskFolder,
 } from '../utils/paths.js';
-import { FeatureJson, FeatureStatusType, TaskInfo, FeatureInfo, TaskStatus, TaskStatusType } from '../types.js';
+import { FeatureJson, FeatureStatusType, TaskInfo, FeatureInfo, TaskStatus } from '../types.js';
 import type { BeadsMode, BeadsModeProvider } from '../types.js';
 import { BeadsRepository } from './beads/BeadsRepository.js';
 import { isBeadsEnabled } from './beads/beadsMode.js';
