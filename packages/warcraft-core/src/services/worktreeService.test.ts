@@ -3,7 +3,6 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { WorktreeService } from './worktreeService';
-import type { TaskStatusType } from '../types';
 
 class FakeBeadsModeProvider {
   constructor(private readonly mode: 'on' | 'off') {}
@@ -13,17 +12,6 @@ class FakeBeadsModeProvider {
   }
 }
 
-class FakeWorktreeBeadClient {
-  calls: Array<{ beadId: string; status: TaskStatusType }> = [];
-  throwOnSync = false;
-
-  syncTaskStatus(beadId: string, status: TaskStatusType): void {
-    if (this.throwOnSync) {
-      throw new Error('sync failed');
-    }
-    this.calls.push({ beadId, status });
-  }
-}
 
 let testRoot = '';
 
@@ -35,68 +23,13 @@ afterEach(() => {
   fs.rmSync(testRoot, { recursive: true, force: true });
 });
 
-function createService(mode: 'on' | 'off', beadClient?: FakeWorktreeBeadClient): WorktreeService {
+function createService(mode: 'on' | 'off'): WorktreeService {
   return new WorktreeService(
     { baseDir: testRoot, warcraftDir: mode === 'off' ? path.join(testRoot, 'docs') : path.join(testRoot, '.beads', 'artifacts') },
     new FakeBeadsModeProvider(mode),
-    beadClient ?? new FakeWorktreeBeadClient(),
+    { syncTaskStatus: () => {} } as any,
   );
 }
-
-describe('WorktreeService bead mode sync', () => {
-  it('skips sync when beads mode is off', async () => {
-    const beadClient = new FakeWorktreeBeadClient();
-    const service = new WorktreeService(
-      { baseDir: '/tmp/project', warcraftDir: '/tmp/project/docs' },
-      new FakeBeadsModeProvider('off'),
-      beadClient,
-    );
-
-    (service as any).getTaskBeadId = async () => 'bd-1';
-
-    await (service as any).syncWorktreeTaskBeadStatus('f1', '01-task', 'in_progress', 'test');
-
-    expect(beadClient.calls).toEqual([]);
-  });
-
-  it('syncs status when mode is on and task has bead id', async () => {
-    const beadClient = new FakeWorktreeBeadClient();
-    const service = new WorktreeService(
-      { baseDir: '/tmp/project', warcraftDir: '/tmp/project/.beads/artifacts' },
-      new FakeBeadsModeProvider('on'),
-      beadClient,
-    );
-
-    (service as any).getTaskBeadId = async () => 'bd-2';
-
-    await (service as any).syncWorktreeTaskBeadStatus('f1', '02-task', 'done', 'test');
-
-    expect(beadClient.calls).toEqual([{ beadId: 'bd-2', status: 'done' }]);
-  });
-
-  it('skips sync when no bead id exists', async () => {
-    const beadClient = new FakeWorktreeBeadClient();
-    const service = createService('on', beadClient);
-
-    (service as any).getTaskBeadId = async (): Promise<string | null> => null;
-
-    await (service as any).syncWorktreeTaskBeadStatus('f1', '03-task', 'blocked', 'test');
-
-    expect(beadClient.calls).toEqual([]);
-  });
-
-  it('does not throw when bead sync fails', async () => {
-    const beadClient = new FakeWorktreeBeadClient();
-    beadClient.throwOnSync = true;
-    const service = createService('on', beadClient);
-
-    (service as any).getTaskBeadId = async () => 'bd-fail';
-
-    await expect(
-      (service as any).syncWorktreeTaskBeadStatus('f1', '04-task', 'done', 'test'),
-    ).resolves.toBeUndefined();
-  });
-});
 
 describe('WorktreeService helpers', () => {
   it('returns canonical tasks status path only', async () => {

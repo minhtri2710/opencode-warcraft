@@ -15,6 +15,8 @@ import {
   fileExists,
   sanitizeName,
   LockOptions,
+  deriveTaskFolder,
+  slugifyTaskName,
 } from '../utils/paths.js';
 import { TaskStatus, TaskStatusType, TaskOrigin, TasksSyncResult, TaskInfo, WorkerSession, SpecData } from '../types.js';
 import type { BeadsMode, BeadsModeProvider } from '../types.js';
@@ -22,7 +24,9 @@ import { BeadsRepository } from './beads/BeadsRepository.js';
 import { ConfigService } from './configService.js';
 import { isBeadsEnabled } from './beads/beadsMode.js';
 import { mapBeadStatusToTaskStatus } from './beads/beadStatus.js';
-import { readJsonArtifact, writeJsonArtifact } from './beads/beadArtifacts.js';
+import { computeRunnableAndBlocked } from './taskDependencyGraph.js';
+import type { TaskWithDeps } from './taskDependencyGraph.js';
+import { taskStateFromTaskStatus, encodeTaskState } from './beads/artifactSchemas.js';
 
 /** Current schema version for TaskStatus */
 export const TASK_STATUS_SCHEMA_VERSION = 1;
@@ -49,9 +53,6 @@ interface ParsedTask {
   dependsOnNumbers: number[] | null;
 }
 
-type TaskStateArtifact = TaskStatus & {
-  folder: string;
-};
 
 export interface RunnableTask {
   folder: string;
@@ -177,12 +178,12 @@ export class TaskService {
       // In beads mode, use provided order or auto-increment based on existing beads
       const existingTasks = this.listFromBeads(featureName);
       const nextOrder = order ?? this.getNextOrderFromTasks(existingTasks);
-      folder = `${String(nextOrder).padStart(2, '0')}-${name}`;
+      folder = deriveTaskFolder(nextOrder, name);
     } else {
       // In off mode, use filesystem-based order detection
       const existingFolders = this.listFolders(featureName);
       const nextOrder = order ?? this.getNextOrder(existingFolders);
-      folder = `${String(nextOrder).padStart(2, '0')}-${name}`;
+      folder = deriveTaskFolder(nextOrder, name);
     }
 
     const beadId = this.createChildBead(name, epicBeadId, priority);
@@ -826,8 +827,8 @@ export class TaskService {
         }
 
         const order = index + 1;
-        const folderName = bead.title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-        const folder = `${String(order).padStart(2, '0')}-${folderName}`;
+        const folderName = slugifyTaskName(bead.title);
+        const folder = deriveTaskFolder(order, folderName);
 
         return {
           folder,
@@ -970,8 +971,22 @@ export class TaskService {
 
       // Also include tasks not in the robot plan (fallback)
       const plannedBeadIds = new Set(planResult.tracks.flatMap(t => t.tasks));
-      for (const task of tasksToUse) {
-        if (task.beadId && !plannedBeadIds.has(task.beadId)) {
+      const nonPlannedTasks = tasksToUse.filter(t => t.beadId && !plannedBeadIds.has(t.beadId));
+
+      if (nonPlannedTasks.length > 0) {
+        // Build dependency info for all tasks (engine needs full graph for accurate resolution)
+        const allTasksWithDeps: TaskWithDeps[] = tasksToUse.map(task => {
+          const rawStatus = this.getRawStatus(featureName, task.folder);
+          return {
+            folder: task.folder,
+            status: task.status,
+            dependsOn: rawStatus?.dependsOn,
+          };
+        });
+        const { runnable: runnableFolders } = computeRunnableAndBlocked(allTasksWithDeps);
+        const runnableSet = new Set(runnableFolders);
+
+        for (const task of nonPlannedTasks) {
           const runnableTask: RunnableTask = {
             folder: task.folder,
             name: task.name,
@@ -991,8 +1006,7 @@ export class TaskService {
               }
               break;
             case 'pending':
-              // Check if dependencies are satisfied
-              if (this.areDependenciesSatisfied(featureName, task.folder)) {
+              if (runnableSet.has(task.folder)) {
                 if (!runnable.find(t => t.folder === task.folder)) {
                   runnable.push(runnableTask);
                 }
@@ -1030,6 +1044,19 @@ export class TaskService {
   private getRunnableTasksFromFilesystem(featureName: string): RunnableTasksResult {
     const allTasks = this.list(featureName);
 
+    // Build dependency-aware task list for canonical engine
+    const tasksWithDeps: TaskWithDeps[] = allTasks.map(task => {
+      const rawStatus = this.getRawStatus(featureName, task.folder);
+      return {
+        folder: task.folder,
+        status: task.status,
+        dependsOn: rawStatus?.dependsOn,
+      };
+    });
+
+    const { runnable: runnableFolders } = computeRunnableAndBlocked(tasksWithDeps);
+    const runnableSet = new Set(runnableFolders);
+
     const runnable: RunnableTask[] = [];
     const blocked: RunnableTask[] = [];
     const completed: RunnableTask[] = [];
@@ -1051,7 +1078,7 @@ export class TaskService {
           inProgress.push(runnableTask);
           break;
         case 'pending':
-          if (this.areDependenciesSatisfied(featureName, task.folder)) {
+          if (runnableSet.has(task.folder)) {
             runnable.push(runnableTask);
           } else {
             blocked.push(runnableTask);
@@ -1075,24 +1102,6 @@ export class TaskService {
     };
   }
 
-  /**
-   * Check if all dependencies for a task are satisfied (completed).
-   */
-  private areDependenciesSatisfied(featureName: string, taskFolder: string): boolean {
-    const status = this.getRawStatus(featureName, taskFolder);
-    if (!status?.dependsOn || status.dependsOn.length === 0) {
-      return true;
-    }
-
-    for (const depFolder of status.dependsOn) {
-      const depStatus = this.getRawStatus(featureName, depFolder);
-      if (!depStatus || depStatus.status !== 'done') {
-        return false;
-      }
-    }
-
-    return true;
-  }
 
   private listFolders(featureName: string): string[] {
     const tasksPath = getTasksPath(this.projectRoot, featureName);
@@ -1159,18 +1168,23 @@ export class TaskService {
     return taskStatus.beadId;
   }
 
-  private readTaskStateByBeadId(beadId: string): TaskStateArtifact | null {
-    const readResult = this.repository.readTaskArtifact(beadId, 'task_state');
-    const raw = readResult.success ? readResult.value : null;
-    return readJsonArtifact<TaskStateArtifact>(raw);
+  private readTaskStateByBeadId(beadId: string): TaskStatus | null {
+    const result = this.repository.getTaskState(beadId);
+    if (result.success === false || !result.value) {
+      return null;
+    }
+    return result.value;
   }
 
-  private writeTaskStateByBeadId(beadId: string, state: TaskStateArtifact, shouldFlush: boolean = true): void {
-    const json = writeJsonArtifact(state);
-    // Use gateway directly to control flush timing (repository auto-flushes)
-    this.repository.getGateway().upsertArtifact(beadId, 'task_state', json);
-    if (isBeadsEnabled(this.beadsModeProvider) && shouldFlush) {
-      this.repository.flushArtifacts();
+  private writeTaskStateByBeadId(beadId: string, state: TaskStatus, shouldFlush: boolean = true): void {
+    if (shouldFlush) {
+      // Full repository path: schema-aware encode + auto-flush
+      this.repository.setTaskState(beadId, state);
+    } else {
+      // Schema-aware encode without flush (performance optimization for background patches)
+      const artifact = taskStateFromTaskStatus(state);
+      const encoded = encodeTaskState(artifact);
+      this.repository.getGateway().upsertArtifact(beadId, 'task_state', encoded);
     }
   }
 
@@ -1202,8 +1216,8 @@ export class TaskService {
         
         const order = parseInt(taskMatch[1], 10);
         const rawName = taskMatch[2].trim();
-        const folderName = rawName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-        const folder = `${String(order).padStart(2, '0')}-${folderName}`;
+        const folderName = slugifyTaskName(rawName);
+        const folder = deriveTaskFolder(order, folderName);
         
         currentTask = {
           folder,

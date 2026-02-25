@@ -76,6 +76,8 @@ export interface TaskStatus {
   dependsOn?: string[];
   /** Blocker details when status is 'blocked'. */
   blocker?: TaskBlocker;
+  /** Task folder name (e.g., '01-setup'). Persisted for stable identity across reordering. */
+  folder?: string;
 }
 
 export interface PlanComment {

@@ -639,31 +639,6 @@ export class WorktreeService {
       return null;
     }
   }
-
-  private async syncWorktreeTaskBeadStatus(
-    feature: string,
-    step: string,
-    status: TaskStatusType,
-    context: string,
-  ): Promise<void> {
-    if (!isBeadsEnabled(this.beadsModeProvider)) {
-      return;
-    }
-
-    const beadId = await this.getTaskBeadId(feature, step);
-    if (!beadId) {
-      return;
-    }
-
-    try {
-      this.worktreeBeadClient.syncTaskStatus(beadId, status);
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
-      console.warn(
-        `[warcraft] Failed to sync bead status during ${context} for ${feature}/${step} (${beadId}): ${reason}`,
-      );
-    }
-  }
 }
 
 export function createWorktreeService(projectDir: string): WorktreeService {

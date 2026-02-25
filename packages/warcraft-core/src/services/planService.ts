@@ -114,6 +114,17 @@ export class PlanService {
         
         // Add approved label
         this.repository.addWorkflowLabel(epicBeadId, 'approved');
+
+        // Update feature state to 'approved' (parity with off-mode)
+        const featurePath = getFeatureJsonPath(this.projectRoot, featureName, beadsMode);
+        const feature = readJson<FeatureJsonWithPlanState>(featurePath);
+        if (feature) {
+          feature.status = 'approved';
+          feature.approvedAt = timestamp;
+          feature.planApprovalHash = planHash;
+          writeJson(featurePath, feature);
+          this.repository.setFeatureState(epicBeadId, feature);
+        }
       }
     }
 
@@ -222,8 +233,17 @@ export class PlanService {
         // Clear approval artifacts by setting empty values
         this.repository.setPlanApproval(epicBeadId, '', '', undefined);
         this.repository.setApprovedPlan(epicBeadId, '', '');
-        // Remove approved label
-        this.repository.addWorkflowLabel(epicBeadId, 'approved'); // Note: may need a removeLabel method
+
+        // Reset feature state to 'planning' (parity with off-mode)
+        const featurePath = getFeatureJsonPath(this.projectRoot, featureName, beadsMode);
+        const feature = readJson<FeatureJsonWithPlanState>(featurePath);
+        if (feature && feature.status === 'approved') {
+          feature.status = 'planning';
+          delete feature.approvedAt;
+          delete feature.planApprovalHash;
+          writeJson(featurePath, feature);
+          this.repository.setFeatureState(epicBeadId, feature);
+        }
       } catch {
         // Ignore errors during revoke
       }
@@ -340,30 +360,6 @@ export class PlanService {
       ?? readJson<FeatureJsonWithPlanState>(getFeatureJsonPath(this.projectRoot, featureName, 'off'))
     );
   }
-
-  private syncPlanBeadLabel(featureName: string, approved: boolean): void {
-    if (this.getBeadsMode() === 'off') {
-      return;
-    }
-
-    const epicResult = this.repository.getEpicByFeatureName(featureName, false);
-    if (epicResult.success === false || !epicResult.value) {
-      return;
-    }
-    const epicBeadId = epicResult.value;
-
-    const label = approved ? 'approved' : 'planning';
-    try {
-      this.repository.addWorkflowLabel(epicBeadId, label);
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
-      console.warn(
-        `[warcraft] Failed to sync plan label for feature '${featureName}' (${epicBeadId}): ${reason}`,
-      );
-    }
-  }
-
-
   private syncPlanDescription(featureName: string, content: string): void {
     if (this.getBeadsMode() === 'off') {
       return;

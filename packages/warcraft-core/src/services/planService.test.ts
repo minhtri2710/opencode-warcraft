@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { PlanService } from './planService';
-import type { PlanComment } from '../types.js';
+import type { PlanComment, FeatureJson } from '../types.js';
 import type { PlanApprovalPayload } from './beads/BeadGateway.types.js';
 
 class FakeBeadsModeProvider {
@@ -29,6 +29,7 @@ class MockBeadsRepository {
   private approvals = new Map<string, PlanApprovalPayload>();
   private approvedPlans = new Map<string, string>();
   private planComments = new Map<string, PlanComment[]>();
+  private featureStates = new Map<string, FeatureJson>();
 
   getEpicByFeatureName(_name: string, _cache: boolean) {
     // Read epicBeadId from feature.json if it exists (simulates real behavior)
@@ -81,6 +82,20 @@ class MockBeadsRepository {
   setPlanComments(beadId: string, comments: PlanComment[]) {
     this.planComments.set(beadId, comments);
     return { success: true as const, value: undefined };
+  }
+
+  getFeatureState(epicBeadId: string) {
+    const state = this.featureStates.get(epicBeadId) ?? null;
+    return { success: true as const, value: state };
+  }
+
+  setFeatureState(epicBeadId: string, feature: FeatureJson) {
+    this.featureStates.set(epicBeadId, { ...feature });
+    return { success: true as const, value: undefined };
+  }
+
+  getStoredFeatureState(epicBeadId: string): FeatureJson | undefined {
+    return this.featureStates.get(epicBeadId);
   }
 
   // Convenience accessors for test assertions
@@ -727,5 +742,137 @@ End of plan.`;
     expect(approvedPlan).toBe(planContent);
     // Verify exact match including whitespace and formatting
     expect(approvedPlan).toHaveLength(planContent.length);
+  });
+});
+
+describe('PlanService on-mode feature state parity', () => {
+  function setupFeatureWithPlan(feature: string, planContent: string): void {
+    const featurePath = path.join(testRoot, '.beads', 'artifacts', feature);
+    fs.mkdirSync(featurePath, { recursive: true });
+    fs.writeFileSync(path.join(featurePath, 'plan.md'), planContent);
+    fs.writeFileSync(
+      path.join(featurePath, 'feature.json'),
+      JSON.stringify(
+        {
+          name: feature,
+          epicBeadId: 'epic-1',
+          status: 'planning',
+          createdAt: new Date().toISOString(),
+        },
+        null,
+        2,
+      ),
+    );
+  }
+
+  it('approve() sets feature state to approved in on-mode (parity with off-mode)', () => {
+    setupFeatureWithPlan('on-approve-state', '# Plan\n\nContent');
+    const mockRepo = new MockBeadsRepository();
+    const service = new PlanService(
+      testRoot,
+      mockRepo as any,
+      new FakeBeadsModeProvider('on'),
+    );
+
+    service.approve('on-approve-state', 'session-abc');
+
+    // Feature state artifact should be set to 'approved'
+    const featureState = mockRepo.getStoredFeatureState('epic-1');
+    expect(featureState).toBeDefined();
+    expect(featureState!.status).toBe('approved');
+    expect(featureState!.approvedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+
+    // Local feature.json should also reflect 'approved'
+    const featureJsonPath = path.join(testRoot, '.beads', 'artifacts', 'on-approve-state', 'feature.json');
+    const localFeature = JSON.parse(fs.readFileSync(featureJsonPath, 'utf-8'));
+    expect(localFeature.status).toBe('approved');
+    expect(localFeature.approvedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(localFeature.planApprovalHash).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  it('revokeApproval() resets feature state to planning in on-mode (parity with off-mode)', () => {
+    setupFeatureWithPlan('on-revoke-state', '# Plan');
+    const mockRepo = new MockBeadsRepository();
+    const service = new PlanService(
+      testRoot,
+      mockRepo as any,
+      new FakeBeadsModeProvider('on'),
+    );
+
+    service.approve('on-revoke-state');
+
+    // Verify approved state
+    const beforeRevoke = mockRepo.getStoredFeatureState('epic-1');
+    expect(beforeRevoke!.status).toBe('approved');
+
+    service.revokeApproval('on-revoke-state');
+
+    // Feature state should be reset to 'planning'
+    const afterRevoke = mockRepo.getStoredFeatureState('epic-1');
+    expect(afterRevoke!.status).toBe('planning');
+    expect(afterRevoke!.approvedAt).toBeUndefined();
+
+    // Local feature.json should also reflect 'planning'
+    const featureJsonPath = path.join(testRoot, '.beads', 'artifacts', 'on-revoke-state', 'feature.json');
+    const localFeature = JSON.parse(fs.readFileSync(featureJsonPath, 'utf-8'));
+    expect(localFeature.status).toBe('planning');
+    expect(localFeature.approvedAt).toBeUndefined();
+    expect(localFeature.planApprovalHash).toBeUndefined();
+  });
+
+  it('revokeApproval() does not add contradictory approved label in on-mode', () => {
+    setupFeatureWithPlan('on-revoke-labels', '# Plan');
+    const mockRepo = new MockBeadsRepository();
+    const service = new PlanService(
+      testRoot,
+      mockRepo as any,
+      new FakeBeadsModeProvider('on'),
+    );
+
+    service.approve('on-revoke-labels');
+    const labelsAfterApprove = [...mockRepo.labels];
+
+    service.revokeApproval('on-revoke-labels');
+
+    // Revoke should NOT add any new labels (especially not a second 'approved')
+    expect(mockRepo.labels).toEqual(labelsAfterApprove);
+  });
+
+  it('revokeApproval() is idempotent when feature is already planning in on-mode', () => {
+    setupFeatureWithPlan('on-revoke-idempotent', '# Plan');
+    const mockRepo = new MockBeadsRepository();
+    const service = new PlanService(
+      testRoot,
+      mockRepo as any,
+      new FakeBeadsModeProvider('on'),
+    );
+
+    // Revoke without prior approval should not throw
+    service.revokeApproval('on-revoke-idempotent');
+
+    // Feature.json should still be 'planning'
+    const featureJsonPath = path.join(testRoot, '.beads', 'artifacts', 'on-revoke-idempotent', 'feature.json');
+    const localFeature = JSON.parse(fs.readFileSync(featureJsonPath, 'utf-8'));
+    expect(localFeature.status).toBe('planning');
+  });
+
+  it('write() with changed content resets feature state from approved to planning in on-mode', () => {
+    setupFeatureWithPlan('on-write-resets', '# Original Plan');
+    const mockRepo = new MockBeadsRepository();
+    const service = new PlanService(
+      testRoot,
+      mockRepo as any,
+      new FakeBeadsModeProvider('on'),
+    );
+
+    service.approve('on-write-resets');
+    expect(mockRepo.getStoredFeatureState('epic-1')!.status).toBe('approved');
+
+    // Write changed content triggers revokeApproval
+    service.write('on-write-resets', '# Modified Plan');
+
+    const afterWrite = mockRepo.getStoredFeatureState('epic-1');
+    expect(afterWrite!.status).toBe('planning');
+    expect(afterWrite!.approvedAt).toBeUndefined();
   });
 });

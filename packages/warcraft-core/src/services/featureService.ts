@@ -13,13 +13,13 @@ import {
   writeJson,
   writeJsonLockedSync,
   fileExists,
+  deriveTaskFolder,
 } from '../utils/paths.js';
 import { FeatureJson, FeatureStatusType, TaskInfo, FeatureInfo, TaskStatus, TaskStatusType } from '../types.js';
 import type { BeadsMode, BeadsModeProvider } from '../types.js';
 import { BeadsRepository } from './beads/BeadsRepository.js';
 import { isBeadsEnabled } from './beads/beadsMode.js';
 import { mapBeadStatusToTaskStatus, mapBeadStatusToFeatureStatus } from './beads/beadStatus.js';
-import { readJsonArtifact, writeJsonArtifact } from './beads/beadArtifacts.js';
 
 import { ConfigService } from './configService.js';
 import { PlanService } from './planService.js';
@@ -39,7 +39,6 @@ type FeatureStateArtifact = Pick<
   | 'completedAt'
 >;
 
-type TaskStateArtifact = TaskStatus & { folder?: string };
 
 
 export class FeatureService {
@@ -252,7 +251,7 @@ export class FeatureService {
         const taskState = this.readTaskState(taskBead.id);
         let folder = taskState?.folder;
         if (!folder) {
-          folder = `${String(index + 1).padStart(2, '0')}-${taskBead.title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')}`;
+          folder = deriveTaskFolder(index + 1, taskBead.title);
           // Persist the generated folder name so it remains stable across
           // future calls even if task ordering changes (avoids index-derived drift).
           this.writeTaskState(taskBead.id, {
@@ -375,7 +374,7 @@ export class FeatureService {
     return result.value;
   }
 
-  private readTaskState(beadId: string): TaskStateArtifact | null {
+  private readTaskState(beadId: string): TaskStatus | null {
     const result = this.repository.getTaskState(beadId);
     if (result.success === false) {
       console.warn(`Failed to read task state: ${result.error.message}`);
@@ -384,7 +383,7 @@ export class FeatureService {
     return result.value;
   }
 
-  private writeTaskState(beadId: string, state: TaskStateArtifact): void {
+  private writeTaskState(beadId: string, state: TaskStatus): void {
     try {
       const result = this.repository.setTaskState(beadId, state);
       if (result.success === false) {
