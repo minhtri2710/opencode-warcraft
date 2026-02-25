@@ -214,6 +214,8 @@ export interface TaskStateArtifact extends VersionedArtifact {
     reason: string;
     detail?: string;
   };
+  /** Task folder name (e.g., '01-setup'). Persisted for stable identity across reordering. */
+  folder?: string;
 }
 
 /**
@@ -233,6 +235,7 @@ interface LegacyTaskState {
   beadId?: string;
   dependsOn?: string[];
   blocker?: unknown;
+  folder?: string;
 }
 
 /**
@@ -280,6 +283,7 @@ export function decodeTaskState(raw: string | null): TaskStateArtifact | null {
       beadId: legacy.beadId,
       dependsOn: legacy.dependsOn,
       blocker: legacy.blocker as TaskStateArtifact['blocker'],
+      folder: legacy.folder,
     };
   } catch {
     return null;
@@ -304,6 +308,7 @@ export function taskStateFromTaskStatus(taskStatus: TaskStatus): TaskStateArtifa
     beadId: taskStatus.beadId,
     dependsOn: taskStatus.dependsOn,
     blocker: taskStatus.blocker,
+    folder: taskStatus.folder,
   };
 }
 
@@ -325,6 +330,7 @@ export function taskStateToTaskStatus(artifact: TaskStateArtifact): TaskStatus {
     beadId: artifact.beadId,
     dependsOn: artifact.dependsOn,
     blocker: artifact.blocker,
+    folder: artifact.folder,
   };
 }
 
