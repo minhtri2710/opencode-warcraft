@@ -217,7 +217,7 @@ export class PlanService {
     const currentPlanContent = fs.readFileSync(planPath, 'utf-8');
     const currentHash = computePlanHash(currentPlanContent);
     if (!feature.planApprovalHash) {
-      return true;
+      return false;
     }
     return feature.planApprovalHash === currentHash;
   }

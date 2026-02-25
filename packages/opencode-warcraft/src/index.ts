@@ -5,7 +5,6 @@ import { tool, type Plugin, type ToolDefinition } from "@opencode-ai/plugin";
 import { getFilteredSkills, loadBuiltinSkill } from "./skills/builtin.js";
 import { loadFileSkill } from "./skills/file-loader.js";
 import { BUILTIN_SKILLS } from "./skills/registry.generated.js";
-import type { SkillDefinition } from "./skills/types.js";
 // Warcraft agents (lean, focused)
 import { KHADGAR_PROMPT } from "./agents/khadgar.js";
 import { MIMIRON_PROMPT } from "./agents/mimiron.js";
@@ -20,28 +19,11 @@ import { BvTriageService } from "./services/bv-triage-service.js";
 // Skill Tool - Uses generated registry (no file-based discovery)
 // ============================================================================
 
-function formatSkillsXml(skills: SkillDefinition[]): string {
-  if (skills.length === 0) return "";
-
-  const skillsXml = skills
-    .map((skill) => {
-      return [
-        "  <skill>",
-        `    <name>${skill.name}</name>`,
-        `    <description>(warcraft - Skill) ${skill.description}</description>`,
-        "  </skill>",
-      ].join("\n");
-    })
-    .join("\n");
-
-  return `\n\n<available_skills>\n${skillsXml}\n</available_skills>`;
-}
-
 function shellQuoteArg(arg: string): string {
   if (/^[A-Za-z0-9_./:=+-]+$/.test(arg)) {
     return arg;
   }
-  return `'${arg.replace(/'/g, `"'"'`)}'`;
+  return `'${arg.replace(/'/g, "'\"'\"'")}'`;
 }
 
 function structuredToCommandString(command: string, args: string[]): string {

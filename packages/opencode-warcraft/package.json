@@ -37,7 +37,7 @@
     "@opencode-ai/plugin": ">=0.13.7"
   },
   "dependencies": {
-    "simple-git": "^3.27.0"
+    "warcraft-core": "workspace:*"
   },
   "optionalDependencies": {
     "grep-mcp": "^1.1.0",
@@ -45,7 +45,6 @@
     "exa-mcp-server": "^3.1.5"
   },
   "devDependencies": {
-    "warcraft-core": "workspace:*",
     "@opencode-ai/plugin": "^1.0.143",
     "@opencode-ai/sdk": "^0.13.0",
     "@types/bun": "^1.2.0",

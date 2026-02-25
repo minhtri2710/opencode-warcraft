@@ -228,12 +228,10 @@ export class BeadGateway {
   }
 
   upsertArtifact(beadId: string, kind: BeadArtifactKind, content: string): void {
-    console.error(`[DEBUG upsertArtifact] kind=${kind}, beadId=${beadId}, contentLen=${content.length}`);
     this.ensurePreflight();
     if (kind === 'spec') {
       const currentDescription = this.readDescription(beadId) ?? '';
       const { artifacts } = this.parseArtifacts(currentDescription);
-      console.error(`[DEBUG upsertArtifact spec] beadId=${beadId}, currentDescLen=${currentDescription.length}, artifactKeys=${JSON.stringify(Object.keys(artifacts))}`);
       if (Object.keys(artifacts).length > 0) {
         this.updateDescription(beadId, this.composeArtifactsDescription(content, artifacts));
       } else {

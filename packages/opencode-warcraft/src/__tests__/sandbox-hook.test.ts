@@ -32,7 +32,7 @@ describe('tool.execute.before bash interception hook logic', () => {
     if (/^[A-Za-z0-9_./:=+-]+$/.test(arg)) {
       return arg;
     }
-    return `'${arg.replace(/'/g, `"'"'`)}'`;
+    return `'${arg.replace(/'/g, "'\"'\"'")}'`;
   };
 
   const structuredToCommandString = (command: string, args: string[]): string => {
@@ -419,6 +419,18 @@ describe('tool.execute.before bash interception hook logic', () => {
       expect(output.args.command).toContain('docker run');
       expect(output.args.command).toContain('echo "hello world" && ls -la');
       expect(output.args.workdir).toBeUndefined();
+    });
+  });
+
+  describe('shellQuoteArg', () => {
+    test('shellQuoteArg correctly quotes apostrophes', () => {
+      const result = shellQuoteArg("hello'world");
+      expect(result).toBe("'hello'\"'\"'world'");
+    });
+
+    test('shellQuoteArg passes through safe strings unchanged', () => {
+      const result = shellQuoteArg('simple-arg_123');
+      expect(result).toBe('simple-arg_123');
     });
   });
 });

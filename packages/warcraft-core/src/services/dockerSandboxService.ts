@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import { existsSync } from 'fs';
 import { join, sep } from 'path';
 import { execFileSync } from 'child_process';
@@ -109,20 +110,16 @@ export class DockerSandboxService {
   static containerName(worktreePath: string): string {
     const parts = worktreePath.split(sep);
     const worktreeIdx = parts.indexOf('.worktrees');
-    
+
     if (worktreeIdx === -1 || worktreeIdx + 2 >= parts.length) {
-      // Not a standard worktree path, use timestamp
       return `warcraft-sandbox-${Date.now()}`;
     }
-    
+
     const feature = parts[worktreeIdx + 1];
     const task = parts[worktreeIdx + 2];
-    
-    // Sanitize for Docker container name (only alphanumeric and hyphens)
-    const name = `warcraft-${feature}-${task}`.replace(/[^a-z0-9-]/gi, '-').toLowerCase();
-    
-    // Docker container names must be <= 63 characters
-    return name.slice(0, 63);
+    const full = `warcraft-${feature}-${task}`.replace(/[^a-z0-9-]/gi, '-').toLowerCase();
+    const hash = createHash('sha256').update(full).digest('hex').slice(0, 7);
+    return `${full.slice(0, 55)}-${hash}`;
   }
 
   /**
@@ -136,19 +133,28 @@ export class DockerSandboxService {
    */
   static ensureContainer(worktreePath: string, image: string): string {
     const name = this.containerName(worktreePath);
-    
+
     try {
-      // Check if container exists and is running
       execFileSync('docker', ['inspect', '--format={{.State.Running}}', name], { stdio: 'pipe', timeout: 15_000 });
-      return name; // Already running
+      return name;
     } catch {
       // Container doesn't exist, create it
-      execFileSync(
-        'docker',
-        ['run', '-d', '--name', name, '-v', `${worktreePath}:/app`, '-w', '/app', image, 'tail', '-f', '/dev/null'],
-        { stdio: 'pipe', timeout: 60_000 }
-      );
-      return name;
+      try {
+        execFileSync(
+          'docker',
+          ['run', '-d', '--name', name, '-v', `${worktreePath}:/app`, '-w', '/app', image, 'tail', '-f', '/dev/null'],
+          { stdio: 'pipe', timeout: 60_000 }
+        );
+        return name;
+      } catch (runError) {
+        // Container may have been created by a concurrent call
+        try {
+          execFileSync('docker', ['inspect', '--format={{.State.Running}}', name], { stdio: 'pipe', timeout: 15_000 });
+          return name;
+        } catch {
+          throw runError;
+        }
+      }
     }
   }
 

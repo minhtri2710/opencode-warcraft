@@ -97,3 +97,31 @@ describe('WorktreeService path sanitization', () => {
     expect(worktreePath).not.toContain('..');
   });
 });
+
+describe('WorktreeService commitChanges staging', () => {
+  it('uses pathspec to exclude .patch files from staging', async () => {
+    const service = createService('off');
+    const addCalls: any[][] = [];
+    const mockGit = {
+      add: async (...args: any[]) => { addCalls.push(args); },
+      status: async () => ({ staged: ['file.ts'], modified: [], not_added: [] }),
+      revparse: async () => 'abc123',
+      commit: async (_msg: string) => ({ commit: 'def456' }),
+    };
+
+    // Override getGit to return mock
+    (service as any).getGit = () => mockGit;
+
+    // Set up worktree directory at the correct off-mode path (docs/.worktrees)
+    const wtDir = path.join(testRoot, 'docs', '.worktrees', 'feat', '01-step');
+    fs.mkdirSync(wtDir, { recursive: true });
+
+    // Call commitChanges
+    const result = await service.commitChanges('feat', '01-step', 'test commit');
+
+    // Verify add was called with pathspec exclusion
+    expect(addCalls.length).toBeGreaterThanOrEqual(1);
+    const addArgs = addCalls[0][0];
+    expect(addArgs).toEqual(['.', '--', ':!*.patch']);
+  });
+});

@@ -478,13 +478,59 @@ describe('FeatureService getTasks folder stability', () => {
     // First call to getTasks generates and persists folders
     const tasks1 = (service as any).getTasks('my-feature');
     expect(tasks1).toHaveLength(3);
-    expect(tasks1[0].folder).toBe('01-setup');
-    expect(tasks1[1].folder).toBe('02-api');
-    expect(tasks1[2].folder).toBe('03-frontend');
+    expect(tasks1[0].folder).toBe('01-api');
+    expect(tasks1[1].folder).toBe('02-frontend');
+    expect(tasks1[2].folder).toBe('03-setup');
 
     // Verify folders were persisted via setTaskState
     const task1Call = setTaskStateCalls.find(call => call.beadId === 'bd-task-1');
     expect(task1Call).toBeDefined();
-    expect(task1Call?.state.folder).toBe('01-setup');
+    expect(task1Call?.state.folder).toBe('03-setup');
+  });
+
+  it('derives same folders regardless of gateway return order', () => {
+    const setTaskStateCalls = new Array<{ beadId: string; state: any }>();
+
+    // Gateway returns tasks in REVERSE alphabetical order
+    const mockRepository = createMockRepository({
+      setTaskState: (beadId: string, state: any) => {
+        setTaskStateCalls.push({ beadId, state });
+        return { success: true, value: undefined };
+      },
+      getGateway: () => ({
+        createEpic: () => 'bd-epic-1',
+        closeBead: () => {},
+        flushArtifacts: () => {},
+        readArtifact: () => null,
+        upsertArtifact: () => {},
+        readDescription: () => null,
+        updateDescription: () => {},
+        addComment: () => {},
+        addLabel: () => {},
+        list: (opts?: any) => {
+          if (opts?.type === 'task') {
+            // Deliberately reversed order compared to existing test
+            return [
+              { id: 'bd-task-3', title: 'Frontend', status: 'open', type: 'task' },
+              { id: 'bd-task-2', title: 'API', status: 'open', type: 'task' },
+              { id: 'bd-task-1', title: 'Setup', status: 'open', type: 'task' },
+            ];
+          }
+          return [];
+        },
+        show: () => ({ id: 'bd-epic-1', title: 'my-feature', status: 'open', created_at: '2024-01-01T00:00:00Z' }),
+      } as any),
+      createEpic: (_name: string, _priority: number) => ({ success: true, value: 'bd-epic-1' }),
+    });
+
+    const service = new FeatureService(testRoot, mockRepository, onMode);
+    service.create('my-feature');
+
+    const tasks = (service as any).getTasks('my-feature');
+    expect(tasks).toHaveLength(3);
+    // After sorting by title: API, Frontend, Setup
+    expect(tasks[0].folder).toBe('01-api');
+    expect(tasks[1].folder).toBe('02-frontend');
+    expect(tasks[2].folder).toBe('03-setup');
   });
 });

@@ -574,3 +574,30 @@ describe("ConfigService sandbox config", () => {
     expect(sandboxConfig).toEqual({ mode: 'docker', image: 'node:22-slim', persistent: true });
   });
 });
+
+
+describe('ConfigService HOME fallback', () => {
+  it('falls back to os.homedir() when HOME and USERPROFILE are both unset', () => {
+    const savedHome = process.env.HOME;
+    const savedUserProfile = process.env.USERPROFILE;
+
+    try {
+      delete process.env.HOME;
+      delete process.env.USERPROFILE;
+
+      const service = new ConfigService();
+      const configPath = service.getPath();
+
+      // Should not be empty or point to root
+      expect(configPath).toBeTruthy();
+      expect(configPath).not.toStartWith('/.config');
+      // Should contain os.homedir()
+      expect(configPath).toContain(os.homedir());
+    } finally {
+      if (savedHome !== undefined) process.env.HOME = savedHome;
+      else delete process.env.HOME;
+      if (savedUserProfile !== undefined) process.env.USERPROFILE = savedUserProfile;
+      else delete process.env.USERPROFILE;
+    }
+  });
+});

@@ -498,7 +498,7 @@ export class WorktreeService {
     const worktreeGit = this.getGit(worktreePath);
 
     try {
-      await worktreeGit.add("-A");
+      await worktreeGit.add(['.', '--', ':!*.patch']);
       
       const status = await worktreeGit.status();
       const hasChanges = status.staged.length > 0 || status.modified.length > 0 || status.not_added.length > 0;

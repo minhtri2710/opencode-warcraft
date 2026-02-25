@@ -171,13 +171,13 @@ describe('DockerSandboxService', () => {
     test('extracts feature and task from worktree path', () => {
       const worktreePath = '/home/user/project/.beads/artifacts/.worktrees/my-feature/my-task';
       const result = DockerSandboxService.containerName(worktreePath);
-      expect(result).toBe('warcraft-my-feature-my-task');
+      expect(result).toBe('warcraft-my-feature-my-task-4437eda');
     });
 
     test('handles complex feature and task names', () => {
       const worktreePath = '/repo/.beads/artifacts/.worktrees/v1.2.0-tighten-gates/07-implement-persistent-sandbox';
       const result = DockerSandboxService.containerName(worktreePath);
-      expect(result).toBe('warcraft-v1-2-0-tighten-gates-07-implement-persistent-sandbox');
+      expect(result).toBe('warcraft-v1-2-0-tighten-gates-07-implement-persistent-s-60e49b1');
     });
 
     test('handles non-worktree paths gracefully', () => {
@@ -193,6 +193,16 @@ describe('DockerSandboxService', () => {
     });
   });
 
+    test('produces different names for long similar paths', () => {
+      const path1 = '/repo/.beads/artifacts/.worktrees/' + 'a'.repeat(60) + '-feature-alpha/task-1';
+      const path2 = '/repo/.beads/artifacts/.worktrees/' + 'a'.repeat(60) + '-feature-beta/task-1';
+      const name1 = DockerSandboxService.containerName(path1);
+      const name2 = DockerSandboxService.containerName(path2);
+      expect(name1).not.toBe(name2);
+      expect(name1.length).toBeLessThanOrEqual(63);
+      expect(name2.length).toBeLessThanOrEqual(63);
+    });
+
   describe('ensureContainer', () => {
     test('returns existing container name when already running', () => {
       const execFileSyncSpy = spyOn(child_process, 'execFileSync').mockImplementation((...mockArgs: any[]) => {
@@ -206,7 +216,7 @@ describe('DockerSandboxService', () => {
       const worktreePath = '/repo/.beads/artifacts/.worktrees/my-feature/my-task';
       const result = DockerSandboxService.ensureContainer(worktreePath, 'node:22-slim');
       
-      expect(result).toBe('warcraft-my-feature-my-task');
+      expect(result).toMatch(/^warcraft-my-feature-my-task-[a-f0-9]{7}$/);
       expect(execFileSyncSpy).toHaveBeenCalledWith(
         'docker',
         expect.arrayContaining(['inspect']),
@@ -232,7 +242,7 @@ describe('DockerSandboxService', () => {
       const worktreePath = '/repo/.beads/artifacts/.worktrees/my-feature/my-task';
       const result = DockerSandboxService.ensureContainer(worktreePath, 'node:22-slim');
       
-      expect(result).toBe('warcraft-my-feature-my-task');
+      expect(result).toMatch(/^warcraft-my-feature-my-task-[a-f0-9]{7}$/);
       // Should have called docker run -d ...
       expect(calls.some(c => c.includes('run') && c.includes('-d'))).toBe(true);
       expect(calls.some(c => c.includes('tail'))).toBe(true);
@@ -240,6 +250,32 @@ describe('DockerSandboxService', () => {
       execFileSyncSpy.mockRestore();
     });
   });
+
+    test('recovers from concurrent container creation in ensureContainer', () => {
+      let inspectCallCount = 0;
+      const execFileSyncSpy = spyOn(child_process, 'execFileSync').mockImplementation((...mockArgs: any[]) => {
+        const [cmd, args] = mockArgs;
+        if (cmd === 'docker' && Array.isArray(args) && args.includes('inspect')) {
+          inspectCallCount++;
+          if (inspectCallCount === 1) {
+            throw new Error('container not found');
+          }
+          return 'true' as any;
+        }
+        if (cmd === 'docker' && Array.isArray(args) && args.includes('run')) {
+          throw Object.assign(new Error('name already in use'), { stderr: 'name already in use' });
+        }
+        return '' as any;
+      });
+
+      const worktreePath = '/repo/.beads/artifacts/.worktrees/my-feature/my-task';
+      const result = DockerSandboxService.ensureContainer(worktreePath, 'node:22-slim');
+
+      expect(result).toMatch(/^warcraft-my-feature-my-task/);
+      expect(inspectCallCount).toBe(2);
+
+      execFileSyncSpy.mockRestore();
+    });
 
   describe('buildExecCommand', () => {
     test('returns structured command with args array', () => {
@@ -316,7 +352,7 @@ describe('DockerSandboxService', () => {
       
       expect(execFileSyncSpy).toHaveBeenCalledWith(
         'docker',
-        ['rm', '-f', 'warcraft-my-feature-my-task'],
+        ['rm', '-f', 'warcraft-my-feature-my-task-4437eda'],
         { stdio: 'ignore', timeout: 15000 }
       );
       

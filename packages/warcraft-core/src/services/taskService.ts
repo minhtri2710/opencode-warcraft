@@ -106,7 +106,6 @@ export class TaskService {
     const epicBeadId = epicResult.value!;
     
     const existingTasks = this.list(featureName);
-    console.error(`[DEBUG sync] featureName=${featureName}, planTasks=${planTasks.length}, existingTasks=${existingTasks.length}, beadsOn=${isBeadsEnabled(this.beadsModeProvider)}`);
     
     const result: TasksSyncResult = {
       created: [],
@@ -214,7 +213,6 @@ export class TaskService {
   }
 
   private createFromPlan(featureName: string, task: ParsedTask, allTasks: ParsedTask[], planContent: string, epicBeadId: string, priority: number = 3): void {
-    console.error(`[DEBUG createFromPlan] task=${task.folder}, feature=${featureName}`);
     // Resolve dependencies: numbers -> folder names
     const dependsOn = this.resolveDependencies(task, allTasks);
 
@@ -255,7 +253,6 @@ export class TaskService {
 
     // Store spec as bead artifact
     this.repository.upsertTaskArtifact(beadId, 'spec', specContent);
-    console.error(`[DEBUG createFromPlan] upsertTaskArtifact returned for ${task.folder}`);
     if (isBeadsEnabled(this.beadsModeProvider)) {
       this.repository.flushArtifacts();
     }

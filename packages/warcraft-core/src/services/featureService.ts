@@ -246,6 +246,7 @@ export class FeatureService {
 
       const gateway = this.repository.getGateway();
       const taskBeads = gateway.list({ type: 'task', parent: feature.epicBeadId, status: 'all' });
+      taskBeads.sort((a, b) => (a.title ?? a.id).localeCompare(b.title ?? b.id));
       return taskBeads.map((taskBead, index) => {
         const beadStatus = mapBeadStatusToTaskStatus(taskBead.status);
         const taskState = this.readTaskState(taskBead.id);

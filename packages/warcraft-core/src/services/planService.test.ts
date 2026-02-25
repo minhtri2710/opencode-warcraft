@@ -383,7 +383,7 @@ describe('PlanService hash-based approval validity', () => {
     expect(isApproved).toBe(false);
   });
 
-  it('isApproved() returns true for legacy feature.json without stored approval hash', () => {
+  it('isApproved() returns false for legacy feature.json without stored approval hash', () => {
     setupFeatureWithPlan('feature-legacy', '# Legacy Plan\n\nOld content');
     const featureJsonPath = path.join(testRoot, 'docs', 'feature-legacy', 'feature.json');
     const feature = JSON.parse(fs.readFileSync(featureJsonPath, 'utf-8'));
@@ -396,7 +396,7 @@ describe('PlanService hash-based approval validity', () => {
 
     const isApproved = service.isApproved('feature-legacy');
 
-    expect(isApproved).toBe(true);
+    expect(isApproved).toBe(false);
   });
 });
 

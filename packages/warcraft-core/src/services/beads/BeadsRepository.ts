@@ -659,7 +659,6 @@ export class BeadsRepository {
    */
   upsertTaskArtifact(taskBeadId: string, kind: BeadArtifactKind, content: string): Result<void> {
     try {
-      console.error(`[DEBUG upsertTaskArtifact] kind=${kind}, beadId=${taskBeadId}`);
       this.gateway.upsertArtifact(taskBeadId, kind, content);
       this.afterWrite();
 

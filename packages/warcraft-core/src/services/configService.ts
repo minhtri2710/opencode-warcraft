@@ -1,3 +1,4 @@
+import * as os from 'os';
 import * as fs from "fs";
 import * as path from "path";
 import { WarcraftConfig, DEFAULT_WARCRAFT_CONFIG } from "../types.js";
@@ -17,7 +18,7 @@ export class ConfigService {
   private cachedConfig: WarcraftConfig | null = null;
 
   constructor() {
-    const homeDir = process.env.HOME || process.env.USERPROFILE || "";
+    const homeDir = process.env.HOME || process.env.USERPROFILE || os.homedir();
     const configDir = path.join(homeDir, ".config", "opencode");
     this.configPath = path.join(configDir, "opencode_warcraft.json");
   }
