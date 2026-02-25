@@ -5,28 +5,44 @@ description: Plan-first AI development with isolated git worktrees and human rev
 
 # Warcraft Workflow
 
-Plan-first development with Warcraft roles.
+Plan-first development: Plan → Approve → Execute.
 
-## Architecture
+## Agent Modes
+
+Warcraft has two agent modes, configured via `agentMode` in `~/.config/opencode/opencode_warcraft.json`:
+
+### Unified Mode (default)
 
 ```
-Mimiron (Planner) -> Saurfang (Orchestrator)
-                          \-> Brann (Explorer/Researcher/Retrieval)
-Saurfang -> Mekkatorque (Worker/Coder)
-Saurfang -> Algalon (Consultant/Reviewer/Debugger)
+Khadgar (Hybrid) — plans AND orchestrates
+  ├→ Brann (Explorer/Researcher)
+  ├→ Mekkatorque (Worker/Coder)
+  └→ Algalon (Consultant/Reviewer)
 ```
 
----
+| Agent          | Mode     | Use                                |
+| -------------- | -------- | ---------------------------------- |
+| `@khadgar`     | Primary  | Discovery + planning + orchestration |
+| `@brann`       | Subagent | Exploration/research/retrieval     |
+| `@mekkatorque` | Subagent | Executes tasks in worktrees        |
+| `@algalon`     | Subagent | Plan/code quality review           |
 
-## Agents
+### Dedicated Mode
 
-| Agent        | Mode     | Use                            |
-| ------------ | -------- | ------------------------------ |
-| `@architect` | Primary  | Discovery + planning           |
-| `@swarm`     | Primary  | Orchestration                  |
-| `@scout`     | Subagent | Exploration/research/retrieval |
-| `@forager`   | Subagent | Executes tasks in worktrees    |
-| `@algalon`   | Subagent | Plan quality review            |
+```
+Mimiron (Planner) → Saurfang (Orchestrator)
+                         ├→ Brann (Explorer/Researcher)
+                         ├→ Mekkatorque (Worker/Coder)
+                         └→ Algalon (Consultant/Reviewer)
+```
+
+| Agent          | Mode     | Use                                |
+| -------------- | -------- | ---------------------------------- |
+| `@mimiron`     | Primary  | Discovery + planning (never executes) |
+| `@saurfang`    | Primary  | Orchestration (delegates, verifies, merges) |
+| `@brann`       | Subagent | Exploration/research/retrieval     |
+| `@mekkatorque` | Subagent | Executes tasks in worktrees        |
+| `@algalon`     | Subagent | Plan/code quality review           |
 
 ---
 
@@ -70,7 +86,7 @@ Classify Intent → Discovery → Plan → Review → Execute → Merge
 
 ---
 
-## Phase 1: Discovery (Architect)
+## Phase 1: Discovery
 
 ### Research First (Greenfield/Complex)
 
@@ -117,7 +133,7 @@ ANY NO → Ask the unclear thing
 warcraft_feature_create({ name: "feature-name" })
 ```
 
-### Save Context (Arcane Briefing)
+### Save Context
 
 ```
 warcraft_context_write({
@@ -255,7 +271,7 @@ In this example, tasks 2 and 3 can run in parallel (both only depend on 1), whil
 
 ---
 
-## Phase 4: Execute (Saurfang)
+## Phase 4: Execute
 
 ### Sync Tasks
 
@@ -263,22 +279,36 @@ In this example, tasks 2 and 3 can run in parallel (both only depend on 1), whil
 warcraft_tasks_sync()
 ```
 
-### Execute Each Task
+### Single Task Execution
+
+`warcraft_worktree_create` creates the worktree and returns delegation instructions with `delegationRequired: true` and a `taskToolCall` object:
 
 ```
-warcraft_worktree_create({ task: "01-task-name" })  // Creates worktree; returns delegation instructions
-task({ ...taskCall })  // Only when delegationRequired is true
-  ↓
-[Mekkatorque implements in worktree]
-  ↓
-warcraft_worktree_commit({ task, summary, status: "completed" })
-  ↓
-warcraft_merge({ task: "01-task-name", strategy: "squash" })
+warcraft_worktree_create({ task: "01-task-name" })
+  → returns { delegationRequired: true, taskToolCall: { subagent_type, description, prompt } }
+
+task({
+  subagent_type: "mekkatorque",
+  description: "Warcraft: 01-task-name",
+  prompt: <from taskToolCall.prompt>
+})
+  → [Mekkatorque implements in worktree]
+
+warcraft_worktree_commit({ task: "01-task-name", summary: "...", status: "completed" })
+  → warcraft_merge({ task: "01-task-name", strategy: "squash" })
 ```
 
-### Parallel Execution (Warband)
+### Parallel Batch Execution
 
-When multiple tasks have their dependencies satisfied (runnable), the orchestrator should ask the operator how to proceed:
+Use `warcraft_batch_execute` to dispatch multiple independent tasks:
+
+1. `warcraft_batch_execute({ mode: "preview" })` — See runnable tasks
+2. Present to user, confirm which to run
+3. `warcraft_batch_execute({ mode: "execute", tasks: ["01-...", "02-..."] })` — Dispatch
+4. Issue ALL returned `task()` calls in the SAME assistant message for true parallelism
+5. After all workers return, call `warcraft_status()` and repeat for the next batch
+
+When multiple tasks are runnable, ask the operator:
 
 ```json
 {
@@ -300,14 +330,6 @@ When multiple tasks have their dependencies satisfied (runnable), the orchestrat
     }
   ]
 }
-```
-
-If `delegationRequired` is returned for a task, call `task` to spawn that worker.
-
-```
-warcraft_worktree_create({ task: "02-task-a" })
-warcraft_worktree_create({ task: "03-task-b" })
-warcraft_status()  // Monitor all
 ```
 
 ---
@@ -362,13 +384,17 @@ If "Revise Plan":
 | Plan      | `warcraft_plan_read`                                       | Check comments                             |
 | Plan      | `warcraft_plan_approve`                                    | Approve plan                               |
 | Execute   | `warcraft_tasks_sync`                                      | Generate tasks                             |
-| Execute   | `warcraft_worktree_create`                                 | Spawn Mekkatorque worker                   |
+| Execute   | `warcraft_task_create`                                     | Create ad-hoc task                         |
+| Execute   | `warcraft_task_update`                                     | Update task status                         |
+| Execute   | `warcraft_worktree_create`                                 | Create worktree + delegation instructions  |
 | Execute   | `warcraft_worktree_commit`                                 | Finish task                                |
 | Execute   | `warcraft_worktree_discard`                                | Discard task                               |
-| Execute   | `warcraft_merge`                                           | Integrate task                             |
+| Execute   | `warcraft_merge`                                           | Integrate task branch                      |
+| Execute   | `warcraft_batch_execute`                                   | Parallel task dispatch                     |
 | Execute   | `warcraft_status`                                          | Check workers/blockers                     |
 | Complete  | `warcraft_feature_complete`                                | Mark done                                  |
-| Status    | `warcraft_status`                                          | Overall progress                           |
+| Any       | `warcraft_skill`                                           | Load skill on demand                       |
+| Any       | `warcraft_agents_md`                                       | Sync/init AGENTS.md                        |
 
 ---
 
@@ -398,13 +424,13 @@ If "Revise Plan":
 
 ```
 warcraft_worktree_discard({ task })  # Discard
-warcraft_worktree_create({ task })  # Fresh start
+warcraft_worktree_create({ task })   # Fresh start
 ```
 
 ### After 3 Failures
 
 1. Stop all workers
-2. Consult oracle: `task({ subagent_type: "oracle", prompt: "Analyze failure..." })`
+2. Delegate to Algalon: `task({ subagent_type: "algalon", prompt: "Analyze failure pattern..." })`
 3. Ask user how to proceed
 
 ### Merge Conflicts
