@@ -58,6 +58,24 @@ Plans are approved with SHA-256 content hashing:
 - **beadsMode: on**: Stored in bead artifacts (`plan_approval`, `approved_plan`)
 - **beadsMode: off**: Stored in `docs/<feature>/feature.json` (`status`, `approvedAt`, `planApprovalHash`)
 
+## Agent Mode
+
+`agentMode` controls which agents are registered at runtime:
+
+- **`"unified"`** (default): Khadgar (hybrid planner+orchestrator), Brann, Mekkatorque, Algalon
+- **`"dedicated"`**: Mimiron (planner), Saurfang (orchestrator), Brann, Mekkatorque, Algalon
+
+In unified mode, Khadgar is the default agent. In dedicated mode, Mimiron is the default.
+
+## Parallel Execution
+
+`parallelExecution` controls batch task dispatch behavior:
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `strategy` | `"unbounded"` | `"unbounded"` dispatches all tasks at once; `"bounded"` limits concurrency |
+| `maxConcurrency` | `4` | Maximum parallel workers when strategy is `"bounded"` |
+
 ## Recommended Workflow
 
 1. Identify the package boundary (`core` logic vs plugin runtime).

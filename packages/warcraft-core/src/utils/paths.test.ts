@@ -27,6 +27,7 @@ import {
   getTaskPath,
   getTaskStatusPath,
   getTaskReportPath,
+  getTaskSpecPath,
   listFeatureDirectories,
 } from "./paths";
 
@@ -418,7 +419,7 @@ describe("Atomic + Locked JSON Utilities", () => {
         JSON.stringify({ name: 'my-feature', epicBeadId: 'bd-1', status: 'planning', createdAt: new Date().toISOString() })
       );
 
-      expect(getFeaturePath(TEST_DIR, 'my-feature')).toBe(flatPath);
+      expect(getFeaturePath(TEST_DIR, 'my-feature', 'on')).toBe(flatPath);
     });
 
     it("returns canonical path even if legacy nested path exists", () => {
@@ -429,7 +430,7 @@ describe("Atomic + Locked JSON Utilities", () => {
         JSON.stringify({ name: 'legacy-feature', epicBeadId: 'bd-2', status: 'planning', createdAt: new Date().toISOString() })
       );
 
-      const result = getFeaturePath(TEST_DIR, 'legacy-feature');
+      const result = getFeaturePath(TEST_DIR, 'legacy-feature', 'on');
 
       expect(result).toBe(path.join(TEST_DIR, '.beads', 'artifacts', 'legacy-feature'));
       expect(fs.existsSync(oldPath)).toBe(true);
@@ -442,11 +443,11 @@ describe("Atomic + Locked JSON Utilities", () => {
       fs.mkdirSync(oldPath, { recursive: true });
       fs.mkdirSync(newPath, { recursive: true });
 
-      expect(getFeaturePath(TEST_DIR, 'conflict-feature')).toBe(newPath);
+      expect(getFeaturePath(TEST_DIR, 'conflict-feature', 'on')).toBe(newPath);
     });
 
     it("returns new canonical path when feature doesn't exist", () => {
-      const result = getFeaturePath(TEST_DIR, 'nonexistent-feature');
+      const result = getFeaturePath(TEST_DIR, 'nonexistent-feature', 'on');
       const expectedPath = path.join(TEST_DIR, '.beads', 'artifacts', 'nonexistent-feature');
       expect(result).toBe(expectedPath);
     });
@@ -551,8 +552,8 @@ describe("Atomic + Locked JSON Utilities", () => {
         expect(getWarcraftDir('off')).toBe('docs');
       });
 
-      it("defaults to 'on' behavior when beadsMode not specified", () => {
-        expect(getWarcraftDir()).toBe('.beads/artifacts');
+      it("defaults to 'off' behavior when beadsMode not specified", () => {
+        expect(getWarcraftDir()).toBe('docs');
       });
     });
 
@@ -567,9 +568,9 @@ describe("Atomic + Locked JSON Utilities", () => {
         expect(result).toBe(path.join('/project', 'docs'));
       });
 
-      it("defaults to 'on' behavior when beadsMode not specified", () => {
+      it("defaults to 'off' behavior when beadsMode not specified", () => {
         const result = getWarcraftPath('/project');
-        expect(result).toBe(path.join('/project', '.beads', 'artifacts'));
+        expect(result).toBe(path.join('/project', 'docs'));
       });
     });
 
@@ -666,5 +667,27 @@ describe("Atomic + Locked JSON Utilities", () => {
     });
 
 
+  });
+
+  describe("task path functions (off-mode only)", () => {
+    it("getTaskPath resolves under docs/", () => {
+      const result = getTaskPath('/project', 'my-feature', '01-task');
+      expect(result).toBe(path.join('/project', 'docs', 'my-feature', 'tasks', '01-task'));
+    });
+
+    it("getTaskStatusPath resolves status.json under docs/", () => {
+      const result = getTaskStatusPath('/project', 'my-feature', '01-task');
+      expect(result).toBe(path.join('/project', 'docs', 'my-feature', 'tasks', '01-task', 'status.json'));
+    });
+
+    it("getTaskReportPath resolves report.md under docs/", () => {
+      const result = getTaskReportPath('/project', 'my-feature', '01-task');
+      expect(result).toBe(path.join('/project', 'docs', 'my-feature', 'tasks', '01-task', 'report.md'));
+    });
+
+    it("getTaskSpecPath resolves spec.md under docs/", () => {
+      const result = getTaskSpecPath('/project', 'my-feature', '01-task');
+      expect(result).toBe(path.join('/project', 'docs', 'my-feature', 'tasks', '01-task', 'spec.md'));
+    });
   });
 });

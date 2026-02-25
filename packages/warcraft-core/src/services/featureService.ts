@@ -16,7 +16,11 @@ import {
 } from '../utils/paths.js';
 import { FeatureJson, FeatureStatusType, TaskInfo, FeatureInfo, TaskStatus, TaskStatusType } from '../types.js';
 import type { BeadsMode, BeadsModeProvider } from '../types.js';
-import { BeadGateway } from './beads/BeadGateway.js';
+import { BeadsRepository } from './beads/BeadsRepository.js';
+import { isBeadsEnabled } from './beads/beadsMode.js';
+import { mapBeadStatusToTaskStatus, mapBeadStatusToFeatureStatus } from './beads/beadStatus.js';
+import { readJsonArtifact, writeJsonArtifact } from './beads/beadArtifacts.js';
+
 import { ConfigService } from './configService.js';
 import { PlanService } from './planService.js';
 
@@ -37,50 +41,20 @@ type FeatureStateArtifact = Pick<
 
 type TaskStateArtifact = TaskStatus & { folder?: string };
 
-export interface BeadClient {
-  createEpic(name: string, cwd: string, priority: number): string;
-  closeBead(beadId: string, cwd: string): void;
-  flushArtifacts(cwd: string): void;
-  readArtifact?(beadId: string, cwd: string, kind: 'feature_state' | 'task_state'): string | null;
-  upsertArtifact?(beadId: string, cwd: string, kind: 'feature_state' | 'task_state', content: string): void;
-}
-
-const defaultBeadClient: BeadClient = {
-  createEpic(name: string, cwd: string, priority: number): string {
-    const gateway = new BeadGateway(cwd);
-    return gateway.createEpic(name, priority);
-  },
-  closeBead(beadId: string, cwd: string): void {
-    const gateway = new BeadGateway(cwd);
-    gateway.closeBead(beadId);
-  },
-  flushArtifacts(cwd: string): void {
-    const gateway = new BeadGateway(cwd);
-    gateway.flushArtifacts();
-  },
-  readArtifact(beadId: string, cwd: string, kind: 'feature_state' | 'task_state'): string | null {
-    const gateway = new BeadGateway(cwd);
-    return gateway.readArtifact(beadId, kind);
-  },
-  upsertArtifact(beadId: string, cwd: string, kind: 'feature_state' | 'task_state', content: string): void {
-    const gateway = new BeadGateway(cwd);
-    gateway.upsertArtifact(beadId, kind, content);
-  },
-};
 
 export class FeatureService {
-  private beadClient: BeadClient;
+  private readonly repository: BeadsRepository;
   private readonly beadsModeProvider: BeadsModeProvider;
   private readonly planService: PlanService;
 
   constructor(
     private projectRoot: string,
-    beadClient?: BeadClient,
+    repository: BeadsRepository,
     beadsModeProvider: BeadsModeProvider = new ConfigService(),
   ) {
-    this.beadClient = beadClient ?? defaultBeadClient;
+    this.repository = repository;
     this.beadsModeProvider = beadsModeProvider;
-    this.planService = new PlanService(projectRoot, this.beadsModeProvider);
+    this.planService = new PlanService(projectRoot, repository, this.beadsModeProvider);
   }
 
   create(name: string, ticket?: string, priority: number = 3): FeatureJson {
@@ -97,13 +71,19 @@ export class FeatureService {
       throw new Error(`Priority must be an integer between 1 and 5 (inclusive), got: ${priority}`);
     }
 
-    const beadsOn = this.shouldSyncBeads();
+    const beadsOn = isBeadsEnabled(this.beadsModeProvider);
 
     // In beadsMode 'off', we don't create bead epics
-    const epicBeadId = beadsOn
-      ? this.beadClient.createEpic(name, this.projectRoot, priority)
-      : `local-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
-
+    let epicBeadId: string;
+    if (beadsOn) {
+      const epicResult = this.repository.createEpic(name, priority);
+      if (epicResult.success === false) {
+        throw new Error(`Failed to create epic: ${epicResult.error.message}`);
+      }
+      epicBeadId = epicResult.value;
+    } else {
+      epicBeadId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+    }
     const feature: FeatureJson = {
       name,
       epicBeadId,
@@ -117,7 +97,7 @@ export class FeatureService {
       ensureDir(getContextPath(this.projectRoot, name, beadsMode));
       if (!beadsOn) {
         // beadsMode off: create local tasks directory
-        ensureDir(getTasksPath(this.projectRoot, name, beadsMode));
+        ensureDir(getTasksPath(this.projectRoot, name));
         writeJson(getFeatureJsonPath(this.projectRoot, name, beadsMode), feature);
       } else {
         this.writeFeatureState(feature.epicBeadId, feature);
@@ -137,29 +117,33 @@ export class FeatureService {
   }
 
   get(name: string): FeatureJson | null {
-    if (this.shouldSyncBeads()) {
+    if (isBeadsEnabled(this.beadsModeProvider)) {
       return this.getViaBeads(name);
     }
     return readJson<FeatureJson>(getFeatureJsonPath(this.projectRoot, name, this.getBeadsMode()));
   }
 
   private getViaBeads(name: string): FeatureJson | null {
-    const gateway = new BeadGateway(this.projectRoot);
-
-    // First, try to find the feature by listing epics and matching name
-    const epics = gateway.list({ type: 'epic', status: 'all' });
-    const epic = epics.find(e => e.title === name);
-
-    if (!epic) {
+    // Use repository to find epic by name
+    const epicResult = this.repository.getEpicByFeatureName(name, false);
+    if (epicResult.success === false) {
+      console.warn(`Failed to get epic: ${epicResult.error.message}`);
       return null;
     }
+    if (!epicResult.value) {
+      return null;
+    }
+    const epicId = epicResult.value;
+
+    // Get gateway for detailed operations
+    const gateway = this.repository.getGateway();
 
     // Read full details via show
-    const details = gateway.show(epic.id);
+    const details = gateway.show(epicId);
     const obj = details as Record<string, unknown>;
 
     // Extract artifacts if present
-    const description = gateway.readDescription(epic.id);
+    const description = gateway.readDescription(epicId);
     let ticket: string | undefined;
 
     if (description) {
@@ -170,17 +154,18 @@ export class FeatureService {
       }
     }
 
-    const featureState = this.readFeatureState(epic.id);
-    const status = featureState?.status ?? this.mapBeadStatusToFeatureStatus(epic.status);
+    const featureState = this.readFeatureState(epicId);
+    const epic = obj as { status: string; created_at?: string; approved_at?: string; closed_at?: string; title?: string };
+    const status = featureState?.status ?? mapBeadStatusToFeatureStatus(epic.status);
 
     const feature = {
-      name: epic.title,
-      epicBeadId: epic.id,
+      name: epic.title || name,
+      epicBeadId: epicId,
       status,
       ticket: featureState?.ticket ?? ticket,
-      createdAt: String(obj.created_at || new Date().toISOString()),
-      approvedAt: featureState?.approvedAt ?? (obj.approved_at ? String(obj.approved_at) : undefined),
-      completedAt: featureState?.completedAt ?? (obj.closed_at ? String(obj.closed_at) : undefined),
+      createdAt: String(epic.created_at || new Date().toISOString()),
+      approvedAt: featureState?.approvedAt ?? (epic.approved_at ? String(epic.approved_at) : undefined),
+      completedAt: featureState?.completedAt ?? (epic.closed_at ? String(epic.closed_at) : undefined),
       sessionId: featureState?.sessionId,
       workflowPath: featureState?.workflowPath,
       reviewChecklistVersion: featureState?.reviewChecklistVersion,
@@ -191,50 +176,15 @@ export class FeatureService {
     return feature;
   }
 
-  private mapBeadStatusToFeatureStatus(beadStatus: string): FeatureStatusType {
-    switch (beadStatus.toLowerCase()) {
-      case 'closed':
-      case 'tombstone':
-        return 'completed';
-      case 'in_progress':
-      case 'blocked':
-      case 'deferred':
-      case 'pinned':
-      case 'hooked':
-      case 'review':
-        return 'executing';
-      case 'open':
-      default:
-        return 'planning';
-    }
-  }
-
-  private mapBeadStatusToTaskStatus(beadStatus: string): TaskStatusType {
-    switch (beadStatus.toLowerCase()) {
-      case 'closed':
-      case 'tombstone':
-        return 'done';
-      case 'in_progress':
-      case 'review':
-      case 'hooked':
-        return 'in_progress';
-      case 'blocked':
-      case 'deferred':
-        return 'blocked';
-      default:
-        return 'pending';
-    }
-  }
-
   list(): string[] {
-    if (this.shouldSyncBeads()) {
+    if (isBeadsEnabled(this.beadsModeProvider)) {
       return this.listViaBeads();
     }
     return listFeatureDirectories(this.projectRoot, this.getBeadsMode()).sort();
   }
 
   private listViaBeads(): string[] {
-    const gateway = new BeadGateway(this.projectRoot);
+    const gateway = this.repository.getGateway();
     const epics = gateway.list({ type: 'epic', status: 'all' });
     return epics.map(e => e.title).sort();
   }
@@ -263,7 +213,7 @@ export class FeatureService {
       feature.completedAt = new Date().toISOString();
     }
 
-    if (this.shouldSyncBeads()) {
+    if (isBeadsEnabled(this.beadsModeProvider)) {
       this.writeFeatureState(feature.epicBeadId, feature);
     } else {
       writeJsonLockedSync(getFeatureJsonPath(this.projectRoot, name, this.getBeadsMode()), feature);
@@ -289,16 +239,16 @@ export class FeatureService {
   }
 
   private getTasks(featureName: string): TaskInfo[] {
-    if (this.shouldSyncBeads()) {
+    if (isBeadsEnabled(this.beadsModeProvider)) {
       const feature = this.get(featureName);
       if (!feature?.epicBeadId) {
         return [];
       }
 
-      const gateway = new BeadGateway(this.projectRoot);
+      const gateway = this.repository.getGateway();
       const taskBeads = gateway.list({ type: 'task', parent: feature.epicBeadId, status: 'all' });
       return taskBeads.map((taskBead, index) => {
-        const beadStatus = this.mapBeadStatusToTaskStatus(taskBead.status);
+        const beadStatus = mapBeadStatusToTaskStatus(taskBead.status);
         const taskState = this.readTaskState(taskBead.id);
         let folder = taskState?.folder;
         if (!folder) {
@@ -324,7 +274,7 @@ export class FeatureService {
       });
     }
 
-    const tasksPath = getTasksPath(this.projectRoot, featureName, this.getBeadsMode());
+    const tasksPath = getTasksPath(this.projectRoot, featureName);
     if (!fileExists(tasksPath)) return [];
 
     const folders = fs.readdirSync(tasksPath, { withFileTypes: true })
@@ -333,7 +283,7 @@ export class FeatureService {
       .sort();
 
     return folders.map(folder => {
-      const statusPath = getTaskStatusPath(this.projectRoot, featureName, folder, this.getBeadsMode());
+      const statusPath = getTaskStatusPath(this.projectRoot, featureName, folder);
       const status = readJson<TaskStatus>(statusPath);
       const name = folder.replace(/^\d+-/, '');
       
@@ -359,13 +309,18 @@ export class FeatureService {
 
     const updated = this.updateStatus(name, 'completed');
 
-    if (!this.shouldSyncBeads()) {
+    if (!isBeadsEnabled(this.beadsModeProvider)) {
       return updated;
     }
 
     try {
-      this.beadClient.closeBead(feature.epicBeadId, this.projectRoot);
-      this.beadClient.flushArtifacts(this.projectRoot);
+      const closeResult = this.repository.closeBead(feature.epicBeadId);
+      if (closeResult.success === false) {
+        console.warn(
+          `[warcraft] Failed to close epic bead '${feature.epicBeadId}' for feature '${name}': ${closeResult.error.message}`,
+        );
+      }
+      // Note: flushArtifacts is handled automatically by repository sync policy
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       console.warn(
@@ -376,16 +331,13 @@ export class FeatureService {
     return updated;
   }
 
-  private shouldSyncBeads(): boolean {
-    return this.beadsModeProvider.getBeadsMode() !== 'off';
-  }
 
   setSession(name: string, sessionId: string): void {
     const feature = this.get(name);
     if (!feature) throw new Error(`Feature '${name}' not found`);
 
     feature.sessionId = sessionId;
-    if (this.shouldSyncBeads()) {
+    if (isBeadsEnabled(this.beadsModeProvider)) {
       this.writeFeatureState(feature.epicBeadId, feature);
       return;
     }
@@ -406,7 +358,7 @@ export class FeatureService {
       ...feature,
       ...patch,
     };
-    if (this.shouldSyncBeads()) {
+    if (isBeadsEnabled(this.beadsModeProvider)) {
       this.writeFeatureState(updated.epicBeadId, updated);
     } else {
       writeJsonLockedSync(getFeatureJsonPath(this.projectRoot, name, this.getBeadsMode()), updated);
@@ -415,34 +367,29 @@ export class FeatureService {
   }
 
   private readFeatureState(epicBeadId: string): FeatureStateArtifact | null {
-    try {
-      const raw = this.beadClient.readArtifact?.(epicBeadId, this.projectRoot, 'feature_state') ?? null;
-      if (!raw) {
-        return null;
-      }
-
-      return JSON.parse(raw) as FeatureStateArtifact;
-    } catch {
+    const result = this.repository.getFeatureState(epicBeadId);
+    if (result.success === false) {
+      console.warn(`Failed to read feature state: ${result.error.message}`);
       return null;
     }
+    return result.value;
   }
 
   private readTaskState(beadId: string): TaskStateArtifact | null {
-    try {
-      const raw = this.beadClient.readArtifact?.(beadId, this.projectRoot, 'task_state') ?? null;
-      if (!raw) {
-        return null;
-      }
-
-      return JSON.parse(raw) as TaskStateArtifact;
-    } catch {
+    const result = this.repository.getTaskState(beadId);
+    if (result.success === false) {
+      console.warn(`Failed to read task state: ${result.error.message}`);
       return null;
     }
+    return result.value;
   }
 
   private writeTaskState(beadId: string, state: TaskStateArtifact): void {
     try {
-      this.beadClient.upsertArtifact?.(beadId, this.projectRoot, 'task_state', JSON.stringify(state));
+      const result = this.repository.setTaskState(beadId, state);
+      if (result.success === false) {
+        console.warn(`Failed to write task state: ${result.error.message}`);
+      }
     } catch {
       // Best-effort persist; if it fails, the folder will be re-derived next call.
     }
@@ -451,25 +398,11 @@ export class FeatureService {
   private writeFeatureState(epicBeadId: string, feature: FeatureJson): void {
     writeJson(getFeatureJsonPath(this.projectRoot, feature.name, this.getBeadsMode()), feature);
 
-    const state: FeatureStateArtifact = {
-      name: feature.name,
-      epicBeadId,
-      status: feature.status,
-      workflowPath: feature.workflowPath,
-      reviewChecklistVersion: feature.reviewChecklistVersion,
-      reviewChecklistCompletedAt: feature.reviewChecklistCompletedAt,
-      ticket: feature.ticket,
-      sessionId: feature.sessionId,
-      createdAt: feature.createdAt,
-      approvedAt: feature.approvedAt,
-      completedAt: feature.completedAt,
-    };
-    if (!this.beadClient.upsertArtifact) {
-      return;
+    const result = this.repository.setFeatureState(epicBeadId, feature);
+    if (result.success === false) {
+      console.warn(`Failed to write feature state: ${result.error.message}`);
     }
-
-    this.beadClient.upsertArtifact(epicBeadId, this.projectRoot, 'feature_state', JSON.stringify(state));
-    this.beadClient.flushArtifacts(this.projectRoot);
+    // Note: flush is handled automatically by repository sync policy
   }
 
   private getBeadsMode(): BeadsMode {

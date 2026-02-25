@@ -12,17 +12,9 @@ import type { BeadsMode, BeadsModeProvider } from '../types.js';
 import * as fs from 'fs';
 import * as crypto from 'crypto';
 import { ConfigService } from './configService.js';
-import { BeadGateway } from './beads/BeadGateway.js';
-import { syncFeatureBeadLabel } from './beads/syncFeatureBeadLabel.js';
-import type { PlanApprovalPayload } from './beads/BeadGateway.types.js';
+import { BeadsRepository } from './beads/BeadsRepository.js';
 
-interface PlanBeadClient {
-  addLabel(beadId: string, label: string): void;
-  updateDescription(beadId: string, content: string): void;
-  addComment(beadId: string, comment: string): void;
-  upsertArtifact(beadId: string, kind: 'plan_approval' | 'approved_plan' | 'plan_comments', content: string): void;
-  readArtifact(beadId: string, kind: 'plan_approval' | 'approved_plan' | 'plan_comments'): string | null;
-}
+import type { PlanApprovalPayload } from './beads/BeadGateway.types.js';
 
 type FeatureJsonWithPlanState = FeatureJson & {
   planApprovalHash?: string;
@@ -38,11 +30,19 @@ function computePlanHash(content: string): string {
 }
 
 export class PlanService {
+  private readonly repository: BeadsRepository;
+  private readonly beadsModeProvider: BeadsModeProvider;
+
   constructor(
     private projectRoot: string,
-    private readonly beadsModeProvider: BeadsModeProvider = new ConfigService(),
-    private readonly planBeadClient: PlanBeadClient = new BeadGateway(projectRoot),
-  ) {}
+    repository: BeadsRepository | undefined = undefined,
+    beadsModeProvider: BeadsModeProvider = new ConfigService(),
+  ) {
+    this.beadsModeProvider = beadsModeProvider;
+    // Create repository if not provided (for backward compatibility)
+    const beadsMode = beadsModeProvider.getBeadsMode();
+    this.repository = repository ?? new BeadsRepository(projectRoot, {}, beadsMode);
+  }
 
   write(featureName: string, content: string): string {
     const planPath = getPlanPath(this.projectRoot, featureName, this.getBeadsMode());
@@ -96,16 +96,24 @@ export class PlanService {
 
     if (beadsMode === 'on') {
       // Store approval in bead artifact
-      const epicBeadId = this.getEpicBeadId(featureName);
-      if (epicBeadId) {
-        const approvalPayload: PlanApprovalPayload = {
-          hash: planHash,
-          approvedAt: timestamp,
-          approvedBySession: sessionId,
-        };
-        this.planBeadClient.upsertArtifact(epicBeadId, 'plan_approval', JSON.stringify(approvalPayload));
+      const epicResult = this.repository.getEpicByFeatureName(featureName, false);
+      if (epicResult.success === true && epicResult.value) {
+        const epicBeadId = epicResult.value;
+        
+        // Set plan approval
+        const setApprovalResult = this.repository.setPlanApproval(epicBeadId, planHash, timestamp, sessionId);
+        if (setApprovalResult.success === false) {
+          console.warn(`[warcraft] Failed to set plan approval: ${setApprovalResult.error.message}`);
+        }
+        
         // Store full approved plan snapshot
-        this.planBeadClient.upsertArtifact(epicBeadId, 'approved_plan', planContent);
+        const setPlanResult = this.repository.setApprovedPlan(epicBeadId, planContent, planHash);
+        if (setPlanResult.success === false) {
+          console.warn(`[warcraft] Failed to set approved plan: ${setPlanResult.error.message}`);
+        }
+        
+        // Add approved label
+        this.repository.addWorkflowLabel(epicBeadId, 'approved');
       }
     }
 
@@ -119,8 +127,6 @@ export class PlanService {
         writeJson(featurePath, feature);
       }
     }
-
-    this.syncPlanBeadLabel(featureName, true);
   }
 
   isApproved(featureName: string): boolean {
@@ -136,10 +142,11 @@ export class PlanService {
   }
 
   private isApprovedViaBead(featureName: string): boolean {
-    const epicBeadId = this.getEpicBeadId(featureName);
-    if (!epicBeadId) {
+    const epicResult = this.repository.getEpicByFeatureName(featureName, false);
+    if (epicResult.success === false || !epicResult.value) {
       return false;
     }
+    const epicBeadId = epicResult.value;
 
     const planPath = getPlanPath(this.projectRoot, featureName, this.getBeadsMode());
     if (!fileExists(planPath)) {
@@ -151,9 +158,9 @@ export class PlanService {
 
     let approvalData: PlanApprovalPayload | null = null;
     try {
-      const artifactContent = this.planBeadClient.readArtifact(epicBeadId, 'plan_approval');
-      if (artifactContent) {
-        approvalData = JSON.parse(artifactContent) as PlanApprovalPayload;
+      const approvalResult = this.repository.getPlanApproval(epicBeadId);
+      if (approvalResult.success === true && approvalResult.value) {
+        approvalData = approvalResult.value;
       }
     } catch {
       // Artifact doesn't exist or is invalid - fall through to legacy check
@@ -171,8 +178,9 @@ export class PlanService {
           approvedAt: legacyFeature.approvedAt ?? new Date().toISOString(),
           approvedBySession: legacyFeature.sessionId,
         };
-        this.planBeadClient.upsertArtifact(epicBeadId, 'plan_approval', JSON.stringify(migratedApproval));
-        this.planBeadClient.upsertArtifact(epicBeadId, 'approved_plan', currentPlanContent);
+        // Migrate to bead artifacts
+        this.repository.setPlanApproval(epicBeadId, migratedApproval.hash, migratedApproval.approvedAt, migratedApproval.approvedBySession);
+        this.repository.setApprovedPlan(epicBeadId, currentPlanContent, migratedApproval.hash);
         return true;
       }
       return false;
@@ -205,14 +213,17 @@ export class PlanService {
 
   revokeApproval(featureName: string): void {
     const beadsMode = this.getBeadsMode();
-    const epicBeadId = this.getEpicBeadId(featureName);
+    const epicResult = this.repository.getEpicByFeatureName(featureName, false);
 
     // Remove bead artifacts in on-mode
-    if (beadsMode === 'on' && epicBeadId) {
+    if (beadsMode === 'on' && epicResult.success === true && epicResult.value) {
+      const epicBeadId = epicResult.value;
       try {
-        // Upsert with empty content effectively removes the artifacts
-        this.planBeadClient.upsertArtifact(epicBeadId, 'plan_approval', '');
-        this.planBeadClient.upsertArtifact(epicBeadId, 'approved_plan', '');
+        // Clear approval artifacts by setting empty values
+        this.repository.setPlanApproval(epicBeadId, '', '', undefined);
+        this.repository.setApprovedPlan(epicBeadId, '', '');
+        // Remove approved label
+        this.repository.addWorkflowLabel(epicBeadId, 'approved'); // Note: may need a removeLabel method
       } catch {
         // Ignore errors during revoke
       }
@@ -228,8 +239,6 @@ export class PlanService {
         writeJson(featurePath, feature);
       }
     }
-
-    this.syncPlanBeadLabel(featureName, false);
   }
 
   getComments(featureName: string): PlanComment[] {
@@ -291,28 +300,27 @@ export class PlanService {
   }
 
   private readCommentsFromBead(featureName: string): PlanComment[] {
-    const epicBeadId = this.getEpicBeadId(featureName);
-    if (!epicBeadId) {
+    const epicResult = this.repository.getEpicByFeatureName(featureName, false);
+    if (epicResult.success === false || !epicResult.value) {
       return [];
     }
-    const content = this.planBeadClient.readArtifact(epicBeadId, 'plan_comments');
-    if (!content) {
+    const epicBeadId = epicResult.value;
+    
+    const commentsResult = this.repository.getPlanComments(epicBeadId);
+    if (commentsResult.success === false || !commentsResult.value) {
       return [];
     }
-    try {
-      const parsed = JSON.parse(content) as CommentsJson;
-      return parsed.threads ?? [];
-    } catch {
-      return [];
-    }
+    return commentsResult.value;
   }
 
   private writeCommentsToBead(featureName: string, comments: PlanComment[]): void {
-    const epicBeadId = this.getEpicBeadId(featureName);
-    if (!epicBeadId) {
+    const epicResult = this.repository.getEpicByFeatureName(featureName, false);
+    if (epicResult.success === false || !epicResult.value) {
       return;
     }
-    this.planBeadClient.upsertArtifact(epicBeadId, 'plan_comments', JSON.stringify({ threads: comments }));
+    const epicBeadId = epicResult.value;
+    
+    this.repository.setPlanComments(epicBeadId, comments);
   }
 
   private readCommentsFromFeature(featureName: string): PlanComment[] {
@@ -334,46 +342,41 @@ export class PlanService {
   }
 
   private syncPlanBeadLabel(featureName: string, approved: boolean): void {
-    syncFeatureBeadLabel({
-      projectRoot: this.projectRoot,
-      featureName,
-      label: approved ? 'plan-approved' : 'plan-revoked',
-      context: approved ? 'approve plan' : 'revoke plan approval',
-      warningPrefix: 'plan label',
-      beadsModeProvider: this.beadsModeProvider,
-      client: this.planBeadClient,
-    });
-  }
-
-  private getEpicBeadId(featureName: string): string | null {
-    const feature = readJson<{ epicBeadId?: string }>(
-      getFeatureJsonPath(this.projectRoot, featureName, this.getBeadsMode()),
-    );
-    if (feature?.epicBeadId) {
-      return feature.epicBeadId;
+    if (this.getBeadsMode() === 'off') {
+      return;
     }
 
-    if (this.getBeadsMode() === 'on') {
-      const epics = new BeadGateway(this.projectRoot).list({ type: 'epic', status: 'all' });
-      const epic = epics.find((entry) => entry.title === featureName);
-      return epic?.id ?? null;
+    const epicResult = this.repository.getEpicByFeatureName(featureName, false);
+    if (epicResult.success === false || !epicResult.value) {
+      return;
     }
+    const epicBeadId = epicResult.value;
 
-    return feature?.epicBeadId ?? null;
+    const label = approved ? 'approved' : 'planning';
+    try {
+      this.repository.addWorkflowLabel(epicBeadId, label);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      console.warn(
+        `[warcraft] Failed to sync plan label for feature '${featureName}' (${epicBeadId}): ${reason}`,
+      );
+    }
   }
+
 
   private syncPlanDescription(featureName: string, content: string): void {
     if (this.getBeadsMode() === 'off') {
       return;
     }
 
-    const epicBeadId = this.getEpicBeadId(featureName);
-    if (!epicBeadId) {
+    const epicResult = this.repository.getEpicByFeatureName(featureName, false);
+    if (epicResult.success === false || !epicResult.value) {
       return;
     }
+    const epicBeadId = epicResult.value;
 
     try {
-      this.planBeadClient.updateDescription(epicBeadId, content);
+      this.repository.setPlanDescription(epicBeadId, content);
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       console.warn(
@@ -387,14 +390,15 @@ export class PlanService {
       return;
     }
 
-    const epicBeadId = this.getEpicBeadId(featureName);
-    if (!epicBeadId) {
+    const epicResult = this.repository.getEpicByFeatureName(featureName, false);
+    if (epicResult.success === false || !epicResult.value) {
       return;
     }
+    const epicBeadId = epicResult.value;
 
     try {
       const commentText = `[${comment.author}] Line ${comment.line}: ${comment.body}`;
-      this.planBeadClient.addComment(epicBeadId, commentText);
+      this.repository.appendPlanComment(epicBeadId, commentText);
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       console.warn(

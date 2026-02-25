@@ -3,9 +3,9 @@ import * as fs from "fs";
 import * as path from "path";
 import * as child_process from "child_process";
 import { TaskService, TASK_STATUS_SCHEMA_VERSION } from "./taskService";
+import { BeadsRepository } from "./beads/BeadsRepository";
 import { TaskStatus } from "../types";
 import { getLockPath, readJson } from "../utils/paths";
-import { BeadsViewerGateway } from "./beads/BeadsViewerGateway";
 
 const TEST_DIR = "/tmp/warcraft-core-taskservice-test-" + process.pid;
 const PROJECT_ROOT = TEST_DIR;
@@ -16,8 +16,13 @@ function cleanup() {
   }
 }
 
+
+function createRepository(mode: 'on' | 'off' = 'off'): BeadsRepository {
+  return new BeadsRepository(PROJECT_ROOT, {}, mode);
+}
+
 function setupFeature(featureName: string): void {
-  const featurePath = path.join(TEST_DIR, ".beads/artifacts", featureName);
+  const featurePath = path.join(TEST_DIR, "docs", featureName);
   fs.mkdirSync(featurePath, { recursive: true });
 
   // Create a minimal feature.json
@@ -90,9 +95,17 @@ describe("TaskService", () => {
         // Handle sync --flush-only and sync --import-only
         return '' as any;
       }
+      if (argList[0] === 'list') {
+        // Return epic list for getEpicByFeatureName and task list for listFromBeads
+        if (argList.includes('--type') && argList[argList.indexOf('--type') + 1] === 'epic') {
+          return JSON.stringify([{ id: 'bd-epic-test', title: 'test-feature', type: 'epic', status: 'open' }]) as any;
+        }
+        // Task listing: return empty by default (tests override with spies)
+        return JSON.stringify([]) as any;
+      }
       throw new Error(`Unexpected br args: ${argList.join(' ')}`);
     });
-    service = new TaskService(PROJECT_ROOT);
+    service = new TaskService(PROJECT_ROOT, createRepository());
   });
 
   afterEach(() => {
@@ -207,14 +220,18 @@ describe("TaskService", () => {
         },
       });
 
+      // Use off-mode service: setupTask writes to local filesystem,
+      // and getRawStatus in on-mode reads from bead state (which has no patched session).
+      const offModeService = new TaskService(PROJECT_ROOT, createRepository("off"), { getBeadsMode: () => "off" });
+
       // Patch only lastHeartbeatAt
-      service.patchBackgroundFields(featureName, "01-test-task", {
+      offModeService.patchBackgroundFields(featureName, "01-test-task", {
         workerSession: {
           lastHeartbeatAt: "2025-01-23T00:00:00Z",
         } as any,
       });
 
-      const result = service.getRawStatus(featureName, "01-test-task");
+      const result = offModeService.getRawStatus(featureName, "01-test-task");
 
       // Original workerSession fields preserved
       expect(result?.workerSession?.sessionId).toBe("session-abc");
@@ -415,7 +432,7 @@ Build the UI layer.
       fs.writeFileSync(path.join(featurePath, "plan.md"), planContent);
 
       // Use off-mode service to test local file creation
-      const offModeService = new TaskService(PROJECT_ROOT, undefined, { getBeadsMode: () => "off" });
+      const offModeService = new TaskService(PROJECT_ROOT, createRepository("off"), { getBeadsMode: () => "off" });
       const result = offModeService.sync(featureName);
 
       expect(result.created).toContain("01-setup-base");
@@ -464,7 +481,7 @@ Also independent.
       fs.writeFileSync(path.join(featurePath, "plan.md"), planContent);
 
       // Use off-mode service to test local file creation
-      const offModeService = new TaskService(PROJECT_ROOT, undefined, { getBeadsMode: () => "off" });
+      const offModeService = new TaskService(PROJECT_ROOT, createRepository("off"), { getBeadsMode: () => "off" });
       const result = offModeService.sync(featureName);
 
       const task1Status = offModeService.getRawStatus(featureName, "01-independent-task-a");
@@ -502,7 +519,7 @@ Do the third thing.
       fs.writeFileSync(path.join(featurePath, "plan.md"), planContent);
 
       // Use off-mode service to test local file creation
-      const offModeService = new TaskService(PROJECT_ROOT, undefined, { getBeadsMode: () => "off" });
+      const offModeService = new TaskService(PROJECT_ROOT, createRepository("off"), { getBeadsMode: () => "off" });
       const result = offModeService.sync(featureName);
 
       const task1Status = offModeService.getRawStatus(featureName, "01-first-task");
@@ -610,7 +627,7 @@ Explicitly depends only on 1, not 2.
       fs.writeFileSync(path.join(featurePath, "plan.md"), planContent);
 
       // Use off-mode service to test local file creation
-      const offModeService = new TaskService(PROJECT_ROOT, undefined, { getBeadsMode: () => "off" });
+      const offModeService = new TaskService(PROJECT_ROOT, createRepository("off"), { getBeadsMode: () => "off" });
       offModeService.sync(featureName);
 
       const task1Status = offModeService.getRawStatus(featureName, "01-base");
@@ -857,9 +874,13 @@ Merge both branches.
       setupFeature(featureName);
       setupTask(featureName, "01-test-task");
 
+      // Use off-mode service: setupTask writes to local filesystem,
+      // and on-mode reads from bead state which doesn't reflect local patches.
+      const offModeService = new TaskService(PROJECT_ROOT, createRepository("off"), { getBeadsMode: () => "off" });
+
       // Rapid sequential updates
       for (let i = 0; i < 10; i++) {
-        service.patchBackgroundFields(featureName, "01-test-task", {
+        offModeService.patchBackgroundFields(featureName, "01-test-task", {
           workerSession: {
             sessionId: "session-1",
             messageCount: i,
@@ -867,7 +888,7 @@ Merge both branches.
         });
       }
 
-      const result = service.getRawStatus(featureName, "01-test-task");
+      const result = offModeService.getRawStatus(featureName, "01-test-task");
 
       // Last write wins
       expect(result?.workerSession?.messageCount).toBe(9);
@@ -917,7 +938,7 @@ Task with spaces around comma.
       fs.writeFileSync(path.join(featurePath, "plan.md"), planContent);
 
       // Use off-mode service to test local file creation
-      const offModeService = new TaskService(PROJECT_ROOT, undefined, { getBeadsMode: () => "off" });
+      const offModeService = new TaskService(PROJECT_ROOT, createRepository("off"), { getBeadsMode: () => "off" });
       const result = offModeService.sync(featureName);
 
       expect(result.created).toContain("01-base-task");
@@ -957,7 +978,7 @@ Second depends on first (non-bold format).
       fs.writeFileSync(path.join(featurePath, "plan.md"), planContent);
 
       // Use off-mode service to test local file creation
-      const offModeService = new TaskService(PROJECT_ROOT, undefined, { getBeadsMode: () => "off" });
+      const offModeService = new TaskService(PROJECT_ROOT, createRepository("off"), { getBeadsMode: () => "off" });
       const result = offModeService.sync(featureName);
 
       const task2Status = offModeService.getRawStatus(featureName, "02-second");
@@ -986,7 +1007,7 @@ Independent task with capital None.
       fs.writeFileSync(path.join(featurePath, "plan.md"), planContent);
 
       // Use off-mode service to test local file creation
-      const offModeService = new TaskService(PROJECT_ROOT, undefined, { getBeadsMode: () => "off" });
+      const offModeService = new TaskService(PROJECT_ROOT, createRepository("off"), { getBeadsMode: () => "off" });
       const result = offModeService.sync(featureName);
 
       const task1Status = offModeService.getRawStatus(featureName, "01-independent-task");
@@ -1397,11 +1418,11 @@ Align documentation wording.
       setupTask(featureName, "01-test-task", { beadId: "bd-task-1" });
 
       // Create a new service with beadsMode on
-      const onModeService = new TaskService(PROJECT_ROOT, undefined, { getBeadsMode: () => "on" });
+      const onModeService = new TaskService(PROJECT_ROOT, createRepository("on"), { getBeadsMode: () => "on" });
 
       // Spy on importArtifacts
-      const importSpy = spyOn((onModeService as any).beadGateway, "importArtifacts").mockImplementation(() => {});
-      const readArtifactSpy = spyOn((onModeService as any).beadGateway, "readArtifact").mockReturnValue("spec content");
+      const importSpy = spyOn((onModeService as any).repository.getGateway(), "importArtifacts").mockImplementation(() => {});
+      const readArtifactSpy = spyOn((onModeService as any).repository.getGateway(), "readArtifact").mockReturnValue("spec content");
 
       const result = onModeService.readTaskBeadArtifact(featureName, "01-test-task", "spec");
 
@@ -1419,11 +1440,11 @@ Align documentation wording.
       setupTask(featureName, "01-test-task", { beadId: "bd-task-1" });
 
       // Create a new service with beadsMode off
-      const offModeService = new TaskService(PROJECT_ROOT, undefined, { getBeadsMode: () => "off" });
+      const offModeService = new TaskService(PROJECT_ROOT, createRepository("off"), { getBeadsMode: () => "off" });
 
       // Spy on importArtifacts
-      const importSpy = spyOn((offModeService as any).beadGateway, "importArtifacts").mockImplementation(() => {});
-      const readArtifactSpy = spyOn((offModeService as any).beadGateway, "readArtifact").mockReturnValue(null);
+      const importSpy = spyOn((offModeService as any).repository, "importArtifacts").mockImplementation(() => ({ success: true, value: undefined }));
+      const readArtifactSpy = spyOn((offModeService as any).repository, "readTaskArtifact").mockReturnValue({ success: true, value: null });
 
       const result = offModeService.readTaskBeadArtifact(featureName, "01-test-task", "spec");
 
@@ -1441,11 +1462,11 @@ Align documentation wording.
       setupTask(featureName, "01-test-task", { beadId: "bd-task-1", status: "pending" });
 
       // Create a new service with beadsMode on
-      const onModeService = new TaskService(PROJECT_ROOT, undefined, { getBeadsMode: () => "on" });
+      const onModeService = new TaskService(PROJECT_ROOT, createRepository("on"), { getBeadsMode: () => "on" });
 
       // Spy on flushArtifacts
-      const flushSpy = spyOn((onModeService as any).beadGateway, "flushArtifacts").mockImplementation(() => {});
-      const syncStatusSpy = spyOn((onModeService as any).beadGateway, "syncTaskStatus").mockImplementation(() => {});
+      const flushSpy = spyOn((onModeService as any).repository.getGateway(), "flushArtifacts").mockImplementation(() => {});
+      const syncStatusSpy = spyOn((onModeService as any).repository.getGateway(), "syncTaskStatus").mockImplementation(() => {});
 
       const result = onModeService.update(featureName, "01-test-task", { status: "in_progress" });
 
@@ -1463,10 +1484,10 @@ Align documentation wording.
       setupTask(featureName, "01-test-task", { beadId: "bd-task-1", status: "pending" });
 
       // Create a new service with beadsMode on
-      const onModeService = new TaskService(PROJECT_ROOT, undefined, { getBeadsMode: () => "on" });
+      const onModeService = new TaskService(PROJECT_ROOT, createRepository("on"), { getBeadsMode: () => "on" });
 
       // Spy on flushArtifacts
-      const flushSpy = spyOn((onModeService as any).beadGateway, "flushArtifacts").mockImplementation(() => {});
+      const flushSpy = spyOn((onModeService as any).repository.getGateway(), "flushArtifacts").mockImplementation(() => {});
 
       // Update without changing status
       const result = onModeService.update(featureName, "01-test-task", { summary: "Updated summary" });
@@ -1483,11 +1504,11 @@ Align documentation wording.
       setupTask(featureName, "01-test-task", { beadId: "bd-task-1" });
 
       // Create a new service with beadsMode on
-      const onModeService = new TaskService(PROJECT_ROOT, undefined, { getBeadsMode: () => "on" });
+      const onModeService = new TaskService(PROJECT_ROOT, createRepository("on"), { getBeadsMode: () => "on" });
 
       // Spy on flushArtifacts
-      const flushSpy = spyOn((onModeService as any).beadGateway, "flushArtifacts").mockImplementation(() => {});
-      const upsertSpy = spyOn((onModeService as any).beadGateway, "upsertArtifact").mockImplementation(() => {});
+      const flushSpy = spyOn((onModeService as any).repository.getGateway(), "flushArtifacts").mockImplementation(() => {});
+      const upsertSpy = spyOn((onModeService as any).repository.getGateway(), "upsertArtifact").mockImplementation(() => {});
 
       const beadId = onModeService.upsertTaskBeadArtifact(featureName, "01-test-task", "spec", "spec content");
 
@@ -1505,11 +1526,11 @@ Align documentation wording.
       setupTask(featureName, "01-test-task", { beadId: "bd-task-1" });
 
       // Create a new service with beadsMode off
-      const offModeService = new TaskService(PROJECT_ROOT, undefined, { getBeadsMode: () => "off" });
+      const offModeService = new TaskService(PROJECT_ROOT, createRepository("off"), { getBeadsMode: () => "off" });
 
       // Spy on flushArtifacts
-      const flushSpy = spyOn((offModeService as any).beadGateway, "flushArtifacts").mockImplementation(() => {});
-      const upsertSpy = spyOn((offModeService as any).beadGateway, "upsertArtifact").mockImplementation(() => {});
+      const flushSpy = spyOn((offModeService as any).repository, "flushArtifacts").mockImplementation(() => ({ success: true, value: undefined }));
+      const upsertSpy = spyOn((offModeService as any).repository, "upsertTaskArtifact").mockImplementation(() => ({ success: true, value: undefined }));
 
       const beadId = offModeService.upsertTaskBeadArtifact(featureName, "01-test-task", "spec", "spec content");
 
@@ -1523,32 +1544,40 @@ Align documentation wording.
   });
 
   describe("writeReport - beadsMode integration", () => {
-    it("writes report to filesystem and adds bead comment when beadsMode is on", () => {
+    it("writes report to bead artifact only (no filesystem) when beadsMode is on", () => {
       const featureName = "test-feature";
       setupFeature(featureName);
       setupTask(featureName, "01-test-task", { beadId: "bd-task-1" });
 
-      // Create mock BeadGateway
-      const mockBeadGateway = {
-        upsertArtifact: () => {},
-        flushArtifacts: () => {},
+      // Create mock repository
+      const mockRepository = {
+        upsertTaskArtifact: () => ({ success: true, value: undefined }),
+        flushArtifacts: () => ({ success: true, value: undefined }),
+        importArtifacts: () => ({ success: true, value: undefined }),
+        readTaskArtifact: () => ({ success: true, value: null }),
+        getGateway: () => ({ list: () => [], readArtifact: () => null }),
+        getEpicByFeatureName: () => ({ success: true, value: "bd-epic-test" }),
+        listTaskBeadsForEpic: () => ({ success: true, value: [] }),
+        getRobotPlan: () => null,
       };
-      const upsertSpy = spyOn(mockBeadGateway, "upsertArtifact").mockImplementation(() => {});
-      const flushSpy = spyOn(mockBeadGateway, "flushArtifacts").mockImplementation(() => {});
+      const upsertSpy = spyOn(mockRepository, "upsertTaskArtifact").mockImplementation(() => ({ success: true, value: undefined }));
+      const flushSpy = spyOn(mockRepository, "flushArtifacts").mockImplementation(() => ({ success: true, value: undefined }));
 
-      // Create service with beadsMode on and mock gateway
-      const onModeService = new TaskService(PROJECT_ROOT, mockBeadGateway as any, { getBeadsMode: () => "on" });
+      // Create service with beadsMode on and mock repository
+      const onModeService = new TaskService(PROJECT_ROOT, mockRepository as any, { getBeadsMode: () => "on" });
 
       const reportContent = "# Task Report\n\nCompleted successfully.";
       const reportPath = onModeService.writeReport(featureName, "01-test-task", reportContent);
 
-      // Verify filesystem write
-      expect(fs.existsSync(reportPath)).toBe(true);
-      expect(fs.readFileSync(reportPath, "utf-8")).toBe(reportContent);
+      // In on-mode, report is NOT written to filesystem (only bead artifacts)
+      expect(fs.existsSync(reportPath)).toBe(false);
 
-      // Verify bead comment added
-      expect(upsertSpy).toHaveBeenCalledWith("bd-task-1", "worker_prompt", reportContent);
+      // Verify bead artifact was upserted and flushed
+      expect(upsertSpy).toHaveBeenCalledWith("bd-task-1", "report", reportContent);
       expect(flushSpy).toHaveBeenCalled();
+
+      // Verify a virtual path is still returned
+      expect(reportPath).toContain("01-test-task");
 
       upsertSpy.mockRestore();
       flushSpy.mockRestore();
@@ -1559,16 +1588,22 @@ Align documentation wording.
       setupFeature(featureName);
       setupTask(featureName, "01-test-task", { beadId: "bd-task-1" });
 
-      // Create mock BeadGateway
-      const mockBeadGateway = {
-        upsertArtifact: () => {},
-        flushArtifacts: () => {},
+      // Create mock repository
+      const mockRepository = {
+        upsertTaskArtifact: () => ({ success: true, value: undefined }),
+        flushArtifacts: () => ({ success: true, value: undefined }),
+        importArtifacts: () => ({ success: true, value: undefined }),
+        readTaskArtifact: () => ({ success: true, value: null }),
+        getGateway: () => ({ list: () => [], readArtifact: () => null }),
+        getEpicByFeatureName: () => ({ success: true, value: "bd-epic-test" }),
+        listTaskBeadsForEpic: () => ({ success: true, value: [] }),
+        getRobotPlan: () => null,
       };
-      const upsertSpy = spyOn(mockBeadGateway, "upsertArtifact").mockImplementation(() => {});
-      const flushSpy = spyOn(mockBeadGateway, "flushArtifacts").mockImplementation(() => {});
+      const upsertSpy = spyOn(mockRepository, "upsertTaskArtifact").mockImplementation(() => ({ success: true, value: undefined }));
+      const flushSpy = spyOn(mockRepository, "flushArtifacts").mockImplementation(() => ({ success: true, value: undefined }));
 
-      // Create service with beadsMode off and mock gateway
-      const offModeService = new TaskService(PROJECT_ROOT, mockBeadGateway as any, { getBeadsMode: () => "off" });
+      // Create service with beadsMode off and mock repository
+      const offModeService = new TaskService(PROJECT_ROOT, mockRepository as any, { getBeadsMode: () => "off" });
 
       const reportContent = "# Task Report\n\nCompleted successfully.";
       const reportPath = offModeService.writeReport(featureName, "01-test-task", reportContent);
@@ -1591,20 +1626,35 @@ Align documentation wording.
       // Task without beadId
       setupTask(featureName, "01-test-task", { status: "pending" });
 
-      // Create mock BeadGateway
-      const mockBeadGateway = {
-        upsertArtifact: () => {},
-        flushArtifacts: () => {},
+      // Create mock repository
+      const mockRepository = {
+        upsertTaskArtifact: () => ({ success: true, value: undefined }),
+        flushArtifacts: () => ({ success: true, value: undefined }),
+        importArtifacts: () => ({ success: true, value: undefined }),
+        readTaskArtifact: () => ({ success: true, value: null }),
+        getGateway: () => ({ list: () => [], readArtifact: () => null }),
+        getEpicByFeatureName: () => ({ success: true, value: "bd-epic-test" }),
+        listTaskBeadsForEpic: () => ({ success: true, value: [] }),
+        getRobotPlan: () => null,
       };
+      const upsertSpy = spyOn(mockRepository, "upsertTaskArtifact").mockImplementation(() => ({ success: true, value: undefined }));
 
-      // Create service with beadsMode on and mock gateway
-      const onModeService = new TaskService(PROJECT_ROOT, mockBeadGateway as any, { getBeadsMode: () => "on" });
+      // Create service with beadsMode on and mock repository
+      const onModeService = new TaskService(PROJECT_ROOT, mockRepository as any, { getBeadsMode: () => "on" });
 
       const reportContent = "# Task Report";
       const reportPath = onModeService.writeReport(featureName, "01-test-task", reportContent);
 
-      // Verify filesystem write still happens
-      expect(fs.existsSync(reportPath)).toBe(true);
+      // In on-mode, report is NOT written to filesystem
+      expect(fs.existsSync(reportPath)).toBe(false);
+
+      // Without beadId, upsert should not be called
+      expect(upsertSpy).not.toHaveBeenCalled();
+
+      // Virtual path is still returned
+      expect(reportPath).toContain("01-test-task");
+
+      upsertSpy.mockRestore();
     });
   });
 
@@ -1614,7 +1664,7 @@ Align documentation wording.
       setupFeature(featureName);
 
       // Create service with beadsMode off
-      const offModeService = new TaskService(PROJECT_ROOT, undefined, { getBeadsMode: () => "off" });
+      const offModeService = new TaskService(PROJECT_ROOT, createRepository("off"), { getBeadsMode: () => "off" });
 
       const result = offModeService.getRunnableTasks(featureName);
 
@@ -1633,7 +1683,7 @@ Align documentation wording.
       setupTask(featureName, "03-done", { status: "done" });
       setupTask(featureName, "04-blocked", { status: "blocked" });
 
-      const offModeService = new TaskService(PROJECT_ROOT, undefined, { getBeadsMode: () => "off" });
+      const offModeService = new TaskService(PROJECT_ROOT, createRepository("off"), { getBeadsMode: () => "off" });
 
       const result = offModeService.getRunnableTasks(featureName);
 
@@ -1653,7 +1703,7 @@ Align documentation wording.
       setupTask(featureName, "01-setup", { status: "pending" });
       setupTask(featureName, "02-dependent", { status: "pending", dependsOn: ["01-setup"] });
 
-      const offModeService = new TaskService(PROJECT_ROOT, undefined, { getBeadsMode: () => "off" });
+      const offModeService = new TaskService(PROJECT_ROOT, createRepository("off"), { getBeadsMode: () => "off" });
 
       const result = offModeService.getRunnableTasks(featureName);
 
@@ -1669,7 +1719,7 @@ Align documentation wording.
       setupTask(featureName, "01-setup", { status: "done" });
       setupTask(featureName, "02-dependent", { status: "pending", dependsOn: ["01-setup"] });
 
-      const offModeService = new TaskService(PROJECT_ROOT, undefined, { getBeadsMode: () => "off" });
+      const offModeService = new TaskService(PROJECT_ROOT, createRepository("off"), { getBeadsMode: () => "off" });
 
       const result = offModeService.getRunnableTasks(featureName);
 
@@ -1685,22 +1735,24 @@ Align documentation wording.
       setupFeature(featureName);
       setupTask(featureName, "01-test", { status: "pending", beadId: "bd-1" });
 
-      // Create service with mocked BeadsViewerGateway that returns null
-      const failingViewer = new BeadsViewerGateway(PROJECT_ROOT, true, () => {
-        throw new Error("bv not available");
-      });
-      const onModeService = new TaskService(
-        PROJECT_ROOT,
-        undefined,
-        { getBeadsMode: () => "on" },
-        failingViewer
-      );
+      // Create service with mocked robot plan that returns null
+      const onModeService = new TaskService(PROJECT_ROOT, createRepository("on"), { getBeadsMode: () => "on" });
+      // Mock getRobotPlan to simulate viewer failure
+      spyOn((onModeService as any).repository, "getRobotPlan").mockImplementation(() => null);
+
+      // Mock gateway list to return the task
+      const listSpy = spyOn((onModeService as any).repository, "listTaskBeadsForEpic").mockReturnValue({ success: true, value: [
+        { id: "bd-1", title: "Test", status: "open" },
+      ]});
 
       const result = onModeService.getRunnableTasks(featureName);
 
-      // Should fall back to filesystem
+      // Robot plan fails, falls back to filesystem-based dependency resolution
+      // But tasks are listed from beads
       expect(result.source).toBe("filesystem");
       expect(result.runnable).toHaveLength(1);
+
+      listSpy.mockRestore();
     });
 
     it("uses beads viewer when available", () => {
@@ -1708,30 +1760,25 @@ Align documentation wording.
       setupFeature(featureName);
       setupTask(featureName, "01-test", { status: "pending", beadId: "bd-task-1" });
 
-      // Mock BeadsViewerGateway that returns a robot plan
-      const mockViewer = new BeadsViewerGateway(PROJECT_ROOT, true, () => {
-        return JSON.stringify({
-          plan: {
-            summary: { total_tracks: 1, total_tasks: 1 },
-            tracks: [
-              { track_id: 1, tasks: ["bd-task-1"] }
-            ]
-          }
-        });
-      });
+      const onModeService = new TaskService(PROJECT_ROOT, createRepository("on"), { getBeadsMode: () => "on" });
+      // Mock getRobotPlan to return a robot plan
+      spyOn((onModeService as any).repository, "getRobotPlan").mockImplementation(() => ({
+        summary: { total_tracks: 1, total_tasks: 1 },
+        tracks: [{ track_id: 1, tasks: ["bd-task-1"] }],
+      }));
 
-      const onModeService = new TaskService(
-        PROJECT_ROOT,
-        undefined,
-        { getBeadsMode: () => "on" },
-        mockViewer
-      );
+      // Mock gateway list so listFromBeads can find the task
+      const listSpy = spyOn((onModeService as any).repository, "listTaskBeadsForEpic").mockReturnValue({ success: true, value: [
+        { id: "bd-task-1", title: "Test", status: "open" },
+      ]});
 
       const result = onModeService.getRunnableTasks(featureName);
 
       expect(result.source).toBe("beads");
       expect(result.runnable).toHaveLength(1);
       expect(result.runnable[0].folder).toBe("01-test");
+
+      listSpy.mockRestore();
     });
 
     it("categorizes tasks from robot plan correctly", () => {
@@ -1741,23 +1788,19 @@ Align documentation wording.
       setupTask(featureName, "02-in-progress", { status: "in_progress", beadId: "bd-2" });
       setupTask(featureName, "03-done", { status: "done", beadId: "bd-3" });
 
-      const mockViewer = new BeadsViewerGateway(PROJECT_ROOT, true, () => {
-        return JSON.stringify({
-          plan: {
-            summary: { total_tracks: 1, total_tasks: 3 },
-            tracks: [
-              { track_id: 1, tasks: ["bd-1", "bd-2", "bd-3"] }
-            ]
-          }
-        });
-      });
+      const onModeService = new TaskService(PROJECT_ROOT, createRepository("on"), { getBeadsMode: () => "on" });
+      // Mock getRobotPlan to return categorized tasks
+      spyOn((onModeService as any).repository, "getRobotPlan").mockImplementation(() => ({
+        summary: { total_tracks: 1, total_tasks: 3 },
+        tracks: [{ track_id: 1, tasks: ["bd-1", "bd-2", "bd-3"] }],
+      }));
 
-      const onModeService = new TaskService(
-        PROJECT_ROOT,
-        undefined,
-        { getBeadsMode: () => "on" },
-        mockViewer
-      );
+      // Mock gateway list so listFromBeads resolves tasks
+      const listSpy = spyOn((onModeService as any).repository, "listTaskBeadsForEpic").mockReturnValue({ success: true, value: [
+        { id: "bd-1", title: "Pending", status: "open" },
+        { id: "bd-2", title: "In Progress", status: "in_progress" },
+        { id: "bd-3", title: "Done", status: "closed" },
+      ]});
 
       const result = onModeService.getRunnableTasks(featureName);
 
@@ -1768,30 +1811,30 @@ Align documentation wording.
       expect(result.inProgress[0].beadId).toBe("bd-2");
       expect(result.completed).toHaveLength(1);
       expect(result.completed[0].beadId).toBe("bd-3");
+
+      listSpy.mockRestore();
     });
   });
 
   describe("beads-only mode (beadsMode: on)", () => {
-    it("creates local task cache during create()", () => {
+    it("does NOT create local task cache during create()", () => {
       const featureName = "test-feature";
       setupFeature(featureName);
 
       // Create service with beadsMode on
-      const onModeService = new TaskService(PROJECT_ROOT, undefined, { getBeadsMode: () => "on" });
+      const onModeService = new TaskService(PROJECT_ROOT, createRepository("on"), { getBeadsMode: () => "on" });
 
       const taskFolder = onModeService.create(featureName, "test-task", 1, 3);
 
-      // Verify task folder and local cache were created
+      // Verify task folder name is correct
       expect(taskFolder).toBe("01-test-task");
-      const taskPath = path.join(TEST_DIR, ".beads/artifacts", featureName, "tasks", taskFolder);
-      expect(fs.existsSync(taskPath)).toBe(true);
 
-      // Verify status.json created
-      const statusPath = path.join(taskPath, "status.json");
-      expect(fs.existsSync(statusPath)).toBe(true);
+      // In on-mode, local task cache is NOT created (bead artifacts are canonical)
+      const taskPath = path.join(TEST_DIR, ".beads/artifacts", featureName, "tasks", taskFolder);
+      expect(fs.existsSync(taskPath)).toBe(false);
     });
 
-    it("creates local task cache during sync()", () => {
+    it("does NOT create local task cache during sync()", () => {
       const featureName = "test-feature";
       const featurePath = path.join(TEST_DIR, ".beads/artifacts", featureName);
       fs.mkdirSync(featurePath, { recursive: true });
@@ -1814,16 +1857,16 @@ Second task description.
       fs.writeFileSync(path.join(featurePath, "plan.md"), planContent);
 
       // Create service with beadsMode on
-      const onModeService = new TaskService(PROJECT_ROOT, undefined, { getBeadsMode: () => "on" });
+      const onModeService = new TaskService(PROJECT_ROOT, createRepository("on"), { getBeadsMode: () => "on" });
       const result = onModeService.sync(featureName);
 
       // Verify tasks were reported as created
       expect(result.created).toContain("01-first-task");
       expect(result.created).toContain("02-second-task");
 
-      // Verify local task cache directories were created
+      // In on-mode, local task cache directories are NOT created
       const tasksPath = path.join(featurePath, "tasks");
-      expect(fs.existsSync(tasksPath)).toBe(true);
+      expect(fs.existsSync(tasksPath)).toBe(false);
     });
 
     it("lists tasks from beads in on-mode", () => {
@@ -1833,13 +1876,13 @@ Second task description.
       setupTask(featureName, "02-task-two", { status: "pending", beadId: "bd-task-2", planTitle: "Task Two" });
 
       // Create service with beadsMode on
-      const onModeService = new TaskService(PROJECT_ROOT, undefined, { getBeadsMode: () => "on" });
+      const onModeService = new TaskService(PROJECT_ROOT, createRepository("on"), { getBeadsMode: () => "on" });
 
       // Mock BeadGateway.list to return tasks
-      const listSpy = spyOn((onModeService as any).beadGateway, "list").mockReturnValue([
+      const listSpy = spyOn((onModeService as any).repository, "listTaskBeadsForEpic").mockReturnValue({ success: true, value: [
         { id: "bd-task-1", title: "Task One", status: "closed" },
         { id: "bd-task-2", title: "Task Two", status: "closed" },
-      ]);
+      ]});
 
       const tasks = onModeService.list(featureName);
 
@@ -1851,15 +1894,7 @@ Second task description.
       expect(tasks[1].beadId).toBe("bd-task-2");
       expect(tasks[1].status).toBe("done");
 
-      const firstStatus = readJson<TaskStatus>(path.join(
-        TEST_DIR,
-        ".beads/artifacts",
-        featureName,
-        "tasks",
-        "01-task-one",
-        "status.json"
-      ));
-      expect(firstStatus?.status).toBe("done");
+      // In on-mode, list() returns from beads — no local cache write verification needed
 
       listSpy.mockRestore();
     });
@@ -1868,12 +1903,12 @@ Second task description.
       const featureName = "test-feature";
       setupFeature(featureName);
 
-      const onModeService = new TaskService(PROJECT_ROOT, undefined, { getBeadsMode: () => "on" });
-      const listSpy = spyOn((onModeService as any).beadGateway, "list").mockReturnValue([
+      const onModeService = new TaskService(PROJECT_ROOT, createRepository("on"), { getBeadsMode: () => "on" });
+      const listSpy = spyOn((onModeService as any).repository, "listTaskBeadsForEpic").mockReturnValue({ success: true, value: [
         { id: "bd-task-1", title: "Task In Progress", status: "in_progress" },
         { id: "bd-task-2", title: "Task Deferred", status: "deferred" },
         { id: "bd-task-3", title: "Task Pinned", status: "pinned" },
-      ]);
+      ]});
 
       const tasks = onModeService.list(featureName);
 
@@ -1885,21 +1920,20 @@ Second task description.
       listSpy.mockRestore();
     });
 
-    it("falls back to filesystem when beads returns empty in on-mode", () => {
+    it("returns empty when beads returns empty in on-mode", () => {
       const featureName = "test-feature";
       setupFeature(featureName);
       // Setup local task (legacy feature with local files)
       setupTask(featureName, "01-local-task", { status: "pending", beadId: "bd-local-1" });
 
       // Create service with beadsMode on, but beads returns empty
-      const onModeService = new TaskService(PROJECT_ROOT, undefined, { getBeadsMode: () => "on" });
-      const listSpy = spyOn((onModeService as any).beadGateway, "list").mockReturnValue([]);
+      const onModeService = new TaskService(PROJECT_ROOT, createRepository("on"), { getBeadsMode: () => "on" });
+      const listSpy = spyOn((onModeService as any).repository, "listTaskBeadsForEpic").mockReturnValue({ success: true, value: []});
 
       const tasks = onModeService.list(featureName);
 
-      // Should fall back to filesystem
-      expect(tasks).toHaveLength(1);
-      expect(tasks[0].folder).toBe("01-local-task");
+      // On-mode: beads is canonical — no filesystem fallback
+      expect(tasks).toHaveLength(0);
 
       listSpy.mockRestore();
     });
@@ -1909,34 +1943,25 @@ Second task description.
       setupFeature(featureName);
 
       // Create service with beadsMode on
-      const onModeService = new TaskService(PROJECT_ROOT, undefined, { getBeadsMode: () => "on" });
+      const onModeService = new TaskService(PROJECT_ROOT, createRepository("on"), { getBeadsMode: () => "on" });
 
       // Mock BeadGateway.list to return tasks
-      const listSpy = spyOn((onModeService as any).beadGateway, "list").mockReturnValue([
+      const listSpy = spyOn((onModeService as any).repository, "listTaskBeadsForEpic").mockReturnValue({ success: true, value: [
         { id: "bd-task-1", title: "Pending Task", status: "open" },
-      ]);
+      ]});
 
-      // Mock BeadsViewerGateway
-      const mockViewer = new BeadsViewerGateway(PROJECT_ROOT, true, () => {
-        return JSON.stringify({
-          plan: {
-            summary: { total_tracks: 1, total_tasks: 1 },
-            tracks: [{ track_id: 1, tasks: ["bd-task-1"] }]
-          }
-        });
-      });
-
-      const serviceWithMockViewer = new TaskService(
-        PROJECT_ROOT,
-        undefined,
-        { getBeadsMode: () => "on" },
-        mockViewer
-      );
+      // Mock robot plan viewer
+      const serviceWithMockViewer = new TaskService(PROJECT_ROOT, createRepository("on"), { getBeadsMode: () => "on" });
+      // Mock getRobotPlan
+      spyOn((serviceWithMockViewer as any).repository, "getRobotPlan").mockImplementation(() => ({
+        summary: { total_tracks: 1, total_tasks: 1 },
+        tracks: [{ track_id: 1, tasks: ["bd-task-1"] }],
+      }));
 
       // Apply the same list spy to the new service
-      const listSpy2 = spyOn((serviceWithMockViewer as any).beadGateway, "list").mockReturnValue([
+      const listSpy2 = spyOn((serviceWithMockViewer as any).repository, "listTaskBeadsForEpic").mockReturnValue({ success: true, value: [
         { id: "bd-task-1", title: "Pending Task", status: "open" },
-      ]);
+      ]});
 
       const result = serviceWithMockViewer.getRunnableTasks(featureName);
 

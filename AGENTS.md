@@ -167,31 +167,36 @@ feat!: change plan format to support subtasks
 
 | Agent | Role |
 |-------|------|
-| Khadgar (Hybrid) | Plans AND orchestrates; phase-aware |
-| Mimiron | Plans features, interviews, writes plans. NEVER executes |
-| Saurfang | Orchestrates execution. Delegates, spawns workers, verifies |
-| Brann | Researches codebase + external docs/data |
-| Mekkatorque | Executes tasks directly in isolated worktrees |
-| Algalon | Reviews plan/code quality. OKAY/REJECT verdict |
+| Khadgar (Hybrid) | Plans + orchestrates. Detects phase, loads skills on-demand |
+| Mimiron (Planner) | Plans features, interviews, writes plans. NEVER executes |
+| Saurfang (Orchestrator) | Orchestrates execution. Delegates, spawns workers, verifies, merges |
+| Brann (Explorer) | Researches codebase + external docs/data |
+| Mekkatorque (Worker) | Executes tasks directly in isolated worktrees. Never delegates |
+| Algalon (Consultant) | Reviews plan/code quality. OKAY/REJECT verdict |
 
 ### Data Model
 
-Features stored in `.beads/artifacts/<name>/`:
+Features stored in `.beads/artifacts/<name>/` (beadsMode `on`) or `docs/<name>/` (beadsMode `off`):
 ```
 .beads/artifacts/my-feature/
-├── feature.json       # Feature metadata
+├── feature.json       # Feature metadata (bead state cache in on mode)
 ├── plan.md            # Implementation plan
 ├── context/            # Persistent context files
 │   ├── research.md
 │   └── decisions.md
-└── tasks/              # Task folders with per-task state
+└── tasks/              # Task folders (beadsMode off only; cache in on mode)
     └── 01-sample-task/
         ├── status.json
         ├── spec.md
+        ├── worker-prompt.md
         └── report.md
 ```
 
-**Compatibility:** Legacy nested feature paths (for example `.beads/artifacts/features/<feature>/`) are no longer supported. Canonical roots are `.beads/artifacts/<feature>/` in beadsMode `on` and `docs/<feature>/` in beadsMode `off`.
+In beadsMode `on`, the `tasks/` directory is **not** created at feature creation. Task state lives canonically in bead artifacts. Local `tasks/` folders appear only as cache when tasks are synced.
+
+In beadsMode `off`, the `tasks/` directory is created at feature creation and is the canonical source of task state.
+
+Legacy nested feature paths (`.beads/artifacts/features/<feature>/`) are no longer supported.
 
 ## Development Workflow
 
@@ -338,6 +343,36 @@ Use `warcraft_merge` to explicitly integrate changes. Worktrees persist until ma
 ```
 
 Workers are unaware of sandboxing — bash commands are transparently intercepted and wrapped with `docker run`.
+
+### Agent Mode
+
+`agentMode` controls which agents are registered:
+
+- **`"unified"`** (default): Khadgar (hybrid), Brann, Mekkatorque, Algalon. Default agent: Khadgar.
+- **`"dedicated"`**: Mimiron (planner), Saurfang (orchestrator), Brann, Mekkatorque, Algalon. Default agent: Mimiron.
+
+Configured in `~/.config/opencode/opencode_warcraft.json`:
+```json
+{
+	"agentMode": "dedicated"
+}
+```
+
+### Parallel Execution
+
+`parallelExecution` controls batch task dispatch:
+
+- `strategy`: `"unbounded"` (default) or `"bounded"`
+- `maxConcurrency`: Max parallel workers when bounded (default: 4)
+
+```json
+{
+	"parallelExecution": {
+		"strategy": "bounded",
+		"maxConcurrency": 4
+	}
+}
+```
 
 ### Beads Mode (beads_rust Workflow)
 

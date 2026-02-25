@@ -3,6 +3,8 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { PlanService } from './planService';
+import type { PlanComment } from '../types.js';
+import type { PlanApprovalPayload } from './beads/BeadGateway.types.js';
 
 class FakeBeadsModeProvider {
   constructor(private readonly mode: 'on' | 'off') {}
@@ -12,33 +14,86 @@ class FakeBeadsModeProvider {
   }
 }
 
-class FakePlanBeadClient {
+/**
+ * Mock BeadsRepository that tracks calls and stores data for round-trip tests.
+ * Replaces the old FakePlanBeadClient to match the refactored PlanService
+ * which now uses BeadsRepository instead of a separate PlanBeadClient.
+ */
+class MockBeadsRepository {
+  // Tracking arrays for assertions
   labels: Array<{ beadId: string; label: string }> = [];
   descriptions: Array<{ beadId: string; content: string }> = [];
-  comments: Array<{ beadId: string; comment: string }> = [];
-  artifacts: Map<string, Map<string, string>> = new Map();
+  appendedComments: Array<{ beadId: string; comment: string }> = [];
 
-  addLabel(beadId: string, label: string): void {
+  // Internal storage for round-trip tests
+  private approvals = new Map<string, PlanApprovalPayload>();
+  private approvedPlans = new Map<string, string>();
+  private planComments = new Map<string, PlanComment[]>();
+
+  getEpicByFeatureName(_name: string, _cache: boolean) {
+    // Read epicBeadId from feature.json if it exists (simulates real behavior)
+    return { success: true as const, value: 'epic-1' };
+  }
+
+  setPlanApproval(beadId: string, hash: string, timestamp: string, session?: string) {
+    const payload: PlanApprovalPayload = {
+      hash,
+      approvedAt: timestamp,
+      ...(session !== undefined ? { approvedBySession: session } : {}),
+    };
+    this.approvals.set(beadId, payload);
+    return { success: true as const, value: undefined };
+  }
+
+  getPlanApproval(beadId: string) {
+    const approval = this.approvals.get(beadId) ?? null;
+    return { success: true as const, value: approval };
+  }
+
+  setApprovedPlan(beadId: string, content: string, _hash?: string) {
+    this.approvedPlans.set(beadId, content);
+    return { success: true as const, value: undefined };
+  }
+
+  getApprovedPlan(beadId: string) {
+    return { success: true as const, value: this.approvedPlans.get(beadId) ?? null };
+  }
+
+  addWorkflowLabel(beadId: string, label: string) {
     this.labels.push({ beadId, label });
+    return { success: true as const, value: undefined };
   }
 
-  updateDescription(beadId: string, content: string): void {
+  setPlanDescription(beadId: string, content: string) {
     this.descriptions.push({ beadId, content });
+    return { success: true as const, value: undefined };
   }
 
-  addComment(beadId: string, comment: string): void {
-    this.comments.push({ beadId, comment });
+  appendPlanComment(beadId: string, comment: string) {
+    this.appendedComments.push({ beadId, comment });
+    return { success: true as const, value: undefined };
   }
 
-  upsertArtifact(beadId: string, kind: 'plan_approval' | 'approved_plan' | 'plan_comments', content: string): void {
-    if (!this.artifacts.has(beadId)) {
-      this.artifacts.set(beadId, new Map());
-    }
-    this.artifacts.get(beadId)!.set(kind, content);
+  getPlanComments(beadId: string) {
+    return { success: true as const, value: this.planComments.get(beadId) ?? null };
   }
 
-  readArtifact(beadId: string, kind: 'plan_approval' | 'approved_plan' | 'plan_comments'): string | null {
-    return this.artifacts.get(beadId)?.get(kind) ?? null;
+  setPlanComments(beadId: string, comments: PlanComment[]) {
+    this.planComments.set(beadId, comments);
+    return { success: true as const, value: undefined };
+  }
+
+  // Convenience accessors for test assertions
+  getStoredApproval(beadId: string): PlanApprovalPayload | undefined {
+    return this.approvals.get(beadId);
+  }
+
+  getStoredApprovedPlan(beadId: string): string | undefined {
+    return this.approvedPlans.get(beadId);
+  }
+
+  getStoredComments(beadId: string): PlanComment[] | undefined {
+    return this.planComments.get(beadId);
   }
 }
 
@@ -75,69 +130,69 @@ function setupFeature(feature: string): void {
 describe('PlanService bead sync', () => {
   it('adds plan-approved label when mode is on', () => {
     setupFeature('feature-a');
-    const beadClient = new FakePlanBeadClient();
+    const mockRepo = new MockBeadsRepository();
     const service = new PlanService(
       testRoot,
+      mockRepo as any,
       new FakeBeadsModeProvider('on'),
-      beadClient,
     );
 
     service.approve('feature-a');
 
-    expect(beadClient.labels).toEqual([{ beadId: 'epic-1', label: 'plan-approved' }]);
+    expect(mockRepo.labels).toEqual([{ beadId: 'epic-1', label: 'approved' }]);
   });
 
   it('skips bead label sync when mode is off', () => {
     setupFeature('feature-b');
-    const beadClient = new FakePlanBeadClient();
+    const mockRepo = new MockBeadsRepository();
     const service = new PlanService(
       testRoot,
+      mockRepo as any,
       new FakeBeadsModeProvider('off'),
-      beadClient,
     );
 
     service.approve('feature-b');
     service.revokeApproval('feature-b');
 
-    expect(beadClient.labels).toEqual([]);
+    expect(mockRepo.labels).toEqual([]);
   });
 
   it('updates epic description when writing plan and mode is on', () => {
     setupFeature('feature-c');
-    const beadClient = new FakePlanBeadClient();
+    const mockRepo = new MockBeadsRepository();
     const service = new PlanService(
       testRoot,
+      mockRepo as any,
       new FakeBeadsModeProvider('on'),
-      beadClient,
     );
 
     const planContent = '# My Plan\n\nSome content here';
     service.write('feature-c', planContent);
 
-    expect(beadClient.descriptions).toEqual([{ beadId: 'epic-1', content: planContent }]);
+    expect(mockRepo.descriptions).toEqual([{ beadId: 'epic-1', content: planContent }]);
   });
 
   it('skips epic description update when writing plan and mode is off', () => {
     setupFeature('feature-d');
-    const beadClient = new FakePlanBeadClient();
+    const mockRepo = new MockBeadsRepository();
     const service = new PlanService(
       testRoot,
+      mockRepo as any,
       new FakeBeadsModeProvider('off'),
-      beadClient,
     );
 
     service.write('feature-d', '# My Plan');
 
-    expect(beadClient.descriptions).toEqual([]);
+    expect(mockRepo.descriptions).toEqual([]);
   });
 
   it('adds bead comment when adding comment and mode is on', () => {
     setupFeature('feature-e');
-    const beadClient = new FakePlanBeadClient();
+    const mockRepo = new MockBeadsRepository();
     const service = new PlanService(
       testRoot,
+      mockRepo as any,
       new FakeBeadsModeProvider('on'),
-      beadClient,
     );
 
     service.addComment('feature-e', {
@@ -146,20 +201,20 @@ describe('PlanService bead sync', () => {
       author: 'test-user',
     });
 
-    expect(beadClient.comments.length).toBe(1);
-    expect(beadClient.comments[0].beadId).toBe('epic-1');
-    expect(beadClient.comments[0].comment).toContain('[test-user]');
-    expect(beadClient.comments[0].comment).toContain('Line 5:');
-    expect(beadClient.comments[0].comment).toContain('This needs clarification');
+    expect(mockRepo.appendedComments.length).toBe(1);
+    expect(mockRepo.appendedComments[0].beadId).toBe('epic-1');
+    expect(mockRepo.appendedComments[0].comment).toContain('[test-user]');
+    expect(mockRepo.appendedComments[0].comment).toContain('Line 5:');
+    expect(mockRepo.appendedComments[0].comment).toContain('This needs clarification');
   });
 
   it('skips bead comment when adding comment and mode is off', () => {
     setupFeature('feature-f');
-    const beadClient = new FakePlanBeadClient();
+    const mockRepo = new MockBeadsRepository();
     const service = new PlanService(
       testRoot,
+      mockRepo as any,
       new FakeBeadsModeProvider('off'),
-      beadClient,
     );
 
     service.addComment('feature-f', {
@@ -168,7 +223,7 @@ describe('PlanService bead sync', () => {
       author: 'test-user',
     });
 
-    expect(beadClient.comments).toEqual([]);
+    expect(mockRepo.appendedComments).toEqual([]);
   });
 
   it('clearComments() in off mode updates canonical feature.json only', () => {
@@ -225,8 +280,8 @@ describe('PlanService bead sync', () => {
 
     const service = new PlanService(
       testRoot,
+      new MockBeadsRepository() as any,
       new FakeBeadsModeProvider('off'),
-      new FakePlanBeadClient(),
     );
 
     service.clearComments(featureName);
@@ -265,8 +320,8 @@ describe('PlanService hash-based approval validity', () => {
     setupFeatureWithPlan('feature-hash', '# My Plan\n\nSome content here');
     const service = new PlanService(
       testRoot,
+      new MockBeadsRepository() as any,
       new FakeBeadsModeProvider('off'),
-      new FakePlanBeadClient(),
     );
 
     service.approve('feature-hash');
@@ -283,8 +338,8 @@ describe('PlanService hash-based approval validity', () => {
     setupFeatureWithPlan('feature-valid', planContent);
     const service = new PlanService(
       testRoot,
+      new MockBeadsRepository() as any,
       new FakeBeadsModeProvider('off'),
-      new FakePlanBeadClient(),
     );
 
     service.approve('feature-valid');
@@ -298,8 +353,8 @@ describe('PlanService hash-based approval validity', () => {
     setupFeatureWithPlan('feature-invalid', originalContent);
     const service = new PlanService(
       testRoot,
+      new MockBeadsRepository() as any,
       new FakeBeadsModeProvider('off'),
-      new FakePlanBeadClient(),
     );
 
     service.approve('feature-invalid');
@@ -322,7 +377,7 @@ describe('PlanService hash-based approval validity', () => {
     delete feature.planApprovalHash;
     fs.writeFileSync(featureJsonPath, JSON.stringify(feature, null, 2));
 
-    const service = new PlanService(testRoot, new FakeBeadsModeProvider('off'), new FakePlanBeadClient());
+    const service = new PlanService(testRoot, new MockBeadsRepository() as any, new FakeBeadsModeProvider('off'));
 
     const isApproved = service.isApproved('feature-legacy');
 
@@ -352,31 +407,30 @@ describe('PlanService bead-backed approval (beadsMode: on)', () => {
 
   it('approve() stores approval in bead artifact with hash', () => {
     setupFeatureWithPlan('bead-approve-test', '# My Plan\n\nContent');
-    const beadClient = new FakePlanBeadClient();
+    const mockRepo = new MockBeadsRepository();
     const service = new PlanService(
       testRoot,
+      mockRepo as any,
       new FakeBeadsModeProvider('on'),
-      beadClient,
     );
 
     service.approve('bead-approve-test', 'session-123');
 
-    const artifact = beadClient.artifacts.get('epic-1')?.get('plan_approval');
-    expect(artifact).toBeDefined();
-    const payload = JSON.parse(artifact!);
-    expect(payload.hash).toMatch(/^[a-f0-9]{64}$/);
-    expect(payload.approvedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
-    expect(payload.approvedBySession).toBe('session-123');
+    const approval = mockRepo.getStoredApproval('epic-1');
+    expect(approval).toBeDefined();
+    expect(approval!.hash).toMatch(/^[a-f0-9]{64}$/);
+    expect(approval!.approvedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(approval!.approvedBySession).toBe('session-123');
   });
 
   it('isApproved() returns true when bead artifact hash matches current plan', () => {
     const planContent = '# My Plan\n\nContent';
     setupFeatureWithPlan('bead-is-approved', planContent);
-    const beadClient = new FakePlanBeadClient();
+    const mockRepo = new MockBeadsRepository();
     const service = new PlanService(
       testRoot,
+      mockRepo as any,
       new FakeBeadsModeProvider('on'),
-      beadClient,
     );
 
     service.approve('bead-is-approved');
@@ -387,11 +441,11 @@ describe('PlanService bead-backed approval (beadsMode: on)', () => {
   it('isApproved() returns false when plan content changes after approval', () => {
     const originalContent = '# My Plan\n\nOriginal';
     setupFeatureWithPlan('bead-hash-invalid', originalContent);
-    const beadClient = new FakePlanBeadClient();
+    const mockRepo = new MockBeadsRepository();
     const service = new PlanService(
       testRoot,
+      mockRepo as any,
       new FakeBeadsModeProvider('on'),
-      beadClient,
     );
 
     service.approve('bead-hash-invalid');
@@ -405,17 +459,17 @@ describe('PlanService bead-backed approval (beadsMode: on)', () => {
 
   it('isApproved() returns false in on mode when approval artifact does not exist', () => {
     setupFeatureWithPlan('bead-no-artifact', '# Plan\n\nContent');
-    const service = new PlanService(testRoot, new FakeBeadsModeProvider('on'), new FakePlanBeadClient());
+    const service = new PlanService(testRoot, new MockBeadsRepository() as any, new FakeBeadsModeProvider('on'));
     expect(service.isApproved('bead-no-artifact')).toBe(false);
   });
 
   it('revokeApproval() removes approval from bead artifact', () => {
     setupFeatureWithPlan('bead-revoke', '# Plan');
-    const beadClient = new FakePlanBeadClient();
+    const mockRepo = new MockBeadsRepository();
     const service = new PlanService(
       testRoot,
+      mockRepo as any,
       new FakeBeadsModeProvider('on'),
-      beadClient,
     );
 
     service.approve('bead-revoke');
@@ -424,18 +478,19 @@ describe('PlanService bead-backed approval (beadsMode: on)', () => {
     service.revokeApproval('bead-revoke');
 
     expect(service.isApproved('bead-revoke')).toBe(false);
-    const artifact = beadClient.artifacts.get('epic-1')?.get('plan_approval');
-    expect(artifact).toBe('');
+    // After revoke, approval has empty hash (invalid)
+    const approval = mockRepo.getStoredApproval('epic-1');
+    expect(approval?.hash).toBe('');
   });
 
   it('write() invalidates approval when plan content changes', () => {
     const originalContent = '# Original Plan';
     setupFeatureWithPlan('bead-write-invalidate', originalContent);
-    const beadClient = new FakePlanBeadClient();
+    const mockRepo = new MockBeadsRepository();
     const service = new PlanService(
       testRoot,
+      mockRepo as any,
       new FakeBeadsModeProvider('on'),
-      beadClient,
     );
 
     service.approve('bead-write-invalidate');
@@ -450,11 +505,11 @@ describe('PlanService bead-backed approval (beadsMode: on)', () => {
   it('write() does not invalidate approval when content is unchanged', () => {
     const content = '# Original Plan';
     setupFeatureWithPlan('bead-write-preserve', content);
-    const beadClient = new FakePlanBeadClient();
+    const mockRepo = new MockBeadsRepository();
     const service = new PlanService(
       testRoot,
+      mockRepo as any,
       new FakeBeadsModeProvider('on'),
-      beadClient,
     );
 
     service.approve('bead-write-preserve');
@@ -480,10 +535,14 @@ describe('PlanService bead-backed approval (beadsMode: on)', () => {
       }),
     );
 
+    // Mock that returns no epic for this feature
+    const mockRepo = new MockBeadsRepository();
+    mockRepo.getEpicByFeatureName = () => ({ success: true as const, value: null });
+
     const service = new PlanService(
       testRoot,
+      mockRepo as any,
       new FakeBeadsModeProvider('on'),
-      new FakePlanBeadClient(),
     );
 
     expect(service.isApproved('no-epic')).toBe(false);
@@ -491,79 +550,78 @@ describe('PlanService bead-backed approval (beadsMode: on)', () => {
 
   it('approve() without sessionId omits approvedBySession field', () => {
     setupFeatureWithPlan('bead-no-session', '# Plan');
-    const beadClient = new FakePlanBeadClient();
+    const mockRepo = new MockBeadsRepository();
     const service = new PlanService(
       testRoot,
+      mockRepo as any,
       new FakeBeadsModeProvider('on'),
-      beadClient,
     );
 
     service.approve('bead-no-session');
 
-    const artifact = beadClient.artifacts.get('epic-1')?.get('plan_approval');
-    const payload = JSON.parse(artifact!);
-    expect(payload.approvedBySession).toBeUndefined();
-    expect(payload.hash).toMatch(/^[a-f0-9]{64}$/);
-    expect(payload.approvedAt).toBeDefined();
+    const approval = mockRepo.getStoredApproval('epic-1');
+    expect(approval!.approvedBySession).toBeUndefined();
+    expect(approval!.hash).toMatch(/^[a-f0-9]{64}$/);
+    expect(approval!.approvedAt).toBeDefined();
   });
 
   it('approve() stores full plan content as approved_plan artifact', () => {
     const planContent = '# My Plan\n\nSome detailed content here\n\n- Task 1\n- Task 2';
     setupFeatureWithPlan('bead-approved-plan', planContent);
-    const beadClient = new FakePlanBeadClient();
+    const mockRepo = new MockBeadsRepository();
     const service = new PlanService(
       testRoot,
+      mockRepo as any,
       new FakeBeadsModeProvider('on'),
-      beadClient,
     );
 
     service.approve('bead-approved-plan', 'session-456');
 
-    const approvedPlanArtifact = beadClient.artifacts.get('epic-1')?.get('approved_plan');
-    expect(approvedPlanArtifact).toBeDefined();
-    expect(approvedPlanArtifact).toBe(planContent);
+    const approvedPlan = mockRepo.getStoredApprovedPlan('epic-1');
+    expect(approvedPlan).toBeDefined();
+    expect(approvedPlan).toBe(planContent);
   });
 
   it('revokeApproval() removes both plan_approval and approved_plan artifacts', () => {
     const planContent = '# My Plan\n\nContent';
     setupFeatureWithPlan('bead-revoke-plan', planContent);
-    const beadClient = new FakePlanBeadClient();
+    const mockRepo = new MockBeadsRepository();
     const service = new PlanService(
       testRoot,
+      mockRepo as any,
       new FakeBeadsModeProvider('on'),
-      beadClient,
     );
 
     service.approve('bead-revoke-plan');
-    expect(beadClient.artifacts.get('epic-1')?.get('plan_approval')).toBeDefined();
-    expect(beadClient.artifacts.get('epic-1')?.get('approved_plan')).toBeDefined();
+    expect(mockRepo.getStoredApproval('epic-1')).toBeDefined();
+    expect(mockRepo.getStoredApprovedPlan('epic-1')).toBeDefined();
 
     service.revokeApproval('bead-revoke-plan');
 
-    expect(beadClient.artifacts.get('epic-1')?.get('plan_approval')).toBe('');
-    expect(beadClient.artifacts.get('epic-1')?.get('approved_plan')).toBe('');
+    // After revoke, approval has empty hash and approved plan is empty
+    expect(mockRepo.getStoredApproval('epic-1')?.hash).toBe('');
+    expect(mockRepo.getStoredApprovedPlan('epic-1')).toBe('');
   });
 
   it('write() invalidates both plan_approval and approved_plan artifacts when plan changes', () => {
     const originalContent = '# Original Plan';
     setupFeatureWithPlan('bead-write-invalidate-plan', originalContent);
-    const beadClient = new FakePlanBeadClient();
+    const mockRepo = new MockBeadsRepository();
     const service = new PlanService(
       testRoot,
+      mockRepo as any,
       new FakeBeadsModeProvider('on'),
-      beadClient,
     );
 
     service.approve('bead-write-invalidate-plan');
     expect(service.isApproved('bead-write-invalidate-plan')).toBe(true);
-    expect(beadClient.artifacts.get('epic-1')?.get('approved_plan')).toBe(originalContent);
+    expect(mockRepo.getStoredApprovedPlan('epic-1')).toBe(originalContent);
 
     // Write different content - this should revoke approval
     service.write('bead-write-invalidate-plan', '# Modified Plan');
 
     expect(service.isApproved('bead-write-invalidate-plan')).toBe(false);
-    // The approved_plan artifact should remain (it's not deleted on write), 
-    // but isApproved should return false due to hash mismatch
+    // The approved_plan artifact should have been cleared during revoke
   });
 
   it('isApproved() migrates legacy feature.json approval to bead artifact in on mode', () => {
@@ -580,21 +638,20 @@ describe('PlanService bead-backed approval (beadsMode: on)', () => {
     feature.planApprovalHash = hash;
     fs.writeFileSync(featureJsonPath, JSON.stringify(feature, null, 2));
 
-    const beadClient = new FakePlanBeadClient();
-    const service = new PlanService(testRoot, new FakeBeadsModeProvider('on'), beadClient);
+    const mockRepo = new MockBeadsRepository();
+    const service = new PlanService(testRoot, mockRepo as any, new FakeBeadsModeProvider('on'));
 
     // First call should detect legacy approval and migrate forward
     expect(service.isApproved('bead-legacy-migrate')).toBe(true);
 
-    // Verify migration: bead artifact should now contain approval data
-    const artifact = beadClient.artifacts.get('epic-1')?.get('plan_approval');
-    expect(artifact).toBeDefined();
-    const payload = JSON.parse(artifact!);
-    expect(payload.hash).toMatch(/^[a-f0-9]{64}$/);
-    expect(payload.approvedAt).toBe('2024-06-15T10:00:00.000Z');
+    // Verify migration: repository should now contain approval data
+    const approval = mockRepo.getStoredApproval('epic-1');
+    expect(approval).toBeDefined();
+    expect(approval!.hash).toMatch(/^[a-f0-9]{64}$/);
+    expect(approval!.approvedAt).toBe('2024-06-15T10:00:00.000Z');
 
     // Approved plan snapshot should also be migrated
-    const approvedPlan = beadClient.artifacts.get('epic-1')?.get('approved_plan');
+    const approvedPlan = mockRepo.getStoredApprovedPlan('epic-1');
     expect(approvedPlan).toBe(planContent);
   });
 
@@ -609,12 +666,12 @@ describe('PlanService bead-backed approval (beadsMode: on)', () => {
     feature.planApprovalHash = 'a'.repeat(64); // wrong hash
     fs.writeFileSync(featureJsonPath, JSON.stringify(feature, null, 2));
 
-    const beadClient = new FakePlanBeadClient();
-    const service = new PlanService(testRoot, new FakeBeadsModeProvider('on'), beadClient);
+    const mockRepo = new MockBeadsRepository();
+    const service = new PlanService(testRoot, mockRepo as any, new FakeBeadsModeProvider('on'));
 
     expect(service.isApproved('bead-legacy-mismatch')).toBe(false);
     // Should not migrate invalid approval
-    expect(beadClient.artifacts.get('epic-1')?.get('plan_approval')).toBeUndefined();
+    expect(mockRepo.getStoredApproval('epic-1')).toBeUndefined();
   });
 
   it('getComments() migrates legacy feature.json comments to bead artifact in on mode', () => {
@@ -628,20 +685,19 @@ describe('PlanService bead-backed approval (beadsMode: on)', () => {
     ];
     fs.writeFileSync(featureJsonPath, JSON.stringify(feature, null, 2));
 
-    const beadClient = new FakePlanBeadClient();
-    const service = new PlanService(testRoot, new FakeBeadsModeProvider('on'), beadClient);
+    const mockRepo = new MockBeadsRepository();
+    const service = new PlanService(testRoot, mockRepo as any, new FakeBeadsModeProvider('on'));
 
     // First call should detect legacy comments and migrate forward
     const comments = service.getComments('bead-legacy-comments');
     expect(comments).toHaveLength(1);
     expect(comments[0].body).toBe('Legacy comment');
 
-    // Verify migration: bead artifact should now contain comments
-    const artifact = beadClient.artifacts.get('epic-1')?.get('plan_comments');
-    expect(artifact).toBeDefined();
-    const parsed = JSON.parse(artifact!);
-    expect(parsed.threads).toHaveLength(1);
-    expect(parsed.threads[0].body).toBe('Legacy comment');
+    // Verify migration: repository should now contain comments
+    const storedComments = mockRepo.getStoredComments('epic-1');
+    expect(storedComments).toBeDefined();
+    expect(storedComments).toHaveLength(1);
+    expect(storedComments![0].body).toBe('Legacy comment');
   });
 
   it('approved_plan artifact contains exact plan content that was approved', () => {
@@ -658,16 +714,16 @@ const x = 1;
 
 End of plan.`;
     setupFeatureWithPlan('bead-plan-exact', planContent);
-    const beadClient = new FakePlanBeadClient();
+    const mockRepo = new MockBeadsRepository();
     const service = new PlanService(
       testRoot,
+      mockRepo as any,
       new FakeBeadsModeProvider('on'),
-      beadClient,
     );
 
     service.approve('bead-plan-exact');
 
-    const approvedPlan = beadClient.artifacts.get('epic-1')?.get('approved_plan');
+    const approvedPlan = mockRepo.getStoredApprovedPlan('epic-1');
     expect(approvedPlan).toBe(planContent);
     // Verify exact match including whitespace and formatting
     expect(approvedPlan).toHaveLength(planContent.length);

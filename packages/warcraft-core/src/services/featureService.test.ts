@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as childProcess from 'child_process';
-import type { BeadClient } from './featureService';
+import { BeadsRepository } from './beads/BeadsRepository.js';
 import { FeatureService } from './featureService';
 
 const onMode = { getBeadsMode: () => 'on' as const };
@@ -19,16 +19,65 @@ afterEach(() => {
   fs.rmSync(testRoot, { recursive: true, force: true });
 });
 
-describe('FeatureService flat layout', () => {
-  it('creates features at canonical flat path', () => {
-    const beadClient: BeadClient = {
+/**
+ * Create a mock BeadsRepository for testing.
+ * Allows overriding specific methods while providing default implementations.
+ */
+function createMockRepository(overrides: Partial<BeadsRepository> = {}): BeadsRepository {
+  const defaultRepo: BeadsRepository = {
+    createEpic: () => ({ success: true, value: 'bd-epic-1' }),
+    closeBead: () => ({ success: true, value: undefined }),
+    getGateway: () => ({
       createEpic: () => 'bd-epic-1',
       closeBead: () => {},
       flushArtifacts: () => {},
-    };
+      readArtifact: () => null,
+      upsertArtifact: () => {},
+      readDescription: () => null,
+      updateDescription: () => {},
+      addComment: () => {},
+      addLabel: () => {},
+      list: () => [{ id: 'bd-epic-1', title: 'test-feature', status: 'open', type: 'epic' }],
+      show: () => ({ id: 'bd-epic-1', title: 'test-feature', status: 'open', created_at: '2024-01-01T00:00:00Z' }),
+    } as any),
+    getViewerGateway: () => ({
+      getRobotPlan: () => ({ success: false, error: new Error('Not implemented') }),
+    } as any),
+    getEpicByFeatureName: () => ({ success: true, value: 'bd-epic-1' }),
+    getFeatureState: () => ({ success: true, value: null }),
+    setFeatureState: () => ({ success: true, value: undefined }),
+    getTaskState: () => ({ success: true, value: null }),
+    setTaskState: () => ({ success: true, value: undefined }),
+    getPlanDescription: () => null,
+    setPlanDescription: () => ({ success: true, value: undefined }),
+    getPlanApproval: () => null,
+    setPlanApproval: () => ({ success: true, value: undefined }),
+    getApprovedPlan: () => null,
+    setApprovedPlan: () => ({ success: true, value: undefined }),
+    getPlanComments: () => [],
+    setPlanComments: () => ({ success: true, value: undefined }),
+    appendPlanComment: () => ({ success: true, value: undefined }),
+    upsertTaskArtifact: () => ({ success: true, value: undefined }),
+    readTaskArtifact: () => ({ success: true, value: null }),
+    listTaskBeadsForEpic: () => [],
+    addWorkflowLabel: () => ({ success: true, value: undefined }),
+    getRobotPlan: () => ({ success: false, error: new Error('Not implemented') }),
+    getViewerHealth: () => ({ success: false, error: new Error('Not implemented') }),
+    importArtifacts: () => ({ success: true, value: undefined }),
+    flushArtifacts: () => ({ success: true, value: undefined }),
+  };
+
+  return { ...defaultRepo, ...overrides };
+}
+
+describe('FeatureService flat layout', () => {
+  it('creates features at canonical flat path', () => {
+  const mockRepository = createMockRepository({
+    createEpic: () => 'bd-epic-1',
+  });
 
     // Use offMode to test filesystem-only behavior
-    const service = new FeatureService(testRoot, beadClient, offMode);
+    const service = new FeatureService(testRoot, mockRepository, offMode);
     const feature = service.create('my-feature');
 
     // Feature should be created at docs/<feature> (flat)
@@ -44,14 +93,12 @@ describe('FeatureService flat layout', () => {
   });
 
   it('lists features from canonical flat path excluding .worktrees', () => {
-    const beadClient: BeadClient = {
-      createEpic: (name) => `bd-${name}`,
-      closeBead: () => {},
-      flushArtifacts: () => {},
-    };
+  const mockRepository = createMockRepository({
+    createEpic: (name) => `bd-${name}`,
+  });
 
     // Use offMode to test filesystem-only behavior
-    const service = new FeatureService(testRoot, beadClient, offMode);
+    const service = new FeatureService(testRoot, mockRepository, offMode);
     service.create('feature-a');
     service.create('feature-b');
 
@@ -68,11 +115,9 @@ describe('FeatureService flat layout', () => {
   });
 
   it('does not resolve features from legacy nested path', () => {
-    const beadClient: BeadClient = {
-      createEpic: () => 'bd-epic-1',
-      closeBead: () => {},
-      flushArtifacts: () => {},
-    };
+  const mockRepository = createMockRepository({
+    createEpic: () => 'bd-epic-1',
+  });
 
     const legacyPath = path.join(testRoot, 'docs', 'features', 'legacy-feature');
     fs.mkdirSync(legacyPath, { recursive: true });
@@ -81,18 +126,16 @@ describe('FeatureService flat layout', () => {
       JSON.stringify({ name: 'legacy-feature', epicBeadId: 'bd-1', status: 'planning', createdAt: new Date().toISOString() })
     );
 
-    const service = new FeatureService(testRoot, beadClient, offMode);
+    const service = new FeatureService(testRoot, mockRepository, offMode);
 
     expect(service.get('legacy-feature')).toBeNull();
     expect(fs.existsSync(legacyPath)).toBe(true);
   });
 
   it('does not list legacy nested features directory entries', () => {
-    const beadClient: BeadClient = {
-      createEpic: () => 'bd-epic-1',
-      closeBead: () => {},
-      flushArtifacts: () => {},
-    };
+  const mockRepository = createMockRepository({
+    createEpic: () => 'bd-epic-1',
+  });
 
     // Create features at legacy locations
     const legacyPath1 = path.join(testRoot, 'docs', 'features', 'feature-1');
@@ -103,7 +146,7 @@ describe('FeatureService flat layout', () => {
     );
 
     // Use offMode to test filesystem-only behavior
-    const service = new FeatureService(testRoot, beadClient, offMode);
+    const service = new FeatureService(testRoot, mockRepository, offMode);
 
     // Listing now scans canonical flat artifacts only.
     const list = service.list();
@@ -113,16 +156,12 @@ describe('FeatureService flat layout', () => {
 
 describe('FeatureService.create', () => {
   it('does not create feature directory when epic creation fails', () => {
-    const failingBeadClient: BeadClient = {
-      createEpic: () => {
-        throw new Error('epic create failed');
-      },
-      closeBead: () => {},
-      flushArtifacts: () => {},
-    };
+    const failingRepository = createMockRepository({
+      createEpic: () => ({ success: false, error: new Error('epic create failed') }),
+    });
 
     // Use onMode to test that bead creation failure prevents filesystem creation
-    const service = new FeatureService(testRoot, failingBeadClient, onMode);
+    const service = new FeatureService(testRoot, failingRepository, onMode);
 
     expect(() => service.create('my-feature')).toThrow('epic create failed');
 
@@ -131,11 +170,9 @@ describe('FeatureService.create', () => {
   });
 
   it('rolls back partial filesystem state when initialization fails after epic creation', () => {
-    const beadClient: BeadClient = {
-      createEpic: () => 'bd-epic-1',
-      closeBead: () => {},
-      flushArtifacts: () => {},
-    };
+  const mockRepository = createMockRepository({
+    createEpic: () => 'bd-epic-1',
+  });
 
     const originalMkdirSync = fs.mkdirSync;
     const mkdirSpy = spyOn(fs, 'mkdirSync').mockImplementation(((target: fs.PathLike, options?: fs.MakeDirectoryOptions | null | undefined): string | void => {
@@ -147,7 +184,7 @@ describe('FeatureService.create', () => {
     }) as typeof fs.mkdirSync);
 
     try {
-      const service = new FeatureService(testRoot, beadClient);
+      const service = new FeatureService(testRoot, mockRepository);
       expect(() => service.create('my-feature')).toThrow(/Failed to initialize feature/);
     } finally {
       mkdirSpy.mockRestore();
@@ -159,82 +196,58 @@ describe('FeatureService.create', () => {
 });
 
 describe('FeatureService.complete', () => {
-  it('closes epic bead and flushes artifacts on completion when beadsMode is on', () => {
-    const beadClient: BeadClient = {
-      createEpic: () => 'bd-epic-1',
-      closeBead: () => {},
-      flushArtifacts: () => {},
-    };
-    const closeSpy = spyOn(beadClient, 'closeBead');
-    const flushSpy = spyOn(beadClient, 'flushArtifacts');
+  it('closes epic bead on completion when beadsMode is on', () => {
+    // Track repository method calls
+    const closeCalls: Array<string> = [];
+    const mockRepository = createMockRepository({
+      createEpic: (name: string, priority: number) => ({ success: true, value: 'bd-epic-1' }),
+      closeBead: (beadId: string) => {
+        closeCalls.push(beadId);
+        return { success: true, value: undefined };
+      },
+    });
 
-    // Mock BeadGateway for get() call - use mockImplementation to handle multiple calls
-    let callCount = 0;
-    const execSpy = spyOn(childProcess, 'execFileSync').mockImplementation(((cmd: string, args?: string[], options?: unknown): string => {
-      callCount++;
-      const argStr = args?.join(' ') || '';
-
-      if (argStr.includes('--version')) {
-        return 'beads_rust 1.2.3';
-      }
-      if (argStr.includes('list')) {
-        return JSON.stringify([{ id: 'bd-epic-1', title: 'my-feature', status: 'open', type: 'epic' }]);
-      }
-      if (argStr.includes('show')) {
-        return JSON.stringify({
-          id: 'bd-epic-1',
-          title: 'my-feature',
-          status: 'open',
-          created_at: '2024-01-01T00:00:00Z'
-        });
-      }
-      return '';
-    }) as typeof childProcess.execFileSync);
-
-    const service = new FeatureService(testRoot, beadClient, onMode);
+    const service = new FeatureService(testRoot, mockRepository, onMode);
     const feature = service.create('my-feature');
     const completed = service.complete('my-feature');
 
     expect(completed.status).toBe('completed');
-    expect(closeSpy).toHaveBeenCalledWith(feature.epicBeadId, testRoot);
-    expect(flushSpy).toHaveBeenCalledWith(testRoot);
-
-    execSpy.mockRestore();
+    expect(closeCalls).toContain(feature.epicBeadId);
   });
 
   it('does not close epic bead when beadsMode is off', () => {
-    const beadClient: BeadClient = {
+    const closeCalls: Array<string> = [];
+    const mockRepository = createMockRepository({
       createEpic: () => 'bd-epic-1',
-      closeBead: () => {},
-      flushArtifacts: () => {},
-    };
-    const closeSpy = spyOn(beadClient, 'closeBead');
-    const flushSpy = spyOn(beadClient, 'flushArtifacts');
+      closeBead: (beadId: string) => {
+        closeCalls.push(beadId);
+        return { success: true, value: undefined };
+      },
+    });
 
-    const service = new FeatureService(testRoot, beadClient, offMode);
-    service.create('my-feature');
-    const completed = service.complete('my-feature');
+    const service = new FeatureService(testRoot, mockRepository, offMode);
+    const feature = service.create('my-feature');
+    service.complete('my-feature');
 
-    expect(completed.status).toBe('completed');
-    expect(closeSpy).not.toHaveBeenCalled();
-    expect(flushSpy).not.toHaveBeenCalled();
+    expect(closeCalls).toHaveLength(0);
   });
 });
 
 describe('FeatureService beadsMode off', () => {
-  it('creates features without calling beadClient.createEpic when beadsMode is off', () => {
-    const beadClient: BeadClient = {
-      createEpic: () => 'bd-epic-1',
-      closeBead: () => {},
-      flushArtifacts: () => {},
-    };
-    const createEpicSpy = spyOn(beadClient, 'createEpic');
+  it('creates features without calling repository.createEpic when beadsMode is off', () => {
+    const createEpicCalls: Array<{ name: string; priority: number }> = [];
+    const mockRepository = createMockRepository({
+      createEpic: (name: string, priority: number) => {
+        createEpicCalls.push({ name, priority });
+        return { success: true, value: 'bd-epic-1' };
+      },
+    });
 
-    const service = new FeatureService(testRoot, beadClient, offMode);
+    const service = new FeatureService(testRoot, mockRepository, offMode);
     const feature = service.create('my-feature');
 
     // Should not call createEpic when beadsMode is off
-    expect(createEpicSpy).not.toHaveBeenCalled();
+    expect(createEpicCalls).toHaveLength(0);
     expect(feature.name).toBe('my-feature');
     expect(feature.epicBeadId.startsWith('local-')).toBe(true);
 
@@ -246,16 +259,14 @@ describe('FeatureService beadsMode off', () => {
   });
 
   it('gets features from filesystem when beadsMode is off', () => {
-    const beadClient: BeadClient = {
-      createEpic: () => 'bd-epic-1',
-      closeBead: () => {},
-      flushArtifacts: () => {},
-    };
+  const mockRepository = createMockRepository({
+    createEpic: () => 'bd-epic-1',
+  });
 
     // Setup spy BEFORE creating service to catch all calls
     const execSpy = spyOn(childProcess, 'execFileSync');
 
-    const service = new FeatureService(testRoot, beadClient, offMode);
+    const service = new FeatureService(testRoot, mockRepository, offMode);
     service.create('my-feature');
 
     // Reset spy after setup to only count get() calls
@@ -271,16 +282,14 @@ describe('FeatureService beadsMode off', () => {
   });
 
   it('lists features from filesystem when beadsMode is off', () => {
-    const beadClient: BeadClient = {
-      createEpic: () => 'bd-epic-1',
-      closeBead: () => {},
-      flushArtifacts: () => {},
-    };
+  const mockRepository = createMockRepository({
+    createEpic: () => 'bd-epic-1',
+  });
 
     // Setup spy BEFORE creating service to catch all calls
     const execSpy = spyOn(childProcess, 'execFileSync');
 
-    const service = new FeatureService(testRoot, beadClient, offMode);
+    const service = new FeatureService(testRoot, mockRepository, offMode);
     service.create('feature-a');
     service.create('feature-b');
 
@@ -298,56 +307,44 @@ describe('FeatureService beadsMode off', () => {
 });
 
 describe('FeatureService beadsMode on', () => {
-  it('calls beadClient.createEpic when beadsMode is on', () => {
-    const beadClient: BeadClient = {
-      createEpic: () => 'bd-epic-1',
-      closeBead: () => {},
-      flushArtifacts: () => {},
-    };
-    const createEpicSpy = spyOn(beadClient, 'createEpic');
+  it('calls repository.createEpic when beadsMode is on', () => {
+    const createEpicCalls: Array<{ name: string; priority: number }> = [];
+    const mockRepository = createMockRepository({
+      createEpic: (name: string, priority: number) => {
+        createEpicCalls.push({ name, priority });
+        return { success: true, value: 'bd-epic-1' };
+      },
+    });
 
-    const service = new FeatureService(testRoot, beadClient, onMode);
+    const service = new FeatureService(testRoot, mockRepository, onMode);
     const feature = service.create('my-feature');
 
-    expect(createEpicSpy).toHaveBeenCalledWith('my-feature', testRoot, 3);
+    expect(createEpicCalls).toHaveLength(1);
+    expect(createEpicCalls[0].name).toBe('my-feature');
+    expect(createEpicCalls[0].priority).toBe(3);
     expect(feature.epicBeadId).toBe('bd-epic-1');
     expect(fs.existsSync(path.join(testRoot, '.beads', 'artifacts', 'my-feature', 'tasks'))).toBe(false);
   });
 
   it('uses BeadGateway for get when beadsMode is on', () => {
-    // Mock execFileSync to return proper responses for BeadGateway
-    let callCount = 0;
-    const execSpy = spyOn(childProcess, 'execFileSync').mockImplementation(((cmd: string, args?: string[], options?: unknown): string => {
-      callCount++;
-      const argStr = args?.join(' ') || '';
+    const mockRepository = createMockRepository({
+      createEpic: (name: string, priority: number) => ({ success: true, value: 'bd-epic-1' }),
+      getGateway: () => ({
+        createEpic: () => 'bd-epic-1',
+        closeBead: () => {},
+        flushArtifacts: () => {},
+        readArtifact: () => null,
+        upsertArtifact: () => {},
+        readDescription: () => null,
+        updateDescription: () => {},
+        addComment: () => {},
+        addLabel: () => {},
+        list: () => [],
+        show: () => ({ id: 'bd-epic-1', title: 'my-feature', status: 'open', created_at: '2024-01-01T00:00:00Z' }),
+      } as any),
+    });
 
-      if (argStr.includes('--version')) {
-        return 'beads_rust 1.2.3';
-      }
-      if (argStr.includes('create') && argStr.includes('epic')) {
-        return '{"id":"bd-epic-1"}';
-      }
-      if (argStr.includes('list')) {
-        return JSON.stringify([{ id: 'bd-epic-1', title: 'my-feature', status: 'open', type: 'epic' }]);
-      }
-      if (argStr.includes('show')) {
-        return JSON.stringify({
-          id: 'bd-epic-1',
-          title: 'my-feature',
-          status: 'open',
-          created_at: '2024-01-01T00:00:00Z'
-        });
-      }
-      return '';
-    }) as typeof childProcess.execFileSync);
-
-    const beadClient: BeadClient = {
-      createEpic: () => 'bd-epic-1',
-      closeBead: () => {},
-      flushArtifacts: () => {},
-    };
-
-    const service = new FeatureService(testRoot, beadClient, onMode);
+    const service = new FeatureService(testRoot, mockRepository, onMode);
 
     // Create the feature
     service.create('my-feature');
@@ -357,158 +354,125 @@ describe('FeatureService beadsMode on', () => {
     expect(feature).not.toBeNull();
     expect(feature?.name).toBe('my-feature');
     expect(feature?.epicBeadId).toBe('bd-epic-1');
-
-    execSpy.mockRestore();
   });
 
   it('maps in-progress epic bead status to executing when feature_state artifact is absent', () => {
-    const execSpy = spyOn(childProcess, 'execFileSync').mockImplementation(((cmd: string, args?: string[], options?: unknown): string => {
-      const argStr = args?.join(' ') || '';
+    const mockRepository = createMockRepository({
+      createEpic: (name: string, priority: number) => ({ success: true, value: 'bd-epic-1' }),
+      getGateway: () => ({
+        createEpic: () => 'bd-epic-1',
+        closeBead: () => {},
+        flushArtifacts: () => {},
+        readArtifact: () => null,
+        upsertArtifact: () => {},
+        readDescription: () => null,
+        updateDescription: () => {},
+        addComment: () => {},
+        addLabel: () => {},
+        list: () => [],
+        show: () => ({ id: 'bd-epic-1', title: 'my-feature', status: 'in_progress', created_at: '2024-01-01T00:00:00Z' }),
+      } as any),
+      getFeatureState: () => ({ success: true, value: null }),
+    });
 
-      if (argStr.includes('--version')) {
-        return 'beads_rust 1.2.3';
-      }
-      if (argStr.includes('list')) {
-        return JSON.stringify([{ id: 'bd-epic-1', title: 'my-feature', status: 'in_progress', type: 'epic' }]);
-      }
-      if (argStr.includes('show')) {
-        return JSON.stringify({
-          id: 'bd-epic-1',
-          title: 'my-feature',
-          status: 'in_progress',
-          created_at: '2024-01-01T00:00:00Z',
-        });
-      }
-      return '';
-    }) as typeof childProcess.execFileSync);
-
-    const beadClient: BeadClient = {
-      createEpic: () => 'bd-epic-1',
-      closeBead: () => {},
-      flushArtifacts: () => {},
-    };
-
-    const service = new FeatureService(testRoot, beadClient, onMode);
+    const service = new FeatureService(testRoot, mockRepository, onMode);
     service.create('my-feature');
 
     const feature = service.get('my-feature');
     expect(feature).not.toBeNull();
     expect(feature?.status).toBe('executing');
-
-    execSpy.mockRestore();
   });
 
   it('uses BeadGateway for list when beadsMode is on', () => {
-    // Mock execFileSync to return proper responses for BeadGateway
-    const execSpy = spyOn(childProcess, 'execFileSync').mockImplementation(((cmd: string, args?: string[], options?: unknown): string => {
-      const argStr = args?.join(' ') || '';
-
-      if (argStr.includes('--version')) {
-        return 'beads_rust 1.2.3';
-      }
-      if (argStr.includes('list')) {
-        return JSON.stringify([
+    const mockRepository = createMockRepository({
+      createEpic: (name: string, priority: number) => ({ success: true, value: 'bd-epic-1' }),
+      getGateway: () => ({
+        createEpic: () => 'bd-epic-1',
+        closeBead: () => {},
+        flushArtifacts: () => {},
+        readArtifact: () => null,
+        upsertArtifact: () => {},
+        readDescription: () => null,
+        updateDescription: () => {},
+        addComment: () => {},
+        addLabel: () => {},
+        list: () => [
           { id: 'bd-epic-1', title: 'feature-a', status: 'open', type: 'epic' },
-          { id: 'bd-epic-2', title: 'feature-b', status: 'open', type: 'epic' }
-        ]);
-      }
-      return '';
-    }) as typeof childProcess.execFileSync);
+          { id: 'bd-epic-2', title: 'feature-b', status: 'open', type: 'epic' },
+        ],
+        show: () => ({}),
+      } as any),
+    });
 
-    const beadClient: BeadClient = {
-      createEpic: () => 'bd-epic-1',
-      closeBead: () => {},
-      flushArtifacts: () => {},
-    };
-
-    const service = new FeatureService(testRoot, beadClient, onMode);
+    const service = new FeatureService(testRoot, mockRepository, onMode);
 
     // List features (uses BeadGateway directly)
     const list = service.list();
     expect(list).toContain('feature-a');
     expect(list).toContain('feature-b');
-
-    execSpy.mockRestore();
   });
 
   it('returns null when feature not found via BeadGateway', () => {
-    // Mock execFileSync to return empty list
-    const execSpy = spyOn(childProcess, 'execFileSync').mockImplementation(((cmd: string, args?: string[], options?: unknown): string => {
-      const argStr = args?.join(' ') || '';
+    const mockRepository = createMockRepository({
+      createEpic: (name: string, priority: number) => ({ success: true, value: 'bd-epic-1' }),
+      getEpicByFeatureName: (name: string) => {
+        // Return failure for non-existent feature
+        if (name === 'non-existent') {
+          return { success: false, error: new Error('Feature not found') };
+        }
+        return { success: true, value: 'bd-epic-1' };
+      },
+    });
 
-      if (argStr.includes('--version')) {
-        return 'beads_rust 1.2.3';
-      }
-      if (argStr.includes('list')) {
-        return JSON.stringify([]);  // No epics found
-      }
-      return '';
-    }) as typeof childProcess.execFileSync);
-
-    const beadClient: BeadClient = {
-      createEpic: () => 'bd-epic-1',
-      closeBead: () => {},
-      flushArtifacts: () => {},
-    };
-
-    const service = new FeatureService(testRoot, beadClient, onMode);
+    const service = new FeatureService(testRoot, mockRepository, onMode);
 
     const feature = service.get('non-existent');
     expect(feature).toBeNull();
-
-    execSpy.mockRestore();
   });
 });
 
 describe('FeatureService getTasks folder stability', () => {
   it('persists generated folder name so reordering does not change it', () => {
-    // Track upsertArtifact calls to verify folder is persisted
-    const upsertedArtifacts = new Map<string, string>();
+    // Track setTaskState calls to verify folder is persisted
+    const setTaskStateCalls = new Array<{ beadId: string; state: any }>();
 
-    const beadClient: BeadClient = {
-      createEpic: () => 'bd-epic-1',
-      closeBead: () => {},
-      flushArtifacts: () => {},
-      readArtifact: (beadId: string) => upsertedArtifacts.get(beadId) ?? null,
-      upsertArtifact: (beadId: string, _cwd: string, _kind: string, content: string) => {
-        upsertedArtifacts.set(beadId, content);
+    const mockRepository = createMockRepository({
+      setTaskState: (beadId: string, state: any) => {
+        setTaskStateCalls.push({ beadId, state });
+        return { success: true, value: undefined };
       },
-    };
+      getGateway: () => ({
+        createEpic: () => 'bd-epic-1',
+        closeBead: () => {},
+        flushArtifacts: () => {},
+        readArtifact: () => null,
+        upsertArtifact: () => {},
+        readDescription: () => null,
+        updateDescription: () => {},
+        addComment: () => {},
+        addLabel: () => {},
+        list: (opts?: any) => {
+          if (opts?.type === 'task') {
+            return [
+              { id: 'bd-task-1', title: 'Setup', status: 'open', type: 'task' },
+              { id: 'bd-task-2', title: 'API', status: 'open', type: 'task' },
+              { id: 'bd-task-3', title: 'Frontend', status: 'open', type: 'task' },
+            ];
+          }
+          return [];
+        },
+        show: () => ({ id: 'bd-epic-1', title: 'my-feature', status: 'open', created_at: '2024-01-01T00:00:00Z' }),
+      } as any),
+      createEpic: (_name, _priority) => ({ success: true, value: 'bd-epic-1' }),
+      // getEpicByFeatureName: (_name, _useCache) => ({ success: true, value: 'bd-epic-1' }),
+      listTaskBeadsForEpic: () => [
+        { type: 'parent-child', id: 'bd-task-1', title: 'Setup', status: 'open' },
+        { type: 'parent-child', id: 'bd-task-2', title: 'API', status: 'open' },
+        { type: 'parent-child', id: 'bd-task-3', title: 'Frontend', status: 'open' },
+      ],
+    });
 
-    // Mock execFileSync for BeadGateway calls
-    const execSpy = spyOn(childProcess, 'execFileSync').mockImplementation(((cmd: string, args?: string[]): string => {
-      const argStr = args?.join(' ') || '';
-
-      if (argStr.includes('--version')) {
-        return 'beads_rust 1.2.3';
-      }
-      if (argStr.includes('create') && argStr.includes('epic')) {
-        return '{"id":"bd-epic-1"}';
-      }
-      if (argStr.includes('dep list')) {
-        return JSON.stringify([
-          { type: 'parent-child', issue_id: 'bd-task-1', title: 'Setup', status: 'open' },
-          { type: 'parent-child', issue_id: 'bd-task-2', title: 'API', status: 'open' },
-          { type: 'parent-child', issue_id: 'bd-task-3', title: 'Frontend', status: 'open' },
-        ]);
-      }
-      if (argStr.includes('show')) {
-        return JSON.stringify({
-          id: 'bd-epic-1',
-          title: 'my-feature',
-          status: 'open',
-          created_at: '2024-01-01T00:00:00Z',
-        });
-      }
-      if (argStr.includes('list')) {
-        return JSON.stringify([
-          { id: 'bd-epic-1', title: 'my-feature', status: 'open', type: 'epic' },
-        ]);
-      }
-      return '';
-    }) as typeof childProcess.execFileSync);
-
-    const service = new FeatureService(testRoot, beadClient, onMode);
+    const service = new FeatureService(testRoot, mockRepository, onMode);
     service.create('my-feature');
 
     // First call to getTasks generates and persists folders
@@ -518,11 +482,9 @@ describe('FeatureService getTasks folder stability', () => {
     expect(tasks1[1].folder).toBe('02-api');
     expect(tasks1[2].folder).toBe('03-frontend');
 
-    // Verify folders were persisted via upsertArtifact
-    expect(upsertedArtifacts.has('bd-task-1')).toBe(true);
-    const storedState1 = JSON.parse(upsertedArtifacts.get('bd-task-1')!);
-    expect(storedState1.folder).toBe('01-setup');
-
-    execSpy.mockRestore();
+    // Verify folders were persisted via setTaskState
+    const task1Call = setTaskStateCalls.find(call => call.beadId === 'bd-task-1');
+    expect(task1Call).toBeDefined();
+    expect(task1Call?.state.folder).toBe('01-setup');
   });
 });

@@ -4,7 +4,7 @@ import { detectContext } from "./utils/detection";
 
 describe("warcraft-core", () => {
   it("exports path helpers", () => {
-    expect(getWarcraftPath("/tmp/project")).toBe("/tmp/project/.beads/artifacts");
+    expect(getWarcraftPath("/tmp/project", "on")).toBe("/tmp/project/.beads/artifacts");
   });
 
   it("exports docs path for beadsMode off", () => {

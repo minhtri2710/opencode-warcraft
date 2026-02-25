@@ -211,6 +211,19 @@ Use `beadsMode` to control integration with the **beads_rust (`br`)** CLI. Accep
 
 **Legacy migration**: Values `"dual-write"` and `"beads-primary"` are no longer supported. Use `"on"` or `"off"` instead.
 
+### Agent Mode
+
+Use `agentMode` to choose between unified and dedicated agent configurations:
+
+- **`"unified"`** (default): Registers Khadgar (hybrid planner+orchestrator), Brann, Mekkatorque, and Algalon. Default agent is Khadgar.
+- **`"dedicated"`**: Registers Mimiron (planner), Saurfang (orchestrator), Brann, Mekkatorque, and Algalon. Default agent is Mimiron.
+
+```json
+{
+	"agentMode": "dedicated"
+}
+```
+
 Install `br` to use bead lifecycle sync and install `bv` for blocker/causality triage in `warcraft_status` and dependency hints.
 
 ### Priority System
@@ -242,6 +255,39 @@ warcraft_feature_create("Fix production bug", "INCIDENT-123", 1);
 // Create medium priority task (default)
 warcraft_task_create("my-feature", "Implement API", 1, 3);
 ```
+
+### Parallel Execution
+
+Control how batch task dispatch works:
+
+```json
+{
+	"parallelExecution": {
+		"strategy": "bounded",
+		"maxConcurrency": 4
+	}
+}
+```
+
+- `strategy`: `"unbounded"` (default) dispatches all tasks at once; `"bounded"` limits concurrency.
+- `maxConcurrency`: Maximum parallel workers when strategy is `"bounded"` (default: 4).
+
+### Sandbox
+
+Isolate worker execution in Docker containers:
+
+```json
+{
+	"sandbox": "docker",
+	"dockerImage": "node:22-slim",
+	"persistentContainers": true
+}
+```
+
+- `sandbox`: `"none"` (default) or `"docker"`
+- `dockerImage`: Override auto-detected image (optional)
+- `persistentContainers`: Reuse containers per worktree (default: `true` when sandbox is `"docker"`)
+- Prefix commands with `HOST:` to bypass sandbox
 
 ### Plan Approval and Content Hashing
 
@@ -277,25 +323,25 @@ Plan approval uses **SHA-256 content hashing** to detect plan modifications:
 
 | ID | Description |
 |----|-------------|
-| `agents-md-mastery` | Use when creating or refining AGENTS.md so guidance stays high-signal and behavior-changing for agents. |
-| `ast-grep` | Use for AST-aware code search and rule authoring. Helps build/test structural patterns before scanning the codebase. |
-| `brainstorming` | Use before creative implementation work to clarify intent, constraints, and design direction. |
-| `code-reviewer` | Use when reviewing implementation changes against approved requirements to catch correctness and maintainability risks. |
-| `dispatching-parallel-agents` | Use when 2+ independent tasks can be investigated or implemented concurrently. |
-| `docker-mastery` | Use when troubleshooting or designing Docker-based development, test, or runtime environments. |
-| `executing-plans` | Use when executing an approved implementation plan through Warcraft task/worktree flow. |
-| `finishing-a-development-branch` | Use when implementation is complete and you must choose merge, preserve, or discard outcomes safely. |
-| `parallel-exploration` | Use when broad discovery should be fanned out into parallel Brann investigations and synthesized. |
-| `receiving-code-review` | Use when review feedback arrives and must be triaged, validated, and applied rigorously. |
-| `requesting-code-review` | Use when a task milestone needs formal review before merge or handoff. |
-| `subagent-driven-development` | Use when executing approved plans in-session with a fresh worker context per task. |
-| `systematic-debugging` | Use when encountering any bug or test failure. Requires root-cause investigation before fixes. |
-| `test-driven-development` | Use when implementing behavior changes. Enforces red-green-refactor discipline. |
-| `using-git-worktrees` | Use when starting isolated task execution with Warcraft-managed worktree lifecycle. |
-| `verification-before-completion` | Use before claiming completion to require command evidence and outcome verification. |
-| `warcraft` | Use for full plan-first Warcraft workflow across discovery, planning, execution, and merge. |
-| `writing-plans` | Use when converting requirements into executable, reviewable plan artifacts. |
-| `writing-skills` | Use when creating or updating built-in skills and validating registry/test integration. |
+| `agents-md-mastery` | Use when bootstrapping, updating, or reviewing AGENTS.md — teaches effective agent memory and signal vs noise filtering. |
+| `ast-grep` | Guide for writing ast-grep rules to perform structural code search and analysis using AST patterns. |
+| `brainstorming` | Use before any creative work — creating features, building components, adding functionality, or modifying behavior. |
+| `code-reviewer` | Use when reviewing implementation changes against an approved plan or task to catch missing requirements, YAGNI, dead code, and risky patterns. |
+| `dispatching-parallel-agents` | Use when facing 2+ independent tasks that can be worked on without shared state or sequential dependencies. |
+| `docker-mastery` | Use when working with Docker containers — debugging failures, writing Dockerfiles, docker-compose, image optimization, or deploying containerized apps. |
+| `executing-plans` | Use when you have a written implementation plan to execute in a separate session with review checkpoints. |
+| `finishing-a-development-branch` | Use when implementation is complete and you need to choose how to integrate, preserve, or discard worktree changes safely. |
+| `parallel-exploration` | Use when you need parallel, read-only exploration with task() (Brann fan-out). |
+| `receiving-code-review` | Use when review feedback arrives and you must evaluate, clarify, and apply it with technical rigor. |
+| `requesting-code-review` | Use when finishing a task or milestone and you need an explicit review pass before merge or handoff. |
+| `subagent-driven-development` | Use when executing an approved multi-task plan in the current session with fresh worker context per task. |
+| `systematic-debugging` | Use when encountering any bug, test failure, or unexpected behavior, before proposing fixes. |
+| `test-driven-development` | Use when implementing any feature or bugfix, before writing implementation code. |
+| `using-git-worktrees` | Use when starting implementation work that requires isolation from the current branch and reproducible task execution. |
+| `verification-before-completion` | Use when about to claim work is complete, fixed, or passing — requires running verification commands and confirming output before making any success claims. |
+| `warcraft` | Plan-first AI development with isolated git worktrees and human review. Use for any feature development. |
+| `writing-plans` | Use when you have a spec or requirements for a multi-step task, before touching code. |
+| `writing-skills` | Use when creating or updating built-in skills so they remain discoverable, testable, and aligned with Warcraft workflows. |
 
 #### Available MCPs
 
@@ -313,7 +359,7 @@ Each agent can have specific skills enabled. If configured, only those skills ap
 {
   "agents": {
     "khadgar": {
-      "skills": ["brainstorming", "writing-plans", "executing-plans"]
+      "skills": ["brainstorming", "writing-plans", "dispatching-parallel-agents", "executing-plans"]
     },
     "mekkatorque": {
       "skills": ["test-driven-development", "verification-before-completion"]
@@ -374,10 +420,11 @@ Skill IDs must be safe directory names (no `/`, `\`, `..`, or `.`). Missing or i
 | Agent | autoLoadSkills default |
 |-------|------------------------|
 | `khadgar` | `parallel-exploration` |
-| `mekkatorque` | `test-driven-development`, `verification-before-completion` |
-| `brann` | (none) |
 | `mimiron` | `parallel-exploration` |
 | `saurfang` | (none) |
+| `brann` | (none) |
+| `mekkatorque` | `test-driven-development`, `verification-before-completion` |
+| `algalon` | (none) |
 
 ### Per-Agent Model Variants
 

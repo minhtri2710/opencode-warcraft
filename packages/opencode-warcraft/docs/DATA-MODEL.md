@@ -11,7 +11,7 @@
  │   │   ├── decisions.md
  │   │   ├── architecture.md
  │   │   └── constraints.md
- │   └── tasks/                    # Task folders
+ │   └── tasks/                    # Task folders (off mode: canonical; on mode: cache)
  │       └── <NN-task-name>/
  │           ├── status.json       # Task state + metadata
  │           ├── spec.md           # Generated worker spec
@@ -24,7 +24,9 @@
 Notes:
 - `warcraft-root` is `.beads/artifacts` in beadsMode `on` and `docs` in beadsMode `off`.
 - Feature path is `<warcraft-root>/<feature-name>`.
-- There is no top-level `tasks.json`; task state lives in each `tasks/<task>/status.json`.
+- In beadsMode `on`, the `tasks/` directory is **not** created at feature creation. Task state lives in bead artifacts; local `tasks/` folders appear as cache when tasks are synced.
+- In beadsMode `off`, the `tasks/` directory is created at feature creation and is the canonical source of task state.
+- There is no top-level `tasks.json`; task state lives in each `tasks/<task>/status.json` (or bead artifacts in on mode).
 
 ## Beads Mode Behavior
 
@@ -55,7 +57,7 @@ Typical fields:
 }
 ```
 
-`planApprovalHash` and `planComments` are primarily used in local (`off`) mode and for legacy migration fallback paths.
+`planApprovalHash` and `planComments` are written by `PlanService` in local (`off`) mode. They are not part of the canonical `FeatureJson` TypeScript type but appear in on-disk `feature.json` files when the plan service manages approval state locally.
 
 ## `tasks/<task>/status.json`
 

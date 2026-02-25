@@ -112,7 +112,12 @@ export class BeadGateway {
   show(beadId: string): unknown {
     this.ensurePreflight();
     const output = this.runBr(['show', beadId, '--json'], `show bead '${beadId}'`);
-    return this.parseJson(output, `bead data for '${beadId}'`);
+    const parsed = this.parseJson(output, `bead data for '${beadId}'`);
+    // br show --json returns a single-element array; unwrap it
+    if (Array.isArray(parsed) && parsed.length === 1) {
+      return parsed[0];
+    }
+    return parsed;
   }
 
   readDescription(beadId: string): string | null {
@@ -170,7 +175,7 @@ export class BeadGateway {
           id: String(obj.id || ''),
           title: String(obj.title || ''),
           status: String(obj.status || ''),
-          type: obj.type ? String(obj.type) : undefined,
+          type: obj.issue_type ? String(obj.issue_type) : (obj.type ? String(obj.type) : undefined),
         };
       })
       .filter((item) => item.id);
@@ -205,7 +210,7 @@ export class BeadGateway {
         id,
         title: String(issue.title || dep.title || ''),
         status: String(issue.status || dep.status || ''),
-        type: hasEmbeddedIssue && issue.type ? String(issue.type) : issueTypeHint,
+        type: hasEmbeddedIssue && (issue.issue_type || issue.type) ? String(issue.issue_type || issue.type) : issueTypeHint,
       });
     }
 
@@ -223,9 +228,17 @@ export class BeadGateway {
   }
 
   upsertArtifact(beadId: string, kind: BeadArtifactKind, content: string): void {
+    console.error(`[DEBUG upsertArtifact] kind=${kind}, beadId=${beadId}, contentLen=${content.length}`);
     this.ensurePreflight();
     if (kind === 'spec') {
-      this.updateDescription(beadId, content);
+      const currentDescription = this.readDescription(beadId) ?? '';
+      const { artifacts } = this.parseArtifacts(currentDescription);
+      console.error(`[DEBUG upsertArtifact spec] beadId=${beadId}, currentDescLen=${currentDescription.length}, artifactKeys=${JSON.stringify(Object.keys(artifacts))}`);
+      if (Object.keys(artifacts).length > 0) {
+        this.updateDescription(beadId, this.composeArtifactsDescription(content, artifacts));
+      } else {
+        this.updateDescription(beadId, content);
+      }
       return;
     }
 
@@ -349,16 +362,14 @@ export class BeadGateway {
     }
 
     try {
-      const parsed = JSON.parse(payload) as TaskBeadArtifacts;
-      return {
-        prefix,
-        artifacts: {
-          spec: typeof parsed.spec === 'string' ? parsed.spec : undefined,
-          worker_prompt: typeof parsed.worker_prompt === 'string' ? parsed.worker_prompt : undefined,
-          plan_approval: typeof parsed.plan_approval === 'string' ? parsed.plan_approval : undefined,
-          approved_plan: typeof parsed.approved_plan === 'string' ? parsed.approved_plan : undefined,
-        },
-      };
+      const parsed = JSON.parse(payload);
+      const artifacts: TaskBeadArtifacts = {};
+      for (const [key, value] of Object.entries(parsed)) {
+        if (typeof value === 'string') {
+          (artifacts as Record<string, string>)[key] = value;
+        }
+      }
+      return { prefix, artifacts };
     } catch {
       return { prefix, artifacts: {} };
     }
@@ -373,3 +384,5 @@ export class BeadGateway {
     return `${prefix}\n\n${artifactsBlock}`;
   }
 }
+
+export { BeadGatewayError };

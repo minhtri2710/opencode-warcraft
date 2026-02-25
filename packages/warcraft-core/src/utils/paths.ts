@@ -42,20 +42,20 @@ export function normalizePath(filePath: string): string {
 
 /**
  * Get the base warcraft directory name based on beadsMode.
- * @param beadsMode - 'on' for .beads/artifacts, 'off' for docs (default: 'on')
+ * @param beadsMode - 'on' for .beads/artifacts, 'off' for docs (default: 'off')
  * @returns The directory name segment(s)
  */
-export function getWarcraftDir(beadsMode: BeadsMode = 'on'): string {
+export function getWarcraftDir(beadsMode: BeadsMode = 'off'): string {
   return beadsMode === 'on' ? WARCRAFT_DIR_BEADS_ON : WARCRAFT_DIR_BEADS_OFF;
 }
 
 /**
  * Get the full warcraft path based on beadsMode.
  * @param projectRoot - The project root directory
- * @param beadsMode - 'on' for .beads/artifacts, 'off' for docs (default: 'on')
+ * @param beadsMode - 'on' for .beads/artifacts, 'off' for docs (default: 'off')
  * @returns The full path to the warcraft directory
  */
-export function getWarcraftPath(projectRoot: string, beadsMode: BeadsMode = 'on'): string {
+export function getWarcraftPath(projectRoot: string, beadsMode: BeadsMode = 'off'): string {
   return path.join(projectRoot, getWarcraftDir(beadsMode));
 }
 
@@ -64,9 +64,9 @@ export function getWarcraftPath(projectRoot: string, beadsMode: BeadsMode = 'on'
  * This is the target path for all new features.
  * @param projectRoot - The project root directory
  * @param featureName - The feature name
- * @param beadsMode - 'on' for .beads/artifacts, 'off' for docs (default: 'on')
+ * @param beadsMode - 'on' for .beads/artifacts, 'off' for docs (default: 'off')
  */
-export function getCanonicalFeaturePath(projectRoot: string, featureName: string, beadsMode: BeadsMode = 'on'): string {
+export function getCanonicalFeaturePath(projectRoot: string, featureName: string, beadsMode: BeadsMode = 'off'): string {
   return path.join(getWarcraftPath(projectRoot, beadsMode), featureName);
 }
 
@@ -75,9 +75,9 @@ export function getCanonicalFeaturePath(projectRoot: string, featureName: string
  * Uses canonical flat layout only.
  * Excludes special directories like .worktrees and internal files.
  * @param projectRoot - The project root directory
- * @param beadsMode - 'on' for .beads/artifacts, 'off' for docs (default: 'on')
+ * @param beadsMode - 'on' for .beads/artifacts, 'off' for docs (default: 'off')
  */
-export function listFeatureDirectories(projectRoot: string, beadsMode: BeadsMode = 'on'): string[] {
+export function listFeatureDirectories(projectRoot: string, beadsMode: BeadsMode = 'off'): string[] {
   const warcraftPath = getWarcraftPath(projectRoot, beadsMode);
   const features = new Set<string>();
 
@@ -106,10 +106,10 @@ export function listFeatureDirectories(projectRoot: string, beadsMode: BeadsMode
  * Get the canonical feature path.
  * @param projectRoot - The project root directory
  * @param featureName - The feature name
- * @param beadsMode - 'on' for .beads/artifacts, 'off' for docs (default: 'on')
+ * @param beadsMode - 'on' for .beads/artifacts, 'off' for docs (default: 'off')
  * @returns The canonical feature path
  */
-export function getFeaturePath(projectRoot: string, featureName: string, beadsMode: BeadsMode = 'on'): string {
+export function getFeaturePath(projectRoot: string, featureName: string, beadsMode: BeadsMode = 'off'): string {
   return getCanonicalFeaturePath(projectRoot, featureName, beadsMode);
 }
 
@@ -117,9 +117,9 @@ export function getFeaturePath(projectRoot: string, featureName: string, beadsMo
  * Get the plan.md path for a feature.
  * @param projectRoot - The project root directory
  * @param featureName - The feature name
- * @param beadsMode - 'on' for .beads/artifacts, 'off' for docs (default: 'on')
+ * @param beadsMode - 'on' for .beads/artifacts, 'off' for docs (default: 'off')
  */
-export function getPlanPath(projectRoot: string, featureName: string, beadsMode: BeadsMode = 'on'): string {
+export function getPlanPath(projectRoot: string, featureName: string, beadsMode: BeadsMode = 'off'): string {
   return path.join(getFeaturePath(projectRoot, featureName, beadsMode), PLAN_FILE);
 }
 
@@ -137,84 +137,83 @@ export function getFeatureJsonPath(projectRoot: string, featureName: string, bea
  * Get the context directory path for a feature.
  * @param projectRoot - The project root directory
  * @param featureName - The feature name
- * @param beadsMode - 'on' for .beads/artifacts, 'off' for docs (default: 'on')
+ * @param beadsMode - 'on' for .beads/artifacts, 'off' for docs (default: 'off')
  */
-export function getContextPath(projectRoot: string, featureName: string, beadsMode: BeadsMode = 'on'): string {
+export function getContextPath(projectRoot: string, featureName: string, beadsMode: BeadsMode = 'off'): string {
   return path.join(getFeaturePath(projectRoot, featureName, beadsMode), CONTEXT_DIR);
 }
 
 /**
  * Get the tasks directory path for a feature.
+ * Always resolves via off-mode (docs-based) path tree.
  * @param projectRoot - The project root directory
  * @param featureName - The feature name
- * @param beadsMode - 'on' for .beads/artifacts, 'off' for docs (default: 'off')
  */
-export function getTasksPath(projectRoot: string, featureName: string, beadsMode: BeadsMode = 'off'): string {
-  return path.join(getFeaturePath(projectRoot, featureName, beadsMode), TASKS_DIR);
+export function getTasksPath(
+  projectRoot: string,
+  featureName: string,
+): string {
+  return path.join(getFeaturePath(projectRoot, featureName, 'off'), TASKS_DIR);
 }
 
 /**
  * Get the path for a specific task folder.
+ * Always resolves via off-mode (docs-based) path tree.
  * @param projectRoot - The project root directory
  * @param featureName - The feature name
  * @param taskFolder - The task folder name
- * @param beadsMode - 'on' for .beads/artifacts, 'off' for docs (default: 'off')
  */
 export function getTaskPath(
   projectRoot: string,
   featureName: string,
   taskFolder: string,
-  beadsMode: BeadsMode = 'off',
 ): string {
-  return path.join(getTasksPath(projectRoot, featureName, beadsMode), taskFolder);
+  return path.join(getTasksPath(projectRoot, featureName), taskFolder);
 }
 
 /**
  * Get the status.json path for a task.
+ * Always resolves via off-mode (docs-based) path tree.
  * @param projectRoot - The project root directory
  * @param featureName - The feature name
  * @param taskFolder - The task folder name
- * @param beadsMode - 'on' for .beads/artifacts, 'off' for docs (default: 'off')
  */
 export function getTaskStatusPath(
   projectRoot: string,
   featureName: string,
   taskFolder: string,
-  beadsMode: BeadsMode = 'off',
 ): string {
-  return path.join(getTaskPath(projectRoot, featureName, taskFolder, beadsMode), STATUS_FILE);
+  return path.join(getTaskPath(projectRoot, featureName, taskFolder), STATUS_FILE);
 }
 
 /**
  * Get the report.md path for a task.
+ * Always resolves via off-mode (docs-based) path tree.
  * @param projectRoot - The project root directory
  * @param featureName - The feature name
  * @param taskFolder - The task folder name
- * @param beadsMode - 'on' for .beads/artifacts, 'off' for docs (default: 'off')
  */
 export function getTaskReportPath(
   projectRoot: string,
   featureName: string,
   taskFolder: string,
-  beadsMode: BeadsMode = 'off',
 ): string {
-  return path.join(getTaskPath(projectRoot, featureName, taskFolder, beadsMode), REPORT_FILE);
+  return path.join(getTaskPath(projectRoot, featureName, taskFolder), REPORT_FILE);
 }
 
 /**
  * Get the spec.md path for a task.
+ * Always resolves via off-mode (docs-based) path tree.
  * @param projectRoot - The project root directory
  * @param featureName - The feature name
  * @param taskFolder - The task folder name
- * @param beadsMode - 'on' for .beads/artifacts, 'off' for docs (default: 'off')
  */
 export function getTaskSpecPath(
   projectRoot: string,
   featureName: string,
   taskFolder: string,
-  beadsMode: BeadsMode = 'off',
 ): string {
-  return path.join(getTaskPath(projectRoot, featureName, taskFolder, beadsMode), 'spec.md');
+  return path.join(getTaskPath(projectRoot, featureName, taskFolder), 'spec.md');
 }
 
 export function ensureDir(dirPath: string): void {

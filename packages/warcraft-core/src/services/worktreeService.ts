@@ -4,7 +4,9 @@ import simpleGit, { SimpleGit } from "simple-git";
 import { acquireLock, getWarcraftPath, sanitizeName } from '../utils/paths.js';
 import type { BeadsModeProvider, TaskStatusType } from '../types.js';
 import { ConfigService } from './configService.js';
-import { BeadGateway } from './beads/BeadGateway.js';
+import { BeadsRepository } from './beads/BeadsRepository.js';
+import { isBeadsEnabled } from './beads/beadsMode.js';
+
 
 interface WorktreeBeadClient {
   syncTaskStatus(beadId: string, status: TaskStatusType): void;
@@ -61,11 +63,15 @@ export class WorktreeService {
   constructor(
     config: WorktreeConfig,
     beadsModeProvider: BeadsModeProvider = new ConfigService(),
-    worktreeBeadClient: WorktreeBeadClient = new BeadGateway(config.baseDir),
+    worktreeBeadClient?: WorktreeBeadClient,
+    repository?: BeadsRepository,
   ) {
     this.config = config;
     this.beadsModeProvider = beadsModeProvider;
-    this.worktreeBeadClient = worktreeBeadClient;
+    // Use provided client, or fall back to repository gateway, or create default
+    this.worktreeBeadClient = worktreeBeadClient
+      ?? repository?.getGateway()
+      ?? new BeadsRepository(config.baseDir, {}, beadsModeProvider.getBeadsMode()).getGateway();
   }
 
   private getGit(cwd?: string): SimpleGit {
@@ -624,10 +630,6 @@ export class WorktreeService {
     return conflicts;
   }
 
-  private shouldSyncBeads(): boolean {
-    return this.beadsModeProvider.getBeadsMode() !== 'off';
-  }
-
   private async getTaskBeadId(feature: string, step: string): Promise<string | null> {
     const statusPath = this.getStepStatusPath(feature, step);
     try {
@@ -644,7 +646,7 @@ export class WorktreeService {
     status: TaskStatusType,
     context: string,
   ): Promise<void> {
-    if (!this.shouldSyncBeads()) {
+    if (!isBeadsEnabled(this.beadsModeProvider)) {
       return;
     }
 

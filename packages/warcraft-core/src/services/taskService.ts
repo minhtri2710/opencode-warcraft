@@ -5,7 +5,6 @@ import {
   getTaskStatusPath,
   getTaskReportPath,
   getPlanPath,
-  getFeatureJsonPath,
   ensureDir,
   readJson,
   writeJson,
@@ -17,11 +16,14 @@ import {
   sanitizeName,
   LockOptions,
 } from '../utils/paths.js';
-import { FeatureJson, TaskStatus, TaskStatusType, TaskOrigin, TasksSyncResult, TaskInfo, WorkerSession, SpecData } from '../types.js';
+import { TaskStatus, TaskStatusType, TaskOrigin, TasksSyncResult, TaskInfo, WorkerSession, SpecData } from '../types.js';
 import type { BeadsMode, BeadsModeProvider } from '../types.js';
-import { BeadGateway } from './beads/BeadGateway.js';
-import { BeadsViewerGateway } from './beads/BeadsViewerGateway.js';
+import { BeadsRepository } from './beads/BeadsRepository.js';
 import { ConfigService } from './configService.js';
+import { isBeadsEnabled } from './beads/beadsMode.js';
+import { mapBeadStatusToTaskStatus } from './beads/beadStatus.js';
+import { readJsonArtifact, writeJsonArtifact } from './beads/beadArtifacts.js';
+
 /** Current schema version for TaskStatus */
 export const TASK_STATUS_SCHEMA_VERSION = 1;
 
@@ -72,21 +74,15 @@ export interface RunnableTasksResult {
 }
 
 export class TaskService {
-  private readonly beadGateway: BeadGateway;
-  private readonly beadsViewerGateway: BeadsViewerGateway;
+  private readonly repository: BeadsRepository;
   private readonly beadsModeProvider: BeadsModeProvider;
 
   constructor(
     private projectRoot: string,
-    beadGateway?: BeadGateway,
+    repository: BeadsRepository,
     beadsModeProvider: BeadsModeProvider = new ConfigService(),
-    beadsViewerGateway?: BeadsViewerGateway,
   ) {
-    this.beadGateway = beadGateway ?? new BeadGateway(projectRoot);
-    this.beadsViewerGateway = beadsViewerGateway ?? new BeadsViewerGateway(
-      projectRoot,
-      beadsModeProvider.getBeadsMode() !== 'off',
-    );
+    this.repository = repository;
     this.beadsModeProvider = beadsModeProvider;
   }
 
@@ -102,9 +98,14 @@ export class TaskService {
     
     // Validate dependency graph before proceeding
     this.validateDependencyGraph(planTasks, featureName);
-    const epicBeadId = this.getEpicBeadId(featureName);
+    const epicResult = this.repository.getEpicByFeatureName(featureName, true);
+    if (epicResult.success === false) {
+      throw new Error(`Failed to resolve epic for feature '${featureName}': ${epicResult.error.message}`);
+    }
+    const epicBeadId = epicResult.value!;
     
     const existingTasks = this.list(featureName);
+    console.error(`[DEBUG sync] featureName=${featureName}, planTasks=${planTasks.length}, existingTasks=${existingTasks.length}, beadsOn=${isBeadsEnabled(this.beadsModeProvider)}`);
     
     const result: TasksSyncResult = {
       created: [],
@@ -159,7 +160,11 @@ export class TaskService {
    */
   create(featureName: string, name: string, order?: number, priority: number = 3): string {
     name = sanitizeName(name);
-    const epicBeadId = this.getEpicBeadId(featureName);
+    const epicResult = this.repository.getEpicByFeatureName(featureName, true);
+    if (epicResult.success === false) {
+      throw new Error(`Failed to resolve epic for feature '${featureName}': ${epicResult.error.message}`);
+    }
+    const epicBeadId = epicResult.value!;
 
     // Validate priority
     if (!Number.isInteger(priority) || priority < 1 || priority > 5) {
@@ -168,7 +173,7 @@ export class TaskService {
 
     // Determine folder name
     let folder: string;
-    if (this.shouldSyncBeads()) {
+    if (isBeadsEnabled(this.beadsModeProvider)) {
       // In beads mode, use provided order or auto-increment based on existing beads
       const existingTasks = this.listFromBeads(featureName);
       const nextOrder = order ?? this.getNextOrderFromTasks(existingTasks);
@@ -189,21 +194,26 @@ export class TaskService {
       beadId,
     };
 
-    if (this.shouldSyncBeads()) {
+    if (isBeadsEnabled(this.beadsModeProvider)) {
       this.writeTaskStateByBeadId(beadId, {
         ...status,
         folder,
       });
     }
 
-    const taskPath = getTaskPath(this.projectRoot, featureName, folder, this.getBeadsMode());
-    ensureDir(taskPath);
-    writeJson(getTaskStatusPath(this.projectRoot, featureName, folder, this.getBeadsMode()), status);
+    // In beadsMode off, write local task directory and status.json.
+    // In beadsMode on, bead artifacts are canonical — no local tasks/ writes.
+    if (!isBeadsEnabled(this.beadsModeProvider)) {
+      const taskPath = getTaskPath(this.projectRoot, featureName, folder);
+      ensureDir(taskPath);
+      writeJson(getTaskStatusPath(this.projectRoot, featureName, folder), status);
+    }
 
     return folder;
   }
 
   private createFromPlan(featureName: string, task: ParsedTask, allTasks: ParsedTask[], planContent: string, epicBeadId: string, priority: number = 3): void {
+    console.error(`[DEBUG createFromPlan] task=${task.folder}, feature=${featureName}`);
     // Resolve dependencies: numbers -> folder names
     const dependsOn = this.resolveDependencies(task, allTasks);
 
@@ -218,16 +228,20 @@ export class TaskService {
       dependsOn,
     };
 
-    if (this.shouldSyncBeads()) {
+    if (isBeadsEnabled(this.beadsModeProvider)) {
       this.writeTaskStateByBeadId(beadId, {
         ...status,
         folder: task.folder,
       });
     }
 
-    const taskPath = getTaskPath(this.projectRoot, featureName, task.folder, this.getBeadsMode());
-    ensureDir(taskPath);
-    writeJson(getTaskStatusPath(this.projectRoot, featureName, task.folder, this.getBeadsMode()), status);
+    // In beadsMode off, write local task directory and status.json.
+    // In beadsMode on, bead artifacts are canonical — no local tasks/ writes.
+    if (!isBeadsEnabled(this.beadsModeProvider)) {
+      const taskPath = getTaskPath(this.projectRoot, featureName, task.folder);
+      ensureDir(taskPath);
+      writeJson(getTaskStatusPath(this.projectRoot, featureName, task.folder), status);
+    }
 
     // Build and store spec in bead (works for both modes)
     const specContent = this.buildSpecContent({
@@ -239,9 +253,10 @@ export class TaskService {
     });
 
     // Store spec as bead artifact
-    this.beadGateway.upsertArtifact(beadId, 'spec', specContent);
-    if (this.shouldSyncBeads()) {
-      this.beadGateway.flushArtifacts();
+    this.repository.upsertTaskArtifact(beadId, 'spec', specContent);
+    console.error(`[DEBUG createFromPlan] upsertTaskArtifact returned for ${task.folder}`);
+    if (isBeadsEnabled(this.beadsModeProvider)) {
+      this.repository.flushArtifacts();
     }
   }
 
@@ -544,10 +559,10 @@ export class TaskService {
   readTaskBeadArtifact(
     featureName: string,
     taskFolder: string,
-    kind: 'spec' | 'worker_prompt',
+    kind: 'spec' | 'worker_prompt' | 'report',
   ): string | null {
-    if (this.shouldSyncBeads()) {
-      this.beadGateway.importArtifacts();
+    if (isBeadsEnabled(this.beadsModeProvider)) {
+      this.repository.importArtifacts();
     }
 
     const status = this.getRawStatus(featureName, taskFolder);
@@ -560,7 +575,8 @@ export class TaskService {
       return null;
     }
 
-    return this.beadGateway.readArtifact(beadId, kind);
+    const readResult = this.repository.readTaskArtifact(beadId, kind);
+    return readResult.success ? readResult.value : null;
   }
 
   /**
@@ -581,8 +597,7 @@ export class TaskService {
     >,
     lockOptions?: LockOptions
   ): TaskStatus {
-    const beadsOn = this.shouldSyncBeads();
-    const statusPath = getTaskStatusPath(this.projectRoot, featureName, taskFolder, this.getBeadsMode());
+    const beadsOn = isBeadsEnabled(this.beadsModeProvider);
     const current = this.getRawStatus(featureName, taskFolder);
     
     if (!current) {
@@ -611,12 +626,15 @@ export class TaskService {
       }
     }
 
-    // Keep local cache in sync in both modes
-    writeJsonLockedSync(statusPath, updated, lockOptions);
+    // In beadsMode off, write local cache. In beadsMode on, bead artifacts are canonical.
+    if (!beadsOn) {
+      const statusPath = getTaskStatusPath(this.projectRoot, featureName, taskFolder);
+      writeJsonLockedSync(statusPath, updated, lockOptions);
+    }
 
-    if (updates.status && updated.beadId && this.shouldSyncBeads()) {
+    if (updates.status && updated.beadId && isBeadsEnabled(this.beadsModeProvider)) {
       this.syncTaskBeadStatus(updated.beadId, updates.status);
-      this.beadGateway.flushArtifacts();
+      this.repository.flushArtifacts();
     }
 
     return updated;
@@ -642,7 +660,7 @@ export class TaskService {
     patch: BackgroundPatchFields,
     lockOptions?: LockOptions
   ): TaskStatus {
-    if (this.shouldSyncBeads()) {
+    if (isBeadsEnabled(this.beadsModeProvider)) {
       const status = this.getRawStatus(featureName, taskFolder);
       if (!status) {
         throw new Error(`Task '${taskFolder}' not found`);
@@ -671,12 +689,11 @@ export class TaskService {
         }, false);
       }
 
-      const statusPath = getTaskStatusPath(this.projectRoot, featureName, taskFolder, this.getBeadsMode());
-      writeJsonLockedSync(statusPath, updated, lockOptions);
+      // beadsMode on: bead artifacts are canonical — skip local write
       return updated;
     }
 
-    const statusPath = getTaskStatusPath(this.projectRoot, featureName, taskFolder, this.getBeadsMode());
+    const statusPath = getTaskStatusPath(this.projectRoot, featureName, taskFolder);
     
     // Build the patch object, only including fields that are defined
     const safePatch: Partial<TaskStatus> = {
@@ -699,22 +716,12 @@ export class TaskService {
    * Get raw TaskStatus including all fields (for internal use or debugging).
    */
   getRawStatus(featureName: string, taskFolder: string): TaskStatus | null {
-    if (this.shouldSyncBeads()) {
+    if (isBeadsEnabled(this.beadsModeProvider)) {
       const beadsTask = this.getFromBeads(featureName, taskFolder);
       if (beadsTask?.beadId) {
         const taskState = this.readTaskStateByBeadId(beadsTask.beadId);
         if (taskState) {
           return taskState;
-        }
-
-        const cached = readJson<TaskStatus>(
-          getTaskStatusPath(this.projectRoot, featureName, taskFolder, this.getBeadsMode()),
-        );
-        if (cached) {
-          return {
-            ...cached,
-            beadId: cached.beadId ?? beadsTask.beadId,
-          };
         }
 
         return {
@@ -725,11 +732,9 @@ export class TaskService {
         };
       }
 
-      const statusPath = getTaskStatusPath(this.projectRoot, featureName, taskFolder, this.getBeadsMode());
-      return readJson<TaskStatus>(statusPath);
     }
 
-    const statusPath = getTaskStatusPath(this.projectRoot, featureName, taskFolder, this.getBeadsMode());
+    const statusPath = getTaskStatusPath(this.projectRoot, featureName, taskFolder);
     const existing = readJson<TaskStatus>(statusPath);
     if (!existing) {
       return null;
@@ -740,31 +745,11 @@ export class TaskService {
 
   get(featureName: string, taskFolder: string): TaskInfo | null {
     // In beads mode, try to get task info from beads first
-    if (this.shouldSyncBeads()) {
+    if (isBeadsEnabled(this.beadsModeProvider)) {
       const beadsTask = this.getFromBeads(featureName, taskFolder);
-      if (beadsTask) {
-        return beadsTask;
-      }
-
-      const status = readJson<TaskStatus>(
-        getTaskStatusPath(this.projectRoot, featureName, taskFolder, this.getBeadsMode()),
-      );
-      if (!status) {
-        return null;
-      }
-
-      return {
-        folder: taskFolder,
-        name: taskFolder.replace(/^\d+-/, ''),
-        beadId: status.beadId,
-        status: status.status,
-        origin: status.origin,
-        planTitle: status.planTitle,
-        summary: status.summary,
-      };
+      return beadsTask ?? null;
     }
-
-    const statusPath = getTaskStatusPath(this.projectRoot, featureName, taskFolder, this.getBeadsMode());
+    const statusPath = getTaskStatusPath(this.projectRoot, featureName, taskFolder);
     const status = readJson<TaskStatus>(statusPath);
 
     if (!status) return null;
@@ -800,62 +785,35 @@ export class TaskService {
   /**
    * Map bead status to task status.
    */
-  private mapBeadStatusToTaskStatus(beadStatus: string): TaskStatusType {
-    switch (beadStatus.toLowerCase()) {
-      case 'closed':
-      case 'tombstone':
-        return 'done';
-      case 'in_progress':
-      case 'review':
-      case 'hooked':
-        return 'in_progress';
-      case 'blocked':
-      case 'deferred':
-        return 'blocked';
-      case 'open':
-      case 'pinned':
-      default:
-        return 'pending';
-    }
-  }
-
   list(featureName: string): TaskInfo[] {
-    if (this.shouldSyncBeads()) {
-      const beadsTasks = this.listFromBeads(featureName);
-      if (beadsTasks.length > 0) {
-        return beadsTasks;
-      }
+    if (isBeadsEnabled(this.beadsModeProvider)) {
+      return this.listFromBeads(featureName);
     }
 
-    // Local filesystem fallback
+    // Local filesystem fallback (off-mode only)
     const folders = this.listFolders(featureName);
     return folders
       .map(folder => this.get(featureName, folder))
       .filter((t): t is TaskInfo => t !== null);
   }
-
   /**
    * List tasks from beads in on-mode.
    * Returns tasks by querying child beads of the feature's epic.
    */
   private listFromBeads(featureName: string): TaskInfo[] {
     try {
-      const epicBeadId = this.getEpicBeadId(featureName);
-      const taskBeads = this.beadGateway.list({ type: 'task', parent: epicBeadId, status: 'all' });
+      const epicResult = this.repository.getEpicByFeatureName(featureName, true);
+      if (epicResult.success === false) {
+        throw epicResult.error;
+      }
+      const epicBeadId = epicResult.value!;
+      const listResult = this.repository.listTaskBeadsForEpic(epicBeadId);
+      const taskBeads = listResult.success ? listResult.value : [];
       const sortedTaskBeads = [...taskBeads].sort((a, b) => a.title.localeCompare(b.title));
       const tasks = sortedTaskBeads.map((bead, index) => {
-        const beadStatus = this.mapBeadStatusToTaskStatus(bead.status);
+        const beadStatus = mapBeadStatusToTaskStatus(bead.status);
         const taskState = this.readTaskStateByBeadId(bead.id);
         if (taskState) {
-          const cachePath = getTaskPath(this.projectRoot, featureName, taskState.folder, this.getBeadsMode());
-          ensureDir(cachePath);
-          writeJson(
-            getTaskStatusPath(this.projectRoot, featureName, taskState.folder, this.getBeadsMode()),
-            {
-              ...taskState,
-              beadId: bead.id,
-            },
-          );
           return {
             folder: taskState.folder,
             name: taskState.folder.replace(/^\d+-/, ''),
@@ -870,42 +828,6 @@ export class TaskService {
         const order = index + 1;
         const folderName = bead.title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
         const folder = `${String(order).padStart(2, '0')}-${folderName}`;
-
-        const cachedStatus = readJson<TaskStatus>(
-          getTaskStatusPath(this.projectRoot, featureName, folder, this.getBeadsMode()),
-        );
-        if (cachedStatus && beadStatus === 'pending') {
-          const cachePath = getTaskPath(this.projectRoot, featureName, folder, this.getBeadsMode());
-          ensureDir(cachePath);
-          writeJson(
-            getTaskStatusPath(this.projectRoot, featureName, folder, this.getBeadsMode()),
-            {
-              ...cachedStatus,
-              beadId: cachedStatus.beadId ?? bead.id,
-            },
-          );
-          return {
-            folder,
-            name: folderName,
-            beadId: cachedStatus.beadId ?? bead.id,
-            status: cachedStatus.status,
-            origin: cachedStatus.origin,
-            planTitle: cachedStatus.planTitle ?? bead.title,
-            summary: cachedStatus.summary,
-          };
-        }
-
-        const cachePath = getTaskPath(this.projectRoot, featureName, folder, this.getBeadsMode());
-        ensureDir(cachePath);
-        writeJson(
-          getTaskStatusPath(this.projectRoot, featureName, folder, this.getBeadsMode()),
-          {
-            status: beadStatus,
-            origin: 'plan',
-            planTitle: bead.title,
-            beadId: bead.id,
-          },
-        );
 
         return {
           folder,
@@ -942,23 +864,25 @@ export class TaskService {
   }
 
   writeReport(featureName: string, taskFolder: string, report: string): string {
-    const reportPath = getTaskReportPath(this.projectRoot, featureName, taskFolder, this.getBeadsMode());
-    writeText(reportPath, report);
-
-    // In beads mode, also add report as bead comment
-    if (this.shouldSyncBeads()) {
+    // In beadsMode on, only write to bead artifacts — no local tasks/ writes.
+    // In beadsMode off, write to local filesystem.
+    if (isBeadsEnabled(this.beadsModeProvider)) {
       const status = this.getRawStatus(featureName, taskFolder);
       if (status?.beadId) {
         try {
-          this.beadGateway.upsertArtifact(status.beadId, 'worker_prompt', report);
-          this.beadGateway.flushArtifacts();
+          this.repository.upsertTaskArtifact(status.beadId, 'report', report);
+          this.repository.flushArtifacts();
         } catch (error) {
           const reason = error instanceof Error ? error.message : String(error);
-          console.warn(`[warcraft] Failed to add report as bead comment for '${taskFolder}': ${reason}`);
+          console.warn(`[warcraft] Failed to add report as bead artifact for '${taskFolder}': ${reason}`);
         }
       }
+      // Return a virtual path for the caller (not written to disk)
+      return getTaskReportPath(this.projectRoot, featureName, taskFolder);
     }
 
+    const reportPath = getTaskReportPath(this.projectRoot, featureName, taskFolder);
+    writeText(reportPath, report);
     return reportPath;
   }
 
@@ -968,7 +892,7 @@ export class TaskService {
    * In beadsMode 'off': uses filesystem-based dependency resolution.
    */
   getRunnableTasks(featureName: string): RunnableTasksResult {
-    if (this.shouldSyncBeads()) {
+    if (isBeadsEnabled(this.beadsModeProvider)) {
       const beadsResult = this.getRunnableTasksFromBeads(featureName);
       if (beadsResult !== null) {
         return beadsResult;
@@ -984,18 +908,18 @@ export class TaskService {
    */
   private getRunnableTasksFromBeads(featureName: string): RunnableTasksResult | null {
     try {
-      const planResult = this.beadsViewerGateway.getRobotPlan();
+      const planResult = this.repository.getRobotPlan();
       if (!planResult) {
         return null;
       }
 
       // Use beads-based listing in on-mode
-      const allTasks = this.shouldSyncBeads()
+      const allTasks = isBeadsEnabled(this.beadsModeProvider)
         ? this.listFromBeads(featureName)
         : this.list(featureName);
 
       // If beads listing returned empty and we're in on-mode, fall back
-      const tasksToUse = (this.shouldSyncBeads() && allTasks.length === 0)
+      const tasksToUse = (isBeadsEnabled(this.beadsModeProvider) && allTasks.length === 0)
         ? this.list(featureName)
         : allTasks;
 
@@ -1171,7 +1095,7 @@ export class TaskService {
   }
 
   private listFolders(featureName: string): string[] {
-    const tasksPath = getTasksPath(this.projectRoot, featureName, this.getBeadsMode());
+    const tasksPath = getTasksPath(this.projectRoot, featureName);
     if (!fileExists(tasksPath)) return [];
 
     return fs.readdirSync(tasksPath, { withFileTypes: true })
@@ -1181,7 +1105,7 @@ export class TaskService {
   }
 
   private deleteTask(featureName: string, taskFolder: string): void {
-    const taskPath = getTaskPath(this.projectRoot, featureName, taskFolder, this.getBeadsMode());
+    const taskPath = getTaskPath(this.projectRoot, featureName, taskFolder);
     if (fileExists(taskPath)) {
       fs.rmSync(taskPath, { recursive: true });
     }
@@ -1197,54 +1121,23 @@ export class TaskService {
     return Math.max(...orders, 0) + 1;
   }
 
-  private getEpicBeadId(featureName: string): string {
-    const feature =
-      readJson<FeatureJson>(getFeatureJsonPath(this.projectRoot, featureName, this.getBeadsMode()))
-      ?? readJson<FeatureJson>(getFeatureJsonPath(this.projectRoot, featureName, 'off'));
-
-    if (feature?.epicBeadId) {
-      return feature.epicBeadId;
-    }
-
-    if (this.shouldSyncBeads()) {
-      const epics = this.beadGateway.list({ type: 'epic', status: 'all' });
-      const epic = epics.find((entry) => entry.title === featureName);
-      if (!epic?.id) {
-        throw new Error(`Feature '${featureName}' not found in beads`);
-      }
-      return epic.id;
-    }
-
-    if (!feature) {
-      throw new Error(`Feature '${featureName}' not found`);
-    }
-    if (!feature.epicBeadId) {
-      throw new Error(`Feature '${featureName}' is missing epicBeadId. Recreate the feature with warcraft_feature_create.`);
-    }
-    return feature.epicBeadId;
-  }
-
   private createChildBead(title: string, epicBeadId: string, priority: number = 3): string {
-    return this.beadGateway.createTask(title, epicBeadId, priority);
+    return this.repository.getGateway().createTask(title, epicBeadId, priority);
   }
 
   private syncTaskBeadStatus(beadId: string, status: TaskStatusType): void {
     try {
-      this.beadGateway.syncTaskStatus(beadId, status);
+      this.repository.getGateway().syncTaskStatus(beadId, status);
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       console.warn(`[warcraft] Failed to sync bead status for '${beadId}' -> '${status}': ${reason}`);
     }
   }
 
-  private shouldSyncBeads(): boolean {
-    return this.getBeadsMode() !== 'off';
-  }
-
   upsertTaskBeadArtifact(
     featureName: string,
     taskFolder: string,
-    kind: 'spec' | 'worker_prompt',
+    kind: 'spec' | 'worker_prompt' | 'report',
     content: string,
   ): string {
     const taskStatus = this.getRawStatus(featureName, taskFolder);
@@ -1257,31 +1150,27 @@ export class TaskService {
       throw new Error(`Task '${taskFolder}' does not have beadId`);
     }
 
-    this.beadGateway.upsertArtifact(taskStatus.beadId, kind, content);
+    this.repository.upsertTaskArtifact(taskStatus.beadId, kind, content);
 
-    if (this.shouldSyncBeads()) {
-      this.beadGateway.flushArtifacts();
+    if (isBeadsEnabled(this.beadsModeProvider)) {
+      this.repository.flushArtifacts();
     }
 
     return taskStatus.beadId;
   }
 
   private readTaskStateByBeadId(beadId: string): TaskStateArtifact | null {
-    try {
-      const raw = this.beadGateway.readArtifact(beadId, 'task_state');
-      if (!raw) {
-        return null;
-      }
-      return JSON.parse(raw) as TaskStateArtifact;
-    } catch {
-      return null;
-    }
+    const readResult = this.repository.readTaskArtifact(beadId, 'task_state');
+    const raw = readResult.success ? readResult.value : null;
+    return readJsonArtifact<TaskStateArtifact>(raw);
   }
 
   private writeTaskStateByBeadId(beadId: string, state: TaskStateArtifact, shouldFlush: boolean = true): void {
-    this.beadGateway.upsertArtifact(beadId, 'task_state', JSON.stringify(state));
-    if (this.shouldSyncBeads() && shouldFlush) {
-      this.beadGateway.flushArtifacts();
+    const json = writeJsonArtifact(state);
+    // Use gateway directly to control flush timing (repository auto-flushes)
+    this.repository.getGateway().upsertArtifact(beadId, 'task_state', json);
+    if (isBeadsEnabled(this.beadsModeProvider) && shouldFlush) {
+      this.repository.flushArtifacts();
     }
   }
 

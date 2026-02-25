@@ -1,5 +1,4 @@
 export { FeatureService } from './featureService.js';
-export type { BeadClient } from './featureService.js';
 export { PlanService } from './planService.js';
 export { TaskService } from './taskService.js';
 export { WorktreeService, createWorktreeService } from './worktreeService.js';
@@ -13,6 +12,9 @@ export type { SandboxConfig } from './dockerSandboxService.js';
 export { buildEffectiveDependencies, computeRunnableAndBlocked } from './taskDependencyGraph.js';
 export type { TaskWithDeps, RunnableBlockedResult } from './taskDependencyGraph.js';
 export { BeadGateway } from './beads/BeadGateway.js';
+export { BeadsRepository } from './beads/BeadsRepository.js';
+export type { RepositoryError, RepositoryErrorCode, SyncPolicy } from './beads/BeadsRepository.js';
+export type { Result } from './beads/BeadsRepository.js';
 export { BeadsViewerGateway } from './beads/BeadsViewerGateway.js';
 export { getTaskBeadActions } from './beads/beadMapping.js';
 export type { BeadArtifactKind, TaskBeadArtifacts, BeadGatewayErrorCode } from './beads/BeadGateway.types.js';

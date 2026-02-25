@@ -219,6 +219,7 @@ describe('BeadGateway', () => {
   it('upserts and reads artifact payload from bead description', () => {
     const execSpy = spyOn(childProcess, 'execFileSync')
       .mockReturnValueOnce('beads_rust 1.2.3')
+      .mockReturnValueOnce('{}')
       .mockReturnValueOnce('')
       .mockReturnValueOnce('{"description":"Spec content"}');
 
@@ -230,6 +231,16 @@ describe('BeadGateway', () => {
     expect(execSpy).toHaveBeenNthCalledWith(
       2,
       'br',
+      ['show', 'bd-2', '--json'],
+      {
+        cwd: '/repo',
+        encoding: 'utf-8',
+        timeout: 30_000,
+      },
+    );
+    expect(execSpy).toHaveBeenNthCalledWith(
+      3,
+      'br',
       ['update', 'bd-2', '--description', 'Spec content'],
       {
         cwd: '/repo',
@@ -237,6 +248,44 @@ describe('BeadGateway', () => {
         timeout: 30_000,
       },
     );
+
+    execSpy.mockRestore();
+  });
+
+  it('spec upsert preserves existing artifacts in description', () => {
+    const existingDesc = 'Old prefix\n\n<!-- WARCRAFT:ARTIFACTS:BEGIN -->\n{"task_state":"{\\"status\\":\\"pending\\",\\"dependsOn\\":[]}"}\n<!-- WARCRAFT:ARTIFACTS:END -->';
+    const expectedDesc = 'New spec content\n\n<!-- WARCRAFT:ARTIFACTS:BEGIN -->\n{\n  "task_state": "{\\"status\\":\\"pending\\",\\"dependsOn\\":[]}"\n}\n<!-- WARCRAFT:ARTIFACTS:END -->';
+    const execSpy = spyOn(childProcess, 'execFileSync')
+      .mockReturnValueOnce('beads_rust 1.2.3')
+      .mockReturnValueOnce(JSON.stringify({ description: existingDesc }))
+      .mockReturnValueOnce('')
+      .mockReturnValueOnce(JSON.stringify({ description: expectedDesc }));
+
+    const gateway = new BeadGateway('/repo');
+    gateway.upsertArtifact('bd-2', 'spec', 'New spec content');
+
+    // The update call should include both spec as prefix and preserved artifacts
+    expect(execSpy).toHaveBeenNthCalledWith(
+      3,
+      'br',
+      ['update', 'bd-2', '--description', expect.stringContaining('New spec content')],
+      expect.any(Object),
+    );
+    expect(execSpy).toHaveBeenNthCalledWith(
+      3,
+      'br',
+      ['update', 'bd-2', '--description', expect.stringContaining('WARCRAFT:ARTIFACTS:BEGIN')],
+      expect.any(Object),
+    );
+    expect(execSpy).toHaveBeenNthCalledWith(
+      3,
+      'br',
+      ['update', 'bd-2', '--description', expect.stringContaining('task_state')],
+      expect.any(Object),
+    );
+
+    const spec = gateway.readArtifact('bd-2', 'spec');
+    expect(spec).toBe('New spec content');
 
     execSpy.mockRestore();
   });
@@ -413,6 +462,32 @@ describe('BeadGateway', () => {
     execSpy.mockRestore();
   });
 
+  it('maps issue_type from br CLI output to type field', () => {
+    const execSpy = spyOn(childProcess, 'execFileSync')
+      .mockReturnValueOnce('beads_rust 1.2.3')
+      .mockReturnValue('[{"id":"bd-1","title":"my-feature","status":"open","issue_type":"epic"},{"id":"bd-2","title":"my-task","status":"open","issue_type":"task"}]');
+    const gateway = new BeadGateway('/repo');
+
+    const result = gateway.list({ type: 'epic', status: 'all' });
+
+    expect(result).toEqual([{ id: 'bd-1', title: 'my-feature', status: 'open', type: 'epic' }]);
+
+    execSpy.mockRestore();
+  });
+
+  it('falls back to type field when issue_type is absent', () => {
+    const execSpy = spyOn(childProcess, 'execFileSync')
+      .mockReturnValueOnce('beads_rust 1.2.3')
+      .mockReturnValue('[{"id":"bd-1","title":"my-feature","status":"open","type":"epic"}]');
+    const gateway = new BeadGateway('/repo');
+
+    const result = gateway.list({ type: 'epic', status: 'all' });
+
+    expect(result).toEqual([{ id: 'bd-1', title: 'my-feature', status: 'open', type: 'epic' }]);
+
+    execSpy.mockRestore();
+  });
+
   it('handles wrapped array response in list', () => {
     const execSpy = spyOn(childProcess, 'execFileSync')
       .mockReturnValueOnce('beads_rust 1.2.3')
@@ -513,6 +588,60 @@ describe('BeadGateway', () => {
     expect(currentDescription).toContain('active');
 
     // Cleanup
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    execSpy.mockRestore();
+  });
+
+  it('preserves all artifact kinds including report, plan_comments, feature_state, and task_state', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'beadgw-test-'));
+    let currentDescription = '';
+
+    const execSpy = spyOn(childProcess, 'execFileSync')
+      .mockReturnValueOnce('beads_rust 1.2.3')
+      .mockImplementation(((cmd: string, args?: string[]): string => {
+        const argStr = args?.join(' ') || '';
+        if (argStr.includes('show')) {
+          return JSON.stringify({ description: currentDescription });
+        }
+        if (argStr.includes('--description')) {
+          const descIdx = args!.indexOf('--description');
+          currentDescription = args![descIdx + 1];
+          return '';
+        }
+        return '';
+      }) as typeof childProcess.execFileSync);
+
+    const gateway = new BeadGateway(tmpDir);
+
+    // Upsert several artifact kinds
+    gateway.upsertArtifact('bd-1', 'worker_prompt', 'prompt content');
+    gateway.upsertArtifact('bd-1', 'report', 'report content');
+    gateway.upsertArtifact('bd-1', 'plan_comments', '{"threads":[]}');
+    gateway.upsertArtifact('bd-1', 'feature_state', '{"status":"active"}');
+    gateway.upsertArtifact('bd-1', 'task_state', '{"status":"pending"}');
+
+    // All artifacts should be present in final description
+    expect(currentDescription).toContain('worker_prompt');
+    expect(currentDescription).toContain('prompt content');
+    expect(currentDescription).toContain('report');
+    expect(currentDescription).toContain('report content');
+    expect(currentDescription).toContain('plan_comments');
+    expect(currentDescription).toContain('feature_state');
+    expect(currentDescription).toContain('task_state');
+
+    // Verify roundtrip: read each artifact back
+    const workerPrompt = gateway.readArtifact('bd-1', 'worker_prompt');
+    const report = gateway.readArtifact('bd-1', 'report');
+    const planComments = gateway.readArtifact('bd-1', 'plan_comments');
+    const featureState = gateway.readArtifact('bd-1', 'feature_state');
+    const taskState = gateway.readArtifact('bd-1', 'task_state');
+
+    expect(workerPrompt).toBe('prompt content');
+    expect(report).toBe('report content');
+    expect(planComments).toBe('{"threads":[]}');
+    expect(featureState).toBe('{"status":"active"}');
+    expect(taskState).toBe('{"status":"pending"}');
+
     fs.rmSync(tmpDir, { recursive: true, force: true });
     execSpy.mockRestore();
   });

@@ -1,6 +1,7 @@
 export type BeadArtifactKind =
   | 'spec'
   | 'worker_prompt'
+  | 'report'
   | 'plan_approval'
   | 'approved_plan'
   | 'plan_comments'
@@ -19,6 +20,8 @@ export interface PlanApprovalPayload {
 export interface TaskBeadArtifacts {
   spec?: string;
   worker_prompt?: string;
+  /** Task completion report content */
+  report?: string;
   /** Plan approval record with hash for integrity checking */
   plan_approval?: string;
   /** Full approved plan content snapshot */

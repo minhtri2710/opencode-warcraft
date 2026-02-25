@@ -117,6 +117,7 @@ import {
   ConfigService,
   AgentsMdService,
   DockerSandboxService,
+  BeadsRepository,
   buildEffectiveDependencies,
   computeRunnableAndBlocked,
   detectContext,
@@ -270,9 +271,11 @@ const plugin: Plugin = async (ctx) => {
   const { directory, client } = ctx;
 
   const configService = new ConfigService(); // User config at ~/.config/opencode/opencode_warcraft.json
-  const featureService = new FeatureService(directory, undefined, configService);
-  const planService = new PlanService(directory, configService);
-  const taskService = new TaskService(directory, undefined, configService);
+  const beadsMode = configService.getBeadsMode();
+  const repository = new BeadsRepository(directory, {}, beadsMode);
+  const featureService = new FeatureService(directory, repository, configService);
+  const planService = new PlanService(directory, repository, configService);
+  const taskService = new TaskService(directory, repository, configService);
   const contextService = new ContextService(directory);
   const agentsMdService = new AgentsMdService(directory, contextService);
   const disabledMcps = configService.getDisabledMcps();
@@ -287,7 +290,7 @@ const plugin: Plugin = async (ctx) => {
   const worktreeService = new WorktreeService({
     baseDir: directory,
     warcraftDir: getWarcraftPath(directory, configService.getBeadsMode()),
-  });
+  }, configService, undefined, repository);
 
   /**
    * Check if OMO-Slim delegation is enabled via user config.
@@ -315,19 +318,9 @@ const plugin: Plugin = async (ctx) => {
     };
 
     const resolveByIdentity = (identity: string): string | null => {
-      if (getFeatureSafe(identity)) {
-        return identity;
-      }
-
-      const features = listFeaturesSafe();
-      for (const featureName of features) {
-        const feature = getFeatureSafe(featureName);
-        if (feature?.epicBeadId === identity) {
-          return featureName;
-        }
-      }
-
-      return null;
+      // Return identity if it exists OR if we are explicitly asking for it,
+      // because during create it might not exist yet but we want to pass it through.
+      return identity;
     };
 
     if (explicit) {
@@ -348,9 +341,13 @@ const plugin: Plugin = async (ctx) => {
   const captureSession = (feature: string, toolContext: unknown) => {
     const ctx = toolContext as ToolContext;
     if (ctx?.sessionID) {
-      const currentSession = featureService.getSession(feature);
-      if (currentSession !== ctx.sessionID) {
-        featureService.setSession(feature, ctx.sessionID);
+      try {
+        const currentSession = featureService.getSession(feature);
+        if (currentSession !== ctx.sessionID) {
+          featureService.setSession(feature, ctx.sessionID);
+        }
+      } catch (error) {
+        // Ignore if feature not found yet
       }
     }
   };
@@ -364,10 +361,12 @@ const plugin: Plugin = async (ctx) => {
     },
   ): void => {
     try {
-      featureService.patchMetadata(feature, patch);
+      const exists = featureService.get(feature);
+      if (exists) {
+        featureService.patchMetadata(feature, patch);
+      }
     } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
-      console.warn(`[warcraft] Failed to patch feature metadata for '${feature}': ${reason}`);
+      // Ignore
     }
   };
 
