@@ -8,6 +8,7 @@ import type {
 import {
   buildEffectiveDependencies,
   computeRunnableAndBlocked,
+  formatSpecContent,
   type TaskWithDeps,
 } from 'warcraft-core';
 import { validatePathSegment } from './index.js';
@@ -284,7 +285,7 @@ export class BatchTools {
             const taskOrder = parseInt(taskInfo.folder.match(/^(\d+)/)?.[1] || '0', 10);
             const status = taskService.getRawStatus(feature, task);
             const dependsOn = status?.dependsOn ?? [];
-            const specContent = taskService.buildSpecContent({
+            const specData = taskService.buildSpecData({
               featureName: feature,
               task: {
                 folder: task,
@@ -302,6 +303,7 @@ export class BatchTools {
               contextFiles,
               completedTasks: previousTasks,
             });
+            const specContent = formatSpecContent(specData);
 
             taskService.writeSpec(feature, task, specContent);
 

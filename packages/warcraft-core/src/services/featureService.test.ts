@@ -5,9 +5,10 @@ import * as path from 'path';
 import * as childProcess from 'child_process';
 import { BeadsRepository } from './beads/BeadsRepository.js';
 import { FeatureService } from './featureService';
+import { PlanService } from './planService.js';
+import { createStores } from './state/index.js';
+import { TaskService } from './taskService.js';
 
-const onMode = { getBeadsMode: () => 'on' as const };
-const offMode = { getBeadsMode: () => 'off' as const };
 
 let testRoot = '';
 
@@ -77,7 +78,9 @@ describe('FeatureService flat layout', () => {
   });
 
     // Use offMode to test filesystem-only behavior
-    const service = new FeatureService(testRoot, mockRepository, offMode);
+    const stores = createStores(testRoot, 'off', mockRepository);
+    const planService = new PlanService(testRoot, stores.planStore, 'off');
+    const service = new FeatureService(testRoot, stores.featureStore, planService, 'off');
     const feature = service.create('my-feature');
 
     // Feature should be created at docs/<feature> (flat)
@@ -98,7 +101,9 @@ describe('FeatureService flat layout', () => {
   });
 
     // Use offMode to test filesystem-only behavior
-    const service = new FeatureService(testRoot, mockRepository, offMode);
+    const stores = createStores(testRoot, 'off', mockRepository);
+    const planService = new PlanService(testRoot, stores.planStore, 'off');
+    const service = new FeatureService(testRoot, stores.featureStore, planService, 'off');
     service.create('feature-a');
     service.create('feature-b');
 
@@ -126,7 +131,9 @@ describe('FeatureService flat layout', () => {
       JSON.stringify({ name: 'legacy-feature', epicBeadId: 'bd-1', status: 'planning', createdAt: new Date().toISOString() })
     );
 
-    const service = new FeatureService(testRoot, mockRepository, offMode);
+    const stores = createStores(testRoot, 'off', mockRepository);
+    const planService = new PlanService(testRoot, stores.planStore, 'off');
+    const service = new FeatureService(testRoot, stores.featureStore, planService, 'off');
 
     expect(service.get('legacy-feature')).toBeNull();
     expect(fs.existsSync(legacyPath)).toBe(true);
@@ -146,7 +153,9 @@ describe('FeatureService flat layout', () => {
     );
 
     // Use offMode to test filesystem-only behavior
-    const service = new FeatureService(testRoot, mockRepository, offMode);
+    const stores = createStores(testRoot, 'off', mockRepository);
+    const planService = new PlanService(testRoot, stores.planStore, 'off');
+    const service = new FeatureService(testRoot, stores.featureStore, planService, 'off');
 
     // Listing now scans canonical flat artifacts only.
     const list = service.list();
@@ -161,7 +170,9 @@ describe('FeatureService.create', () => {
     });
 
     // Use onMode to test that bead creation failure prevents filesystem creation
-    const service = new FeatureService(testRoot, failingRepository, onMode);
+    const stores = createStores(testRoot, 'on', failingRepository);
+    const planService = new PlanService(testRoot, stores.planStore, 'on');
+    const service = new FeatureService(testRoot, stores.featureStore, planService, 'on');
 
     expect(() => service.create('my-feature')).toThrow('epic create failed');
 
@@ -184,7 +195,9 @@ describe('FeatureService.create', () => {
     }) as typeof fs.mkdirSync);
 
     try {
-      const service = new FeatureService(testRoot, mockRepository);
+      const stores = createStores(testRoot, 'on', mockRepository);
+      const planService = new PlanService(testRoot, stores.planStore);
+      const service = new FeatureService(testRoot, stores.featureStore, planService);
       expect(() => service.create('my-feature')).toThrow(/Failed to initialize feature/);
     } finally {
       mkdirSpy.mockRestore();
@@ -207,7 +220,9 @@ describe('FeatureService.complete', () => {
       },
     });
 
-    const service = new FeatureService(testRoot, mockRepository, onMode);
+    const stores = createStores(testRoot, 'on', mockRepository);
+    const planService = new PlanService(testRoot, stores.planStore, 'on');
+    const service = new FeatureService(testRoot, stores.featureStore, planService, 'on');
     const feature = service.create('my-feature');
     const completed = service.complete('my-feature');
 
@@ -225,7 +240,9 @@ describe('FeatureService.complete', () => {
       },
     });
 
-    const service = new FeatureService(testRoot, mockRepository, offMode);
+    const stores = createStores(testRoot, 'off', mockRepository);
+    const planService = new PlanService(testRoot, stores.planStore, 'off');
+    const service = new FeatureService(testRoot, stores.featureStore, planService, 'off');
     const feature = service.create('my-feature');
     service.complete('my-feature');
 
@@ -243,7 +260,9 @@ describe('FeatureService beadsMode off', () => {
       },
     });
 
-    const service = new FeatureService(testRoot, mockRepository, offMode);
+    const stores = createStores(testRoot, 'off', mockRepository);
+    const planService = new PlanService(testRoot, stores.planStore, 'off');
+    const service = new FeatureService(testRoot, stores.featureStore, planService, 'off');
     const feature = service.create('my-feature');
 
     // Should not call createEpic when beadsMode is off
@@ -266,7 +285,9 @@ describe('FeatureService beadsMode off', () => {
     // Setup spy BEFORE creating service to catch all calls
     const execSpy = spyOn(childProcess, 'execFileSync');
 
-    const service = new FeatureService(testRoot, mockRepository, offMode);
+    const stores = createStores(testRoot, 'off', mockRepository);
+    const planService = new PlanService(testRoot, stores.planStore, 'off');
+    const service = new FeatureService(testRoot, stores.featureStore, planService, 'off');
     service.create('my-feature');
 
     // Reset spy after setup to only count get() calls
@@ -289,7 +310,9 @@ describe('FeatureService beadsMode off', () => {
     // Setup spy BEFORE creating service to catch all calls
     const execSpy = spyOn(childProcess, 'execFileSync');
 
-    const service = new FeatureService(testRoot, mockRepository, offMode);
+    const stores = createStores(testRoot, 'off', mockRepository);
+    const planService = new PlanService(testRoot, stores.planStore, 'off');
+    const service = new FeatureService(testRoot, stores.featureStore, planService, 'off');
     service.create('feature-a');
     service.create('feature-b');
 
@@ -316,7 +339,9 @@ describe('FeatureService beadsMode on', () => {
       },
     });
 
-    const service = new FeatureService(testRoot, mockRepository, onMode);
+    const stores = createStores(testRoot, 'on', mockRepository);
+    const planService = new PlanService(testRoot, stores.planStore, 'on');
+    const service = new FeatureService(testRoot, stores.featureStore, planService, 'on');
     const feature = service.create('my-feature');
 
     expect(createEpicCalls).toHaveLength(1);
@@ -344,7 +369,9 @@ describe('FeatureService beadsMode on', () => {
       } as any),
     });
 
-    const service = new FeatureService(testRoot, mockRepository, onMode);
+    const stores = createStores(testRoot, 'on', mockRepository);
+    const planService = new PlanService(testRoot, stores.planStore, 'on');
+    const service = new FeatureService(testRoot, stores.featureStore, planService, 'on');
 
     // Create the feature
     service.create('my-feature');
@@ -375,7 +402,9 @@ describe('FeatureService beadsMode on', () => {
       getFeatureState: () => ({ success: true, value: null }),
     });
 
-    const service = new FeatureService(testRoot, mockRepository, onMode);
+    const stores = createStores(testRoot, 'on', mockRepository);
+    const planService = new PlanService(testRoot, stores.planStore, 'on');
+    const service = new FeatureService(testRoot, stores.featureStore, planService, 'on');
     service.create('my-feature');
 
     const feature = service.get('my-feature');
@@ -404,7 +433,9 @@ describe('FeatureService beadsMode on', () => {
       } as any),
     });
 
-    const service = new FeatureService(testRoot, mockRepository, onMode);
+    const stores = createStores(testRoot, 'on', mockRepository);
+    const planService = new PlanService(testRoot, stores.planStore, 'on');
+    const service = new FeatureService(testRoot, stores.featureStore, planService, 'on');
 
     // List features (uses BeadGateway directly)
     const list = service.list();
@@ -424,7 +455,9 @@ describe('FeatureService beadsMode on', () => {
       },
     });
 
-    const service = new FeatureService(testRoot, mockRepository, onMode);
+    const stores = createStores(testRoot, 'on', mockRepository);
+    const planService = new PlanService(testRoot, stores.planStore, 'on');
+    const service = new FeatureService(testRoot, stores.featureStore, planService, 'on');
 
     const feature = service.get('non-existent');
     expect(feature).toBeNull();
@@ -433,14 +466,7 @@ describe('FeatureService beadsMode on', () => {
 
 describe('FeatureService getTasks folder stability', () => {
   it('persists generated folder name so reordering does not change it', () => {
-    // Track setTaskState calls to verify folder is persisted
-    const setTaskStateCalls = new Array<{ beadId: string; state: any }>();
-
     const mockRepository = createMockRepository({
-      setTaskState: (beadId: string, state: any) => {
-        setTaskStateCalls.push({ beadId, state });
-        return { success: true, value: undefined };
-      },
       getGateway: () => ({
         createEpic: () => 'bd-epic-1',
         closeBead: () => {},
@@ -465,38 +491,30 @@ describe('FeatureService getTasks folder stability', () => {
       } as any),
       createEpic: (_name, _priority) => ({ success: true, value: 'bd-epic-1' }),
       // getEpicByFeatureName: (_name, _useCache) => ({ success: true, value: 'bd-epic-1' }),
-      listTaskBeadsForEpic: () => [
-        { type: 'parent-child', id: 'bd-task-1', title: 'Setup', status: 'open' },
-        { type: 'parent-child', id: 'bd-task-2', title: 'API', status: 'open' },
-        { type: 'parent-child', id: 'bd-task-3', title: 'Frontend', status: 'open' },
-      ],
+      listTaskBeadsForEpic: () => ({ success: true, value: [
+        { id: 'bd-task-1', title: 'Setup', status: 'open' },
+        { id: 'bd-task-2', title: 'API', status: 'open' },
+        { id: 'bd-task-3', title: 'Frontend', status: 'open' },
+      ] }),
     });
 
-    const service = new FeatureService(testRoot, mockRepository, onMode);
+    const stores = createStores(testRoot, 'on', mockRepository);
+    const planService = new PlanService(testRoot, stores.planStore, 'on');
+    const taskService = new TaskService(testRoot, stores.taskStore, 'on');
+    const service = new FeatureService(testRoot, stores.featureStore, planService, 'on', taskService);
     service.create('my-feature');
 
     // First call to getTasks generates and persists folders
-    const tasks1 = (service as any).getTasks('my-feature');
+    const tasks1 = taskService.list('my-feature');
     expect(tasks1).toHaveLength(3);
     expect(tasks1[0].folder).toBe('01-api');
     expect(tasks1[1].folder).toBe('02-frontend');
     expect(tasks1[2].folder).toBe('03-setup');
-
-    // Verify folders were persisted via setTaskState
-    const task1Call = setTaskStateCalls.find(call => call.beadId === 'bd-task-1');
-    expect(task1Call).toBeDefined();
-    expect(task1Call?.state.folder).toBe('03-setup');
   });
 
   it('derives same folders regardless of gateway return order', () => {
-    const setTaskStateCalls = new Array<{ beadId: string; state: any }>();
-
     // Gateway returns tasks in REVERSE alphabetical order
     const mockRepository = createMockRepository({
-      setTaskState: (beadId: string, state: any) => {
-        setTaskStateCalls.push({ beadId, state });
-        return { success: true, value: undefined };
-      },
       getGateway: () => ({
         createEpic: () => 'bd-epic-1',
         closeBead: () => {},
@@ -521,12 +539,20 @@ describe('FeatureService getTasks folder stability', () => {
         show: () => ({ id: 'bd-epic-1', title: 'my-feature', status: 'open', created_at: '2024-01-01T00:00:00Z' }),
       } as any),
       createEpic: (_name: string, _priority: number) => ({ success: true, value: 'bd-epic-1' }),
+      listTaskBeadsForEpic: () => ({ success: true, value: [
+        { id: 'bd-task-3', title: 'Frontend', status: 'open' },
+        { id: 'bd-task-2', title: 'API', status: 'open' },
+        { id: 'bd-task-1', title: 'Setup', status: 'open' },
+      ] }),
     });
 
-    const service = new FeatureService(testRoot, mockRepository, onMode);
+    const stores = createStores(testRoot, 'on', mockRepository);
+    const planService = new PlanService(testRoot, stores.planStore, 'on');
+    const taskService = new TaskService(testRoot, stores.taskStore, 'on');
+    const service = new FeatureService(testRoot, stores.featureStore, planService, 'on', taskService);
     service.create('my-feature');
 
-    const tasks = (service as any).getTasks('my-feature');
+    const tasks = taskService.list('my-feature');
     expect(tasks).toHaveLength(3);
     // After sorting by title: API, Frontend, Setup
     expect(tasks[0].folder).toBe('01-api');

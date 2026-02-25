@@ -100,6 +100,7 @@ import {
   AgentsMdService,
   DockerSandboxService,
   BeadsRepository,
+  createStores,
   buildEffectiveDependencies,
   detectContext,
   getWarcraftPath,
@@ -224,9 +225,10 @@ const plugin: Plugin = async (ctx) => {
   const configService = new ConfigService(); // User config at ~/.config/opencode/opencode_warcraft.json
   const beadsMode = configService.getBeadsMode();
   const repository = new BeadsRepository(directory, {}, beadsMode);
-  const featureService = new FeatureService(directory, repository, configService);
-  const planService = new PlanService(directory, repository, configService);
-  const taskService = new TaskService(directory, repository, configService);
+  const stores = createStores(directory, beadsMode, repository);
+  const planService = new PlanService(directory, stores.planStore, beadsMode);
+  const taskService = new TaskService(directory, stores.taskStore, beadsMode);
+  const featureService = new FeatureService(directory, stores.featureStore, planService, beadsMode, taskService);
   const contextService = new ContextService(directory);
   const agentsMdService = new AgentsMdService(directory, contextService);
   const disabledMcps = configService.getDisabledMcps();

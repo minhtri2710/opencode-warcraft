@@ -3,8 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as child_process from 'child_process';
 import { WorktreeTools } from './worktree-tools';
-import { formatSpecContent } from '../services/spec-content-builder';
-import type { SpecData } from 'warcraft-core';
+import { formatSpecContent } from 'warcraft-core';
 
 const TEST_DIR = '/tmp/opencode-warcraft-worktree-tools-test-' + process.pid;
 

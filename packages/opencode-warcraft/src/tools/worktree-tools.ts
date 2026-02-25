@@ -6,6 +6,7 @@ import type {
   WorktreeService,
   TaskStatusType,
 } from 'warcraft-core';
+import { formatSpecContent } from 'warcraft-core';
 import { validatePathSegment } from './index.js';
 import type { ContextFile, CompletedTask } from '../utils/worker-prompt.js';
 import {
@@ -20,7 +21,6 @@ import {
   type TruncationEvent,
 } from '../utils/prompt-budgeting.js';
 import { buildWorkerPrompt } from '../utils/worker-prompt.js';
-import { formatSpecContent } from '../services/spec-content-builder.js';
 
 export interface WorktreeToolsDependencies {
   featureService: FeatureService;

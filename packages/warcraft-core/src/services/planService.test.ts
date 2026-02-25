@@ -3,16 +3,10 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { PlanService } from './planService';
+import { createStores } from './state/index.js';
 import type { PlanComment, FeatureJson } from '../types.js';
 import type { PlanApprovalPayload } from './beads/BeadGateway.types.js';
 
-class FakeBeadsModeProvider {
-  constructor(private readonly mode: 'on' | 'off') {}
-
-  getBeadsMode(): 'on' | 'off' {
-    return this.mode;
-  }
-}
 
 /**
  * Mock BeadsRepository that tracks calls and stores data for round-trip tests.
@@ -146,11 +140,8 @@ describe('PlanService bead sync', () => {
   it('adds plan-approved label when mode is on', () => {
     setupFeature('feature-a');
     const mockRepo = new MockBeadsRepository();
-    const service = new PlanService(
-      testRoot,
-      mockRepo as any,
-      new FakeBeadsModeProvider('on'),
-    );
+    const stores = createStores(testRoot, 'on', mockRepo as any);
+    const service = new PlanService(testRoot, stores.planStore, 'on');
 
     service.approve('feature-a');
 
@@ -160,11 +151,8 @@ describe('PlanService bead sync', () => {
   it('skips bead label sync when mode is off', () => {
     setupFeature('feature-b');
     const mockRepo = new MockBeadsRepository();
-    const service = new PlanService(
-      testRoot,
-      mockRepo as any,
-      new FakeBeadsModeProvider('off'),
-    );
+    const stores = createStores(testRoot, 'off', mockRepo as any);
+    const service = new PlanService(testRoot, stores.planStore, 'off');
 
     service.approve('feature-b');
     service.revokeApproval('feature-b');
@@ -175,11 +163,8 @@ describe('PlanService bead sync', () => {
   it('updates epic description when writing plan and mode is on', () => {
     setupFeature('feature-c');
     const mockRepo = new MockBeadsRepository();
-    const service = new PlanService(
-      testRoot,
-      mockRepo as any,
-      new FakeBeadsModeProvider('on'),
-    );
+    const stores = createStores(testRoot, 'on', mockRepo as any);
+    const service = new PlanService(testRoot, stores.planStore, 'on');
 
     const planContent = '# My Plan\n\nSome content here';
     service.write('feature-c', planContent);
@@ -190,11 +175,8 @@ describe('PlanService bead sync', () => {
   it('skips epic description update when writing plan and mode is off', () => {
     setupFeature('feature-d');
     const mockRepo = new MockBeadsRepository();
-    const service = new PlanService(
-      testRoot,
-      mockRepo as any,
-      new FakeBeadsModeProvider('off'),
-    );
+    const stores = createStores(testRoot, 'off', mockRepo as any);
+    const service = new PlanService(testRoot, stores.planStore, 'off');
 
     service.write('feature-d', '# My Plan');
 
@@ -204,11 +186,8 @@ describe('PlanService bead sync', () => {
   it('adds bead comment when adding comment and mode is on', () => {
     setupFeature('feature-e');
     const mockRepo = new MockBeadsRepository();
-    const service = new PlanService(
-      testRoot,
-      mockRepo as any,
-      new FakeBeadsModeProvider('on'),
-    );
+    const stores = createStores(testRoot, 'on', mockRepo as any);
+    const service = new PlanService(testRoot, stores.planStore, 'on');
 
     service.addComment('feature-e', {
       line: 5,
@@ -226,11 +205,8 @@ describe('PlanService bead sync', () => {
   it('skips bead comment when adding comment and mode is off', () => {
     setupFeature('feature-f');
     const mockRepo = new MockBeadsRepository();
-    const service = new PlanService(
-      testRoot,
-      mockRepo as any,
-      new FakeBeadsModeProvider('off'),
-    );
+    const stores = createStores(testRoot, 'off', mockRepo as any);
+    const service = new PlanService(testRoot, stores.planStore, 'off');
 
     service.addComment('feature-f', {
       line: 3,
@@ -293,11 +269,8 @@ describe('PlanService bead sync', () => {
       ),
     );
 
-    const service = new PlanService(
-      testRoot,
-      new MockBeadsRepository() as any,
-      new FakeBeadsModeProvider('off'),
-    );
+    const stores = createStores(testRoot, 'off', new MockBeadsRepository() as any);
+    const service = new PlanService(testRoot, stores.planStore, 'off');
 
     service.clearComments(featureName);
 
@@ -333,11 +306,8 @@ describe('PlanService hash-based approval validity', () => {
 
   it('approve() writes approval metadata to feature.json in off mode', () => {
     setupFeatureWithPlan('feature-hash', '# My Plan\n\nSome content here');
-    const service = new PlanService(
-      testRoot,
-      new MockBeadsRepository() as any,
-      new FakeBeadsModeProvider('off'),
-    );
+    const stores = createStores(testRoot, 'off', new MockBeadsRepository() as any);
+    const service = new PlanService(testRoot, stores.planStore, 'off');
 
     service.approve('feature-hash');
 
@@ -351,11 +321,8 @@ describe('PlanService hash-based approval validity', () => {
   it('isApproved() returns true when current plan hash matches marker hash', () => {
     const planContent = '# My Plan\n\nSome content here';
     setupFeatureWithPlan('feature-valid', planContent);
-    const service = new PlanService(
-      testRoot,
-      new MockBeadsRepository() as any,
-      new FakeBeadsModeProvider('off'),
-    );
+    const stores = createStores(testRoot, 'off', new MockBeadsRepository() as any);
+    const service = new PlanService(testRoot, stores.planStore, 'off');
 
     service.approve('feature-valid');
     const isApproved = service.isApproved('feature-valid');
@@ -366,11 +333,8 @@ describe('PlanService hash-based approval validity', () => {
   it('isApproved() returns false when plan content changes after approval (hash mismatch)', () => {
     const originalContent = '# My Plan\n\nOriginal content';
     setupFeatureWithPlan('feature-invalid', originalContent);
-    const service = new PlanService(
-      testRoot,
-      new MockBeadsRepository() as any,
-      new FakeBeadsModeProvider('off'),
-    );
+    const stores = createStores(testRoot, 'off', new MockBeadsRepository() as any);
+    const service = new PlanService(testRoot, stores.planStore, 'off');
 
     service.approve('feature-invalid');
 
@@ -392,7 +356,8 @@ describe('PlanService hash-based approval validity', () => {
     delete feature.planApprovalHash;
     fs.writeFileSync(featureJsonPath, JSON.stringify(feature, null, 2));
 
-    const service = new PlanService(testRoot, new MockBeadsRepository() as any, new FakeBeadsModeProvider('off'));
+    const stores = createStores(testRoot, 'off', new MockBeadsRepository() as any);
+    const service = new PlanService(testRoot, stores.planStore, 'off');
 
     const isApproved = service.isApproved('feature-legacy');
 
@@ -423,11 +388,8 @@ describe('PlanService bead-backed approval (beadsMode: on)', () => {
   it('approve() stores approval in bead artifact with hash', () => {
     setupFeatureWithPlan('bead-approve-test', '# My Plan\n\nContent');
     const mockRepo = new MockBeadsRepository();
-    const service = new PlanService(
-      testRoot,
-      mockRepo as any,
-      new FakeBeadsModeProvider('on'),
-    );
+    const stores = createStores(testRoot, 'on', mockRepo as any);
+    const service = new PlanService(testRoot, stores.planStore, 'on');
 
     service.approve('bead-approve-test', 'session-123');
 
@@ -442,11 +404,8 @@ describe('PlanService bead-backed approval (beadsMode: on)', () => {
     const planContent = '# My Plan\n\nContent';
     setupFeatureWithPlan('bead-is-approved', planContent);
     const mockRepo = new MockBeadsRepository();
-    const service = new PlanService(
-      testRoot,
-      mockRepo as any,
-      new FakeBeadsModeProvider('on'),
-    );
+    const stores = createStores(testRoot, 'on', mockRepo as any);
+    const service = new PlanService(testRoot, stores.planStore, 'on');
 
     service.approve('bead-is-approved');
 
@@ -457,11 +416,8 @@ describe('PlanService bead-backed approval (beadsMode: on)', () => {
     const originalContent = '# My Plan\n\nOriginal';
     setupFeatureWithPlan('bead-hash-invalid', originalContent);
     const mockRepo = new MockBeadsRepository();
-    const service = new PlanService(
-      testRoot,
-      mockRepo as any,
-      new FakeBeadsModeProvider('on'),
-    );
+    const stores = createStores(testRoot, 'on', mockRepo as any);
+    const service = new PlanService(testRoot, stores.planStore, 'on');
 
     service.approve('bead-hash-invalid');
 
@@ -474,18 +430,16 @@ describe('PlanService bead-backed approval (beadsMode: on)', () => {
 
   it('isApproved() returns false in on mode when approval artifact does not exist', () => {
     setupFeatureWithPlan('bead-no-artifact', '# Plan\n\nContent');
-    const service = new PlanService(testRoot, new MockBeadsRepository() as any, new FakeBeadsModeProvider('on'));
+    const stores = createStores(testRoot, 'on', new MockBeadsRepository() as any);
+    const service = new PlanService(testRoot, stores.planStore, 'on');
     expect(service.isApproved('bead-no-artifact')).toBe(false);
   });
 
   it('revokeApproval() removes approval from bead artifact', () => {
     setupFeatureWithPlan('bead-revoke', '# Plan');
     const mockRepo = new MockBeadsRepository();
-    const service = new PlanService(
-      testRoot,
-      mockRepo as any,
-      new FakeBeadsModeProvider('on'),
-    );
+    const stores = createStores(testRoot, 'on', mockRepo as any);
+    const service = new PlanService(testRoot, stores.planStore, 'on');
 
     service.approve('bead-revoke');
     expect(service.isApproved('bead-revoke')).toBe(true);
@@ -502,11 +456,8 @@ describe('PlanService bead-backed approval (beadsMode: on)', () => {
     const originalContent = '# Original Plan';
     setupFeatureWithPlan('bead-write-invalidate', originalContent);
     const mockRepo = new MockBeadsRepository();
-    const service = new PlanService(
-      testRoot,
-      mockRepo as any,
-      new FakeBeadsModeProvider('on'),
-    );
+    const stores = createStores(testRoot, 'on', mockRepo as any);
+    const service = new PlanService(testRoot, stores.planStore, 'on');
 
     service.approve('bead-write-invalidate');
     expect(service.isApproved('bead-write-invalidate')).toBe(true);
@@ -521,11 +472,8 @@ describe('PlanService bead-backed approval (beadsMode: on)', () => {
     const content = '# Original Plan';
     setupFeatureWithPlan('bead-write-preserve', content);
     const mockRepo = new MockBeadsRepository();
-    const service = new PlanService(
-      testRoot,
-      mockRepo as any,
-      new FakeBeadsModeProvider('on'),
-    );
+    const stores = createStores(testRoot, 'on', mockRepo as any);
+    const service = new PlanService(testRoot, stores.planStore, 'on');
 
     service.approve('bead-write-preserve');
     expect(service.isApproved('bead-write-preserve')).toBe(true);
@@ -554,11 +502,8 @@ describe('PlanService bead-backed approval (beadsMode: on)', () => {
     const mockRepo = new MockBeadsRepository();
     mockRepo.getEpicByFeatureName = () => ({ success: true as const, value: null });
 
-    const service = new PlanService(
-      testRoot,
-      mockRepo as any,
-      new FakeBeadsModeProvider('on'),
-    );
+    const stores = createStores(testRoot, 'on', mockRepo as any);
+    const service = new PlanService(testRoot, stores.planStore, 'on');
 
     expect(service.isApproved('no-epic')).toBe(false);
   });
@@ -566,11 +511,8 @@ describe('PlanService bead-backed approval (beadsMode: on)', () => {
   it('approve() without sessionId omits approvedBySession field', () => {
     setupFeatureWithPlan('bead-no-session', '# Plan');
     const mockRepo = new MockBeadsRepository();
-    const service = new PlanService(
-      testRoot,
-      mockRepo as any,
-      new FakeBeadsModeProvider('on'),
-    );
+    const stores = createStores(testRoot, 'on', mockRepo as any);
+    const service = new PlanService(testRoot, stores.planStore, 'on');
 
     service.approve('bead-no-session');
 
@@ -584,11 +526,8 @@ describe('PlanService bead-backed approval (beadsMode: on)', () => {
     const planContent = '# My Plan\n\nSome detailed content here\n\n- Task 1\n- Task 2';
     setupFeatureWithPlan('bead-approved-plan', planContent);
     const mockRepo = new MockBeadsRepository();
-    const service = new PlanService(
-      testRoot,
-      mockRepo as any,
-      new FakeBeadsModeProvider('on'),
-    );
+    const stores = createStores(testRoot, 'on', mockRepo as any);
+    const service = new PlanService(testRoot, stores.planStore, 'on');
 
     service.approve('bead-approved-plan', 'session-456');
 
@@ -601,11 +540,8 @@ describe('PlanService bead-backed approval (beadsMode: on)', () => {
     const planContent = '# My Plan\n\nContent';
     setupFeatureWithPlan('bead-revoke-plan', planContent);
     const mockRepo = new MockBeadsRepository();
-    const service = new PlanService(
-      testRoot,
-      mockRepo as any,
-      new FakeBeadsModeProvider('on'),
-    );
+    const stores = createStores(testRoot, 'on', mockRepo as any);
+    const service = new PlanService(testRoot, stores.planStore, 'on');
 
     service.approve('bead-revoke-plan');
     expect(mockRepo.getStoredApproval('epic-1')).toBeDefined();
@@ -622,11 +558,8 @@ describe('PlanService bead-backed approval (beadsMode: on)', () => {
     const originalContent = '# Original Plan';
     setupFeatureWithPlan('bead-write-invalidate-plan', originalContent);
     const mockRepo = new MockBeadsRepository();
-    const service = new PlanService(
-      testRoot,
-      mockRepo as any,
-      new FakeBeadsModeProvider('on'),
-    );
+    const stores = createStores(testRoot, 'on', mockRepo as any);
+    const service = new PlanService(testRoot, stores.planStore, 'on');
 
     service.approve('bead-write-invalidate-plan');
     expect(service.isApproved('bead-write-invalidate-plan')).toBe(true);
@@ -654,7 +587,8 @@ describe('PlanService bead-backed approval (beadsMode: on)', () => {
     fs.writeFileSync(featureJsonPath, JSON.stringify(feature, null, 2));
 
     const mockRepo = new MockBeadsRepository();
-    const service = new PlanService(testRoot, mockRepo as any, new FakeBeadsModeProvider('on'));
+    const stores = createStores(testRoot, 'on', mockRepo as any);
+    const service = new PlanService(testRoot, stores.planStore, 'on');
 
     // First call should detect legacy approval and migrate forward
     expect(service.isApproved('bead-legacy-migrate')).toBe(true);
@@ -682,7 +616,8 @@ describe('PlanService bead-backed approval (beadsMode: on)', () => {
     fs.writeFileSync(featureJsonPath, JSON.stringify(feature, null, 2));
 
     const mockRepo = new MockBeadsRepository();
-    const service = new PlanService(testRoot, mockRepo as any, new FakeBeadsModeProvider('on'));
+    const stores = createStores(testRoot, 'on', mockRepo as any);
+    const service = new PlanService(testRoot, stores.planStore, 'on');
 
     expect(service.isApproved('bead-legacy-mismatch')).toBe(false);
     // Should not migrate invalid approval
@@ -701,7 +636,8 @@ describe('PlanService bead-backed approval (beadsMode: on)', () => {
     fs.writeFileSync(featureJsonPath, JSON.stringify(feature, null, 2));
 
     const mockRepo = new MockBeadsRepository();
-    const service = new PlanService(testRoot, mockRepo as any, new FakeBeadsModeProvider('on'));
+    const stores = createStores(testRoot, 'on', mockRepo as any);
+    const service = new PlanService(testRoot, stores.planStore, 'on');
 
     // First call should detect legacy comments and migrate forward
     const comments = service.getComments('bead-legacy-comments');
@@ -730,11 +666,8 @@ const x = 1;
 End of plan.`;
     setupFeatureWithPlan('bead-plan-exact', planContent);
     const mockRepo = new MockBeadsRepository();
-    const service = new PlanService(
-      testRoot,
-      mockRepo as any,
-      new FakeBeadsModeProvider('on'),
-    );
+    const stores = createStores(testRoot, 'on', mockRepo as any);
+    const service = new PlanService(testRoot, stores.planStore, 'on');
 
     service.approve('bead-plan-exact');
 
@@ -768,11 +701,8 @@ describe('PlanService on-mode feature state parity', () => {
   it('approve() sets feature state to approved in on-mode (parity with off-mode)', () => {
     setupFeatureWithPlan('on-approve-state', '# Plan\n\nContent');
     const mockRepo = new MockBeadsRepository();
-    const service = new PlanService(
-      testRoot,
-      mockRepo as any,
-      new FakeBeadsModeProvider('on'),
-    );
+    const stores = createStores(testRoot, 'on', mockRepo as any);
+    const service = new PlanService(testRoot, stores.planStore, 'on');
 
     service.approve('on-approve-state', 'session-abc');
 
@@ -793,11 +723,8 @@ describe('PlanService on-mode feature state parity', () => {
   it('revokeApproval() resets feature state to planning in on-mode (parity with off-mode)', () => {
     setupFeatureWithPlan('on-revoke-state', '# Plan');
     const mockRepo = new MockBeadsRepository();
-    const service = new PlanService(
-      testRoot,
-      mockRepo as any,
-      new FakeBeadsModeProvider('on'),
-    );
+    const stores = createStores(testRoot, 'on', mockRepo as any);
+    const service = new PlanService(testRoot, stores.planStore, 'on');
 
     service.approve('on-revoke-state');
 
@@ -823,11 +750,8 @@ describe('PlanService on-mode feature state parity', () => {
   it('revokeApproval() does not add contradictory approved label in on-mode', () => {
     setupFeatureWithPlan('on-revoke-labels', '# Plan');
     const mockRepo = new MockBeadsRepository();
-    const service = new PlanService(
-      testRoot,
-      mockRepo as any,
-      new FakeBeadsModeProvider('on'),
-    );
+    const stores = createStores(testRoot, 'on', mockRepo as any);
+    const service = new PlanService(testRoot, stores.planStore, 'on');
 
     service.approve('on-revoke-labels');
     const labelsAfterApprove = [...mockRepo.labels];
@@ -841,11 +765,8 @@ describe('PlanService on-mode feature state parity', () => {
   it('revokeApproval() is idempotent when feature is already planning in on-mode', () => {
     setupFeatureWithPlan('on-revoke-idempotent', '# Plan');
     const mockRepo = new MockBeadsRepository();
-    const service = new PlanService(
-      testRoot,
-      mockRepo as any,
-      new FakeBeadsModeProvider('on'),
-    );
+    const stores = createStores(testRoot, 'on', mockRepo as any);
+    const service = new PlanService(testRoot, stores.planStore, 'on');
 
     // Revoke without prior approval should not throw
     service.revokeApproval('on-revoke-idempotent');
@@ -859,11 +780,8 @@ describe('PlanService on-mode feature state parity', () => {
   it('write() with changed content resets feature state from approved to planning in on-mode', () => {
     setupFeatureWithPlan('on-write-resets', '# Original Plan');
     const mockRepo = new MockBeadsRepository();
-    const service = new PlanService(
-      testRoot,
-      mockRepo as any,
-      new FakeBeadsModeProvider('on'),
-    );
+    const stores = createStores(testRoot, 'on', mockRepo as any);
+    const service = new PlanService(testRoot, stores.planStore, 'on');
 
     service.approve('on-write-resets');
     expect(mockRepo.getStoredFeatureState('epic-1')!.status).toBe('approved');

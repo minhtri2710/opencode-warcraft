@@ -22,7 +22,7 @@ describeIfHostReady('integration: runtime spec contract verification', () => {
 
   runIfHostReady('spec formatter produces expected output structure', async () => {
     // Import the spec content builder directly to verify formatting
-    const { formatSpecContent } = await import('../services/spec-content-builder.js');
+    const { formatSpecContent } = await import('warcraft-core');
     
     const specData = {
       featureName: 'test-feature',
@@ -48,7 +48,7 @@ describeIfHostReady('integration: runtime spec contract verification', () => {
   });
 
   runIfHostReady('spec formatter handles complex dependencies', async () => {
-    const { formatSpecContent } = await import('../services/spec-content-builder.js');
+    const { formatSpecContent } = await import('warcraft-core');
     
     const specData = {
       featureName: 'complex-feature',
