@@ -206,6 +206,55 @@ describe('FeatureService.create', () => {
     const featurePath = path.join(testRoot, '.beads', 'artifacts', 'my-feature');
     expect(fs.existsSync(featurePath)).toBe(false);
   });
+
+  it('allows only one winner for concurrent create attempts in beadsMode off', async () => {
+    const mockRepository = createMockRepository({
+      createEpic: () => 'bd-epic-1',
+    });
+
+    const stores = createStores(testRoot, 'off', mockRepository);
+    const planService = new PlanService(testRoot, stores.planStore, 'off');
+    const service = new FeatureService(testRoot, stores.featureStore, planService, 'off');
+
+    const results = await Promise.allSettled([
+      Promise.resolve().then(() => service.create('race-feature')),
+      Promise.resolve().then(() => service.create('race-feature')),
+    ]);
+
+    const fulfilled = results.filter((result): result is PromiseFulfilledResult<unknown> => result.status === 'fulfilled');
+    const rejected = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
+
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    expect(String(rejected[0].reason)).toContain("Feature 'race-feature' already exists");
+  });
+
+  it('allows only one winner for concurrent create attempts in beadsMode on', async () => {
+    const createEpicCalls: Array<{ name: string; priority: number }> = [];
+    const mockRepository = createMockRepository({
+      createEpic: (name: string, priority: number) => {
+        createEpicCalls.push({ name, priority });
+        return { success: true, value: `bd-${name}` };
+      },
+    });
+
+    const stores = createStores(testRoot, 'on', mockRepository);
+    const planService = new PlanService(testRoot, stores.planStore, 'on');
+    const service = new FeatureService(testRoot, stores.featureStore, planService, 'on');
+
+    const results = await Promise.allSettled([
+      Promise.resolve().then(() => service.create('race-feature')),
+      Promise.resolve().then(() => service.create('race-feature')),
+    ]);
+
+    const fulfilled = results.filter((result): result is PromiseFulfilledResult<unknown> => result.status === 'fulfilled');
+    const rejected = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
+
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    expect(String(rejected[0].reason)).toContain("Feature 'race-feature' already exists");
+    expect(createEpicCalls).toHaveLength(1);
+  });
 });
 
 describe('FeatureService.complete', () => {

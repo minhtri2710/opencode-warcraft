@@ -259,14 +259,7 @@ Some operations MUST run on host:
 - **Host-level tools** (Docker itself, system config)
 - **Cross-worktree operations** (accessing main repo from worktree)
 
-**Pattern:** Use `HOST:` prefix to escape sandbox:
-```bash
-HOST: git status
-HOST: docker ps
-```
-
-**If you need host access frequently:** Report as blocked and ask user if sandbox should be disabled for this task.
-
+When sandboxing blocks required host access, report as blocked and ask whether sandbox should be disabled for the task.
 ### Persistent vs Ephemeral Containers
 
 **Current (v1.2.0):** Each command runs `docker run --rm` (ephemeral). State does NOT persist.
@@ -337,8 +330,6 @@ Before marking Docker work complete:
 | **Multi-service tests** | `docker-compose up --abort-on-container-exit` |
 | **Check image contents** | `docker run --rm <image> ls /app` |
 | **Optimize build** | Add `.dockerignore`, use multi-stage, pin versions |
-| **Escape Warcraft sandbox** | Prefix with `HOST:` (e.g., `HOST: git status`) |
-
 ## Related Skills
 
 - **warcraft_skill:systematic-debugging** - When container behavior is unexpected

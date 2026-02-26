@@ -287,8 +287,6 @@ Isolate worker execution in Docker containers:
 - `sandbox`: `"none"` (default) or `"docker"`
 - `dockerImage`: Override auto-detected image (optional)
 - `persistentContainers`: Reuse containers per worktree (default: `true` when sandbox is `"docker"`)
-- Prefix commands with `HOST:` to bypass sandbox
-
 ### Plan Approval and Content Hashing
 
 Plan approval uses **SHA-256 content hashing** to detect plan modifications:

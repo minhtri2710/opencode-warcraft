@@ -530,15 +530,6 @@ To unblock: Remove ${blockedPath}`;
       const command = output.args?.command?.trim();
       if (!command) return;
 
-      // Escape hatch: HOST: prefix (case-insensitive)
-      if (/^HOST:\s*/i.test(command)) {
-        const strippedCommand = command.replace(/^HOST:\s*/i, "");
-        console.warn(
-          `[warcraft:sandbox] HOST bypass: ${strippedCommand.slice(0, 80)}${strippedCommand.length > 80 ? "..." : ""}`,
-        );
-        output.args.command = strippedCommand;
-        return;
-      }
 
       // Only wrap commands with explicit workdir inside warcraft worktrees
       const workdir = output.args?.workdir;

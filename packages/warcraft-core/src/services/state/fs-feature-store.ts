@@ -1,3 +1,4 @@
+import * as path from 'path';
 import * as fs from 'fs';
 import type { FeatureJson } from '../../types.js';
 import {
@@ -8,7 +9,7 @@ import {
   listFeatureDirectories,
 } from '../../utils/paths.js';
 import { ensureDir, readJson, writeJson, fileExists } from '../../utils/fs.js';
-import { writeJsonLockedSync } from '../../utils/json-lock.js';
+import { acquireLockSync, writeJsonLockedSync } from '../../utils/json-lock.js';
 import type { FeatureStore, CreateFeatureInput } from './types.js';
 
 /**
@@ -25,33 +26,44 @@ export class FilesystemFeatureStore implements FeatureStore {
 
   create(input: CreateFeatureInput, _priority: number): FeatureJson {
     const featurePath = getFeaturePath(this.projectRoot, input.name, 'off');
+    const featureJsonPath = getFeatureJsonPath(this.projectRoot, input.name, 'off');
+    const lockTarget = `${featurePath}.create`;
 
-    const epicBeadId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
-
-    const feature: FeatureJson = {
-      name: input.name,
-      epicBeadId,
-      status: input.status,
-      ticket: input.ticket,
-      createdAt: input.createdAt,
-    };
-
+    ensureDir(path.dirname(featurePath));
+    const release = acquireLockSync(lockTarget);
     try {
-      ensureDir(featurePath);
-      ensureDir(getContextPath(this.projectRoot, input.name, 'off'));
-      ensureDir(getTasksPath(this.projectRoot, input.name));
-      writeJson(getFeatureJsonPath(this.projectRoot, input.name, 'off'), feature);
-    } catch (error) {
-      if (fileExists(featurePath)) {
-        fs.rmSync(featurePath, { recursive: true, force: true });
+      if (fileExists(featureJsonPath)) {
+        throw new Error(`Feature '${input.name}' already exists`);
       }
-      const reason = error instanceof Error ? error.message : String(error);
-      throw new Error(
-        `Failed to initialize feature '${input.name}': ${reason}`,
-      );
-    }
 
-    return feature;
+      const epicBeadId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+      const feature: FeatureJson = {
+        name: input.name,
+        epicBeadId,
+        status: input.status,
+        ticket: input.ticket,
+        createdAt: input.createdAt,
+      };
+
+      try {
+        ensureDir(featurePath);
+        ensureDir(getContextPath(this.projectRoot, input.name, 'off'));
+        ensureDir(getTasksPath(this.projectRoot, input.name));
+        writeJson(featureJsonPath, feature);
+      } catch (error) {
+        if (fileExists(featurePath)) {
+          fs.rmSync(featurePath, { recursive: true, force: true });
+        }
+        const reason = error instanceof Error ? error.message : String(error);
+        throw new Error(
+          `Failed to initialize feature '${input.name}': ${reason}`,
+        );
+      }
+
+      return feature;
+    } finally {
+      release();
+    }
   }
 
   get(name: string): FeatureJson | null {

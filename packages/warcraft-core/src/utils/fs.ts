@@ -12,12 +12,22 @@ export function fileExists(filePath: string): boolean {
 }
 
 export function readJson<T>(filePath: string): T | null {
-  if (!fs.existsSync(filePath)) return null;
   try {
     const content = fs.readFileSync(filePath, 'utf-8');
-    return JSON.parse(content) as T;
-  } catch {
-    return null;
+    try {
+      return JSON.parse(content) as T;
+    } catch (error) {
+      if (error instanceof SyntaxError) {
+        throw new SyntaxError(`Failed to parse JSON file at ${filePath}: ${error.message}`);
+      }
+      throw error;
+    }
+  } catch (error) {
+    const fsError = error as NodeJS.ErrnoException;
+    if (fsError.code === 'ENOENT') {
+      return null;
+    }
+    throw error;
   }
 }
 

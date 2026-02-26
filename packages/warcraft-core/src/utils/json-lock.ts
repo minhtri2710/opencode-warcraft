@@ -1,3 +1,5 @@
+import { randomUUID } from 'crypto';
+import * as os from 'os';
 import * as path from 'path';
 import * as fs from 'fs';
 import { ensureDir, readJson } from './fs.js';
@@ -16,12 +18,26 @@ export interface LockOptions {
   staleLockTTL?: number;
 }
 
+interface LockFileContent {
+  pid: number;
+  timestamp: string;
+  filePath: string;
+  sessionId: string;
+  hostname: string;
+  lockId: string;
+}
+
+type PidProbeResult = 'alive' | 'dead' | 'inconclusive';
+
 /** Default lock options */
 const DEFAULT_LOCK_OPTIONS: Required<LockOptions> = {
   timeout: 5000,
   retryInterval: 50,
   staleLockTTL: 30000,
 };
+
+const PROCESS_SESSION_ID = randomUUID();
+const LOCAL_HOSTNAME = os.hostname();
 
 // ============================================================================
 // Lock Path & Staleness
@@ -34,6 +50,71 @@ export function getLockPath(filePath: string): string {
   return `${filePath}.lock`;
 }
 
+function createLockContent(filePath: string): LockFileContent {
+  return {
+    pid: process.pid,
+    timestamp: new Date().toISOString(),
+    filePath,
+    sessionId: PROCESS_SESSION_ID,
+    hostname: LOCAL_HOSTNAME,
+    lockId: randomUUID(),
+  };
+}
+
+function parseLockContent(lockPath: string): LockFileContent | null {
+  try {
+    const raw = fs.readFileSync(lockPath, 'utf-8');
+    const parsed = JSON.parse(raw) as Partial<LockFileContent>;
+
+    if (
+      typeof parsed.pid !== 'number' ||
+      typeof parsed.timestamp !== 'string' ||
+      typeof parsed.filePath !== 'string' ||
+      typeof parsed.sessionId !== 'string' ||
+      typeof parsed.hostname !== 'string' ||
+      typeof parsed.lockId !== 'string'
+    ) {
+      return null;
+    }
+
+    return parsed as LockFileContent;
+  } catch {
+    return null;
+  }
+}
+
+function probePid(pid: number): PidProbeResult {
+  try {
+    process.kill(pid, 0);
+    return 'alive';
+  } catch (error) {
+    const probeError = error as NodeJS.ErrnoException;
+    if (probeError.code === 'ESRCH') {
+      return 'dead';
+    }
+    if (probeError.code === 'EPERM') {
+      return 'inconclusive';
+    }
+    return 'inconclusive';
+  }
+}
+
+function releaseLockIfOwned(lockPath: string, lockId: string): void {
+  const currentLock = parseLockContent(lockPath);
+  if (!currentLock || currentLock.lockId !== lockId) {
+    return;
+  }
+
+  try {
+    fs.unlinkSync(lockPath);
+  } catch (error) {
+    const unlinkError = error as NodeJS.ErrnoException;
+    if (unlinkError.code !== 'ENOENT') {
+      // Lock file may already have been replaced or removed by another process
+    }
+  }
+}
+
 /**
  * Check if a lock file is stale (older than TTL)
  */
@@ -44,21 +125,32 @@ function isLockStale(lockPath: string, staleTTL: number): boolean {
     if (age <= staleTTL) {
       return false; // Not old enough to be stale
     }
-    // Lock is old — check if owning process is still alive
-    try {
-      const lockContent = fs.readFileSync(lockPath, 'utf-8');
-      const lockData = JSON.parse(lockContent) as { pid?: number };
-      if (lockData.pid) {
-        try {
-          process.kill(lockData.pid, 0); // Signal 0 = check existence
-          return false; // Process is alive, lock is not stale
-        } catch {
-          return true; // Process is dead, lock is stale
-        }
-      }
-    } catch {
-      // Cannot read/parse lock file, treat as stale
+
+    const lockData = parseLockContent(lockPath);
+    if (!lockData) {
+      return true; // Corrupt or unreadable lock file is stale
     }
+
+    if (lockData.hostname !== LOCAL_HOSTNAME) {
+      // Cross-host PID probing is unreliable; apply TTL-only stale policy
+      return true;
+    }
+
+    const pidProbe = probePid(lockData.pid);
+    if (pidProbe === 'dead') {
+      return true;
+    }
+
+    if (pidProbe === 'alive') {
+      const sameSession = lockData.sessionId === PROCESS_SESSION_ID;
+      if (sameSession) {
+        return false;
+      }
+      // Live process with different session metadata is treated as active to avoid unsafe lock breakage
+      return false;
+    }
+
+    // Inconclusive probe (permission/namespace ambiguity) falls back to TTL-only staleness
     return true;
   } catch {
     return true; // If we can't stat it, treat as stale
@@ -85,11 +177,8 @@ export async function acquireLock(
   const opts = { ...DEFAULT_LOCK_OPTIONS, ...options };
   const lockPath = getLockPath(filePath);
   const startTime = Date.now();
-  const lockContent = JSON.stringify({
-    pid: process.pid,
-    timestamp: new Date().toISOString(),
-    filePath,
-  });
+  const lockData = createLockContent(filePath);
+  const lockContent = JSON.stringify(lockData);
 
   while (true) {
     try {
@@ -97,14 +186,10 @@ export async function acquireLock(
       const fd = fs.openSync(lockPath, fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_WRONLY);
       fs.writeSync(fd, lockContent);
       fs.closeSync(fd);
-      
+
       // Lock acquired - return release function
       return () => {
-        try {
-          fs.unlinkSync(lockPath);
-        } catch {
-          // Lock file already removed, that's fine
-        }
+        releaseLockIfOwned(lockPath, lockData.lockId);
       };
     } catch (err: unknown) {
       const error = err as NodeJS.ErrnoException;
@@ -146,24 +231,17 @@ export function acquireLockSync(
   const opts = { ...DEFAULT_LOCK_OPTIONS, ...options };
   const lockPath = getLockPath(filePath);
   const startTime = Date.now();
-  const lockContent = JSON.stringify({
-    pid: process.pid,
-    timestamp: new Date().toISOString(),
-    filePath,
-  });
+  const lockData = createLockContent(filePath);
+  const lockContent = JSON.stringify(lockData);
 
   while (true) {
     try {
       const fd = fs.openSync(lockPath, fs.constants.O_CREAT | fs.constants.O_EXCL | fs.constants.O_WRONLY);
       fs.writeSync(fd, lockContent);
       fs.closeSync(fd);
-      
+
       return () => {
-        try {
-          fs.unlinkSync(lockPath);
-        } catch {
-          // Lock file already removed
-        }
+        releaseLockIfOwned(lockPath, lockData.lockId);
       };
     } catch (err: unknown) {
       const error = err as NodeJS.ErrnoException;

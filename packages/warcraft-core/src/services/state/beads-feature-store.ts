@@ -1,3 +1,4 @@
+import * as path from 'path';
 import * as fs from 'fs';
 import type { FeatureJson, FeatureStatusType } from '../../types.js';
 import type { BeadsRepository } from '../beads/BeadsRepository.js';
@@ -8,6 +9,7 @@ import {
   getContextPath,
 } from '../../utils/paths.js';
 import { ensureDir, writeJson, fileExists } from '../../utils/fs.js';
+import { acquireLockSync } from '../../utils/json-lock.js';
 import type { FeatureStore, CreateFeatureInput } from './types.js';
 
 /**
@@ -27,36 +29,48 @@ export class BeadsFeatureStore implements FeatureStore {
 
   create(input: CreateFeatureInput, priority: number): FeatureJson {
     const featurePath = getFeaturePath(this.projectRoot, input.name, 'on');
+    const featureJsonPath = getFeatureJsonPath(this.projectRoot, input.name, 'on');
+    const lockTarget = `${featurePath}.create`;
 
-    const epicResult = this.repository.createEpic(input.name, priority);
-    if (epicResult.success === false) {
-      throw new Error(`Failed to create epic: ${epicResult.error.message}`);
-    }
-    const epicBeadId = epicResult.value;
-
-    const feature: FeatureJson = {
-      name: input.name,
-      epicBeadId,
-      status: input.status,
-      ticket: input.ticket,
-      createdAt: input.createdAt,
-    };
-
+    ensureDir(path.dirname(featurePath));
+    const release = acquireLockSync(lockTarget);
     try {
-      ensureDir(featurePath);
-      ensureDir(getContextPath(this.projectRoot, input.name, 'on'));
-      this.writeFeatureState(epicBeadId, feature);
-    } catch (error) {
-      if (fileExists(featurePath)) {
-        fs.rmSync(featurePath, { recursive: true, force: true });
+      if (fileExists(featureJsonPath)) {
+        throw new Error(`Feature '${input.name}' already exists`);
       }
-      const reason = error instanceof Error ? error.message : String(error);
-      throw new Error(
-        `Failed to initialize feature '${input.name}' after creating epic '${epicBeadId}': ${reason}`,
-      );
-    }
 
-    return feature;
+      const epicResult = this.repository.createEpic(input.name, priority);
+      if (epicResult.success === false) {
+        throw new Error(`Failed to create epic: ${epicResult.error.message}`);
+      }
+      const epicBeadId = epicResult.value;
+
+      const feature: FeatureJson = {
+        name: input.name,
+        epicBeadId,
+        status: input.status,
+        ticket: input.ticket,
+        createdAt: input.createdAt,
+      };
+
+      try {
+        ensureDir(featurePath);
+        ensureDir(getContextPath(this.projectRoot, input.name, 'on'));
+        this.writeFeatureState(epicBeadId, feature);
+      } catch (error) {
+        if (fileExists(featurePath)) {
+          fs.rmSync(featurePath, { recursive: true, force: true });
+        }
+        const reason = error instanceof Error ? error.message : String(error);
+        throw new Error(
+          `Failed to initialize feature '${input.name}' after creating epic '${epicBeadId}': ${reason}`,
+        );
+      }
+
+      return feature;
+    } finally {
+      release();
+    }
   }
 
   get(name: string): FeatureJson | null {

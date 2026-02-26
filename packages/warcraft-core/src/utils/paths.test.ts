@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeEach, afterEach } from "bun:test";
 import * as fs from "fs";
 import * as path from "path";
+import * as os from 'os';
 import {
   normalizePath,
   getFeaturePath,
@@ -491,31 +492,37 @@ describe("Atomic + Locked JSON Utilities", () => {
     });
   });
 
-  describe("readJson safety", () => {
-    it("returns null for malformed JSON", () => {
-      const tmpDir = fs.mkdtempSync(path.join(TEST_DIR, "readjson-test-"));
-      const filePath = path.join(tmpDir, "bad.json");
-      fs.writeFileSync(filePath, "{ invalid json !!!");
+  describe('readJson safety', () => {
+    it('throws SyntaxError for malformed JSON with file path context', () => {
+      const tmpDir = fs.mkdtempSync(path.join(TEST_DIR, 'readjson-test-'));
+      const filePath = path.join(tmpDir, 'bad.json');
+      fs.writeFileSync(filePath, '{ invalid json !!!');
 
-      expect(readJson(filePath)).toBeNull();
+      expect(() => readJson(filePath)).toThrow(`Failed to parse JSON file at ${filePath}`);
     });
 
-    it("returns null for missing file", () => {
-      expect(readJson("/nonexistent/path/file.json")).toBeNull();
+    it('returns null for missing file', () => {
+      expect(readJson('/nonexistent/path/file.json')).toBeNull();
     });
 
-    it("returns parsed data for valid JSON", () => {
-      const tmpDir = fs.mkdtempSync(path.join(TEST_DIR, "readjson-test-"));
-      const filePath = path.join(tmpDir, "good.json");
+    it('rethrows non-ENOENT filesystem errors', () => {
+      const tmpDir = fs.mkdtempSync(path.join(TEST_DIR, 'readjson-test-'));
+
+      expect(() => readJson(tmpDir)).toThrow();
+    });
+
+    it('returns parsed data for valid JSON', () => {
+      const tmpDir = fs.mkdtempSync(path.join(TEST_DIR, 'readjson-test-'));
+      const filePath = path.join(tmpDir, 'good.json');
       fs.writeFileSync(filePath, '{"name": "test"}');
 
-      expect(readJson<{ name: string }>(filePath)).toEqual({ name: "test" });
+      expect(readJson<{ name: string }>(filePath)).toEqual({ name: 'test' });
     });
   });
 
-  describe("acquireLock PID awareness", () => {
-    it("breaks lock with dead PID", async () => {
-      const filePath = path.join(TEST_DIR, "pid-lock-test.json");
+  describe('acquireLock stale lock detection', () => {
+    it('breaks lock with dead PID', async () => {
+      const filePath = path.join(TEST_DIR, 'pid-lock-test.json');
       const lockPath = getLockPath(filePath);
 
       // Create a fake stale lock with a dead PID
@@ -526,19 +533,81 @@ describe("Atomic + Locked JSON Utilities", () => {
           pid: 999999999,
           timestamp: new Date(Date.now() - 60000).toISOString(),
           filePath,
+          sessionId: 'dead-process-session',
+          hostname: os.hostname(),
+          lockId: 'dead-lock-id',
         })
       );
-      // Backdate the lock file
       const oldTime = new Date(Date.now() - 60000);
       fs.utimesSync(lockPath, oldTime, oldTime);
 
-      // Should be able to acquire despite existing lock (PID is dead, lock is old)
       const release = await acquireLock(filePath, {
         staleLockTTL: 1000,
         timeout: 2000,
       });
-      expect(typeof release).toBe("function");
+      expect(typeof release).toBe('function');
       release();
+    });
+
+    it('does not reclaim lock when PID is alive but session metadata does not match current process', async () => {
+      const filePath = path.join(TEST_DIR, 'pid-reuse-test.json');
+      const lockPath = getLockPath(filePath);
+
+      ensureDir(TEST_DIR);
+      fs.writeFileSync(
+        lockPath,
+        JSON.stringify({
+          pid: process.pid,
+          timestamp: new Date(Date.now() - 60000).toISOString(),
+          filePath,
+          sessionId: 'foreign-session',
+          hostname: os.hostname(),
+          lockId: 'foreign-lock-id',
+        })
+      );
+      const oldTime = new Date(Date.now() - 60000);
+      fs.utimesSync(lockPath, oldTime, oldTime);
+
+      await expect(
+        acquireLock(filePath, { staleLockTTL: 1000, timeout: 120, retryInterval: 20 })
+      ).rejects.toThrow(/Failed to acquire lock/);
+    });
+
+    it('reclaims lock when PID probe is inconclusive using TTL fallback', async () => {
+      const filePath = path.join(TEST_DIR, 'pid-inconclusive-test.json');
+      const lockPath = getLockPath(filePath);
+
+      ensureDir(TEST_DIR);
+      fs.writeFileSync(
+        lockPath,
+        JSON.stringify({
+          pid: 424242,
+          timestamp: new Date(Date.now() - 60000).toISOString(),
+          filePath,
+          sessionId: 'inconclusive-session',
+          hostname: os.hostname(),
+          lockId: 'inconclusive-lock-id',
+        })
+      );
+      const oldTime = new Date(Date.now() - 60000);
+      fs.utimesSync(lockPath, oldTime, oldTime);
+
+      const originalKill = process.kill;
+      (process as { kill: typeof process.kill }).kill = ((pid: number, signal?: number) => {
+        void pid;
+        void signal;
+        const error = new Error('Operation not permitted') as NodeJS.ErrnoException;
+        error.code = 'EPERM';
+        throw error;
+      }) as typeof process.kill;
+
+      try {
+        const release = await acquireLock(filePath, { staleLockTTL: 1000, timeout: 120, retryInterval: 20 });
+        expect(typeof release).toBe('function');
+        release();
+      } finally {
+        (process as { kill: typeof process.kill }).kill = originalKill;
+      }
     });
   });
 

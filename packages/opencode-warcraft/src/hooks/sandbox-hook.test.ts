@@ -9,7 +9,7 @@ import { DockerSandboxService } from 'warcraft-core';
  * - Only intercept bash tool calls
  * - Only wrap commands with explicit workdir inside .beads/artifacts/.worktrees/
  * - Respect sandbox config mode ('none' = no wrapping, 'docker' = wrap)
- * - Support HOST: prefix escape hatch
+ * - Treat commands uniformly (no HOST: escape hatch)
  * - Clear workdir after wrapping (docker runs on host)
  * 
  * Note: These tests simulate the hook logic. The actual hook is in index.ts
@@ -55,13 +55,6 @@ describe('tool.execute.before bash interception hook logic', () => {
     const command = output.args?.command?.trim();
     if (!command) return;
     
-    // Escape hatch: HOST: prefix (case-insensitive)
-    if (/^HOST:\s*/i.test(command)) {
-      const strippedCommand = command.replace(/^HOST:\s*/i, '');
-      console.warn(`[warcraft:sandbox] HOST bypass: ${strippedCommand.slice(0, 80)}${strippedCommand.length > 80 ? '...' : ''}`);
-      output.args.command = strippedCommand;
-      return;
-    }
     
     // Only wrap commands with explicit workdir inside warcraft worktrees
     const workdir = output.args?.workdir;
@@ -173,9 +166,9 @@ describe('tool.execute.before bash interception hook logic', () => {
       expect(output.args.command).not.toContain('docker run');
     });
 
-    test('strips HOST: prefix and bypasses wrapping', () => {
+    test('wraps HOST-prefixed commands like any other command in worktree sandbox', () => {
       const sandboxConfig = { mode: 'docker' as const, image: 'node:22-slim' };
-      
+
       const input = {
         tool: 'bash',
         sessionID: 'test-session',
@@ -190,99 +183,9 @@ describe('tool.execute.before bash interception hook logic', () => {
 
       executeHook(input, output, sandboxConfig, mockDirectory);
 
-      // HOST: should be stripped, no docker wrapping
-      expect(output.args.command).toBe('git status');
-      expect(output.args.command).not.toContain('docker run');
-      expect(output.args.command).not.toContain('HOST:');
-      // Workdir should remain (not wrapped)
-      expect(output.args.workdir).toBe(worktreePath);
-    });
-
-    test('strips HOST: prefix with case insensitivity', () => {
-      const sandboxConfig = { mode: 'docker' as const, image: 'node:22-slim' };
-      
-      const input = {
-        tool: 'bash',
-        sessionID: 'test-session',
-        callID: 'test-call',
-      };
-      const output = {
-        args: {
-          command: 'host: git log',
-          workdir: worktreePath,
-        },
-      };
-
-      executeHook(input, output, sandboxConfig, mockDirectory);
-
-      expect(output.args.command).toBe('git log');
-      expect(output.args.command).not.toContain('docker run');
-    });
-
-    test('logs console.warn with [warcraft:sandbox] prefix when HOST: is used', () => {
-      const sandboxConfig = { mode: 'docker' as const, image: 'node:22-slim' };
-      
-      const input = {
-        tool: 'bash',
-        sessionID: 'test-session',
-        callID: 'test-call',
-      };
-      const output = {
-        args: {
-          command: 'HOST: bun test',
-          workdir: worktreePath,
-        },
-      };
-
-      const originalWarn = console.warn;
-      const warnings: string[] = [];
-      console.warn = (...args: any[]) => {
-        warnings.push(args.join(' '));
-      };
-
-      executeHook(input, output, sandboxConfig, mockDirectory);
-
-      console.warn = originalWarn;
-
-      expect(warnings.length).toBe(1);
-      expect(warnings[0]).toContain('[warcraft:sandbox]');
-      expect(warnings[0]).toContain('HOST bypass:');
-      expect(warnings[0]).toContain('bun test');
-    });
-
-    test('truncates long commands in HOST: audit log', () => {
-      const sandboxConfig = { mode: 'docker' as const, image: 'node:22-slim' };
-      const longCommand = 'HOST: echo ' + 'a'.repeat(100); // 106 chars after "HOST: "
-      
-      const input = {
-        tool: 'bash',
-        sessionID: 'test-session',
-        callID: 'test-call',
-      };
-      const output = {
-        args: {
-          command: longCommand,
-          workdir: worktreePath,
-        },
-      };
-
-      const originalWarn = console.warn;
-      const warnings: string[] = [];
-      console.warn = (...args: any[]) => {
-        warnings.push(args.join(' '));
-      };
-
-      executeHook(input, output, sandboxConfig, mockDirectory);
-
-      console.warn = originalWarn;
-
-      expect(warnings.length).toBe(1);
-      const logMessage = warnings[0];
-      expect(logMessage).toContain('[warcraft:sandbox]');
-      expect(logMessage).toContain('...');
-      // Verify it's truncated (should be ~80 chars + "..." after the prefix)
-      const commandPart = logMessage.split('HOST bypass: ')[1];
-      expect(commandPart.length).toBeLessThan(90); // 80 + "..." + some margin
+      expect(output.args.command).toContain('docker run');
+      expect(output.args.command).toContain('HOST: git status');
+      expect(output.args.workdir).toBeUndefined();
     });
   });
 

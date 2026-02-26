@@ -331,8 +331,6 @@ Use `warcraft_merge` to explicitly integrate changes. Worktrees persist until ma
   - `Cargo.toml` → `rust:1.77-slim`
   - `Dockerfile` → builds from project Dockerfile
   - Fallback → `ubuntu:24.04`
-- **Escape hatch**: Prefix commands with `HOST:` to bypass sandbox and run directly on host
-
 **Example config**:
 ```json
 {
