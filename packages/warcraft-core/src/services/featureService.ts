@@ -1,8 +1,8 @@
 import {
   sanitizeName,
   getPlanPath,
-  fileExists,
 } from '../utils/paths.js';
+import { fileExists } from '../utils/fs.js';
 import type { FeatureJson, FeatureStatusType, TaskInfo, FeatureInfo, BeadsMode } from '../types.js';
 import type { FeatureStore } from './state/types.js';
 import type { PlanService } from './planService.js';

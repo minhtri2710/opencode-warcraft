@@ -8,17 +8,10 @@ import type {
 import {
   buildEffectiveDependencies,
   computeRunnableAndBlocked,
-  formatSpecContent,
   type TaskWithDeps,
 } from 'warcraft-core';
-import { validatePathSegment } from './index.js';
-import type { ContextFile, CompletedTask } from '../utils/worker-prompt.js';
-import {
-  applyTaskBudget,
-  applyContextBudget,
-  DEFAULT_BUDGET,
-} from '../utils/prompt-budgeting.js';
-import { buildWorkerPrompt } from '../utils/worker-prompt.js';
+import { resolveFeatureInput, validateTaskInput } from './tool-input.js';
+import { prepareTaskDispatch, fetchSharedDispatchData } from './task-dispatch.js';
 import type { BlockedResult } from '../types.js';
 import { toolError, toolSuccess } from '../types.js';
 
@@ -133,10 +126,9 @@ export class BatchTools {
           .describe('Feature name (defaults to active)'),
       },
       async execute({ mode, tasks: selectedTasks, feature: explicitFeature }) {
-        if (explicitFeature) validatePathSegment(explicitFeature, 'feature');
-        const feature = resolveFeature(explicitFeature);
-        if (!feature)
-          return toolError('No feature specified. Create a feature or provide feature param.');
+        const resolution = resolveFeatureInput(resolveFeature, explicitFeature);
+        if (!resolution.ok) return toolError(resolution.error);
+        const feature = resolution.feature;
 
         const blockedResult = checkBlocked(feature);
         if (blockedResult.blocked) {
@@ -175,7 +167,7 @@ export class BatchTools {
             waitingOn: deps,
           }));
 
-          return JSON.stringify({
+          return toolSuccess({
             feature,
             parallelPolicy,
             summary: {
@@ -201,7 +193,7 @@ export class BatchTools {
               : inProgress.length > 0
                 ? 'Wait for in-progress tasks to complete, then check again.'
                 : 'All tasks complete or blocked by dependencies.',
-          }, null, 2);
+          });
         }
 
         // Execute mode
@@ -209,7 +201,7 @@ export class BatchTools {
           return toolError('tasks array is required for execute mode. Use preview mode first to see runnable tasks.');
 
         for (const task of selectedTasks) {
-          validatePathSegment(task, 'task');
+          validateTaskInput(task);
         }
 
         // Validate all selected tasks are actually runnable
@@ -235,24 +227,14 @@ export class BatchTools {
         }
 
         if (notRunnable.length > 0) {
-          return JSON.stringify({
-            success: false,
-            error: 'Some tasks cannot be dispatched',
-            notRunnable,
-            hint: 'Use preview mode to see which tasks are actually runnable.',
-          }, null, 2);
+          return toolError(
+            'Some tasks cannot be dispatched: ' + notRunnable.join(', '),
+            ['Use preview mode to see which tasks are actually runnable.'],
+          );
         }
 
         // Dispatch all tasks in parallel
-        const planResult = planService.read(feature);
-        const allTaskInfos = taskService.list(feature);
-        const rawContextFiles = contextService.list(feature).map((f) => ({
-          name: f.name,
-          content: f.content,
-        }));
-        const rawPreviousTasks = allTaskInfos
-          .filter((t) => t.status === 'done' && t.summary)
-          .map((t) => ({ name: t.folder, summary: t.summary! }));
+        const shared = fetchSharedDispatchData(feature, { planService, taskService, contextService });
 
         const dispatchTask = async (task: string): Promise<TaskDispatchResult> => {
           const taskInfo = taskService.get(feature, task);
@@ -268,69 +250,18 @@ export class BatchTools {
               baseCommit: worktree.commit,
             });
 
-            const taskBudgetResult = applyTaskBudget(rawPreviousTasks, {
-              ...DEFAULT_BUDGET,
-              feature,
-            });
-            const contextBudgetResult = applyContextBudget(rawContextFiles, {
-              ...DEFAULT_BUDGET,
-              feature,
-            });
-
-            const contextFiles: ContextFile[] = contextBudgetResult.files.map((f) => ({
-              name: f.name,
-              content: f.content,
-            }));
-            const previousTasks: CompletedTask[] = taskBudgetResult.tasks.map((t) => ({
-              name: t.name,
-              summary: t.summary,
-            }));
-
-            const taskOrder = parseInt(taskInfo.folder.match(/^(\d+)/)?.[1] || '0', 10);
-            const status = taskService.getRawStatus(feature, task);
-            const dependsOn = status?.dependsOn ?? [];
-            const specData = taskService.buildSpecData({
-              featureName: feature,
-              task: {
-                folder: task,
-                name: taskInfo.planTitle ?? taskInfo.name,
-                order: taskOrder,
-                description: undefined,
+            const prep = prepareTaskDispatch(
+              {
+                feature,
+                task,
+                taskInfo,
+                worktree,
               },
-              dependsOn,
-              allTasks: allTaskInfos.map((t) => ({
-                folder: t.folder,
-                name: t.name,
-                order: parseInt(t.folder.match(/^(\d+)/)?.[1] || '0', 10),
-              })),
-              planContent: planResult?.content ?? null,
-              contextFiles,
-              completedTasks: previousTasks,
-            });
-            const specContent = formatSpecContent(specData);
-
-            taskService.writeSpec(feature, task, specContent);
-
-            const workerPrompt = buildWorkerPrompt({
-              feature,
-              task,
-              taskOrder,
-              worktreePath: worktree.path,
-              branch: worktree.branch,
-              plan: planResult?.content || 'No plan available',
-              contextFiles,
-              spec: specContent,
-              previousTasks,
-            });
-
-            taskService.writeWorkerPrompt(feature, task, workerPrompt);
-
-            const persistedWorkerPrompt = taskService.readTaskBeadArtifact(
-              feature,
-              task,
-              'worker_prompt',
+              { planService, taskService, contextService },
+              shared,
             );
-            if (!persistedWorkerPrompt || persistedWorkerPrompt.trim().length === 0) {
+
+            if (!prep.persistedWorkerPrompt || prep.persistedWorkerPrompt.trim().length === 0) {
               return {
                 task,
                 success: false,
@@ -350,7 +281,7 @@ export class BatchTools {
               taskToolCall: {
                 subagent_type: agent,
                 description: `Warcraft: ${task}`,
-                prompt: persistedWorkerPrompt,
+                prompt: prep.persistedWorkerPrompt,
               },
             };
           } catch (error) {
@@ -372,8 +303,7 @@ export class BatchTools {
 
         const taskCalls = succeeded.map((r) => r.taskToolCall!);
 
-        return JSON.stringify({
-          success: failed.length === 0,
+        return toolSuccess({
           feature,
           parallelPolicy,
           dispatched: {
@@ -388,7 +318,7 @@ export class BatchTools {
           failed: failed.length > 0
             ? failed.map((r) => ({ task: r.task, error: r.error }))
             : undefined,
-        }, null, 2);
+        });
       },
     });
   }

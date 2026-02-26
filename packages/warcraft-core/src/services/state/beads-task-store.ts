@@ -12,12 +12,10 @@ import {
   getTaskPath,
   getTaskStatusPath,
   getTaskReportPath,
-  readJson,
-  fileExists,
-  deriveTaskFolder,
-  slugifyTaskName,
-  LockOptions,
 } from '../../utils/paths.js';
+import { readJson, fileExists } from '../../utils/fs.js';
+import { deriveTaskFolder, slugifyTaskName } from '../../utils/slug.js';
+import type { LockOptions } from '../../utils/json-lock.js';
 
 /**
  * TaskStore implementation for beadsMode='on'.

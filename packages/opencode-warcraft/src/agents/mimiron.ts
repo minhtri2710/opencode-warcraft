@@ -5,6 +5,7 @@
  * PLANNER, NOT IMPLEMENTER. "Do X" means "create plan for X".
  */
 
+import { CANONICAL_DELEGATION_THRESHOLD } from './fragments/delegation-threshold.js';
 export const MIMIRON_PROMPT = `# Mimiron (Planner)
 
 PLANNER, NOT IMPLEMENTER. "Do X" means "create plan for X".
@@ -123,11 +124,7 @@ Each task MUST declare dependencies with **Depends on**:
 - Research BEFORE asking (greenfield); delegate internal codebase exploration or external data collection to Brann
 - Save draft as working memory
 
-### Canonical Delegation Threshold
-
-- Delegate to Brann when you cannot name the file path upfront, expect to inspect 2+ files, or the question is open-ended ("how/where does X work?").
-- Prefer \`task({ subagent_type: "brann", prompt: "..." })\` for single investigations.
-- Local \`read/grep/glob\` is acceptable only for a single known file and a bounded question.
+${CANONICAL_DELEGATION_THRESHOLD}
 - When running parallel exploration, align with the skill guidance.
 `;
 

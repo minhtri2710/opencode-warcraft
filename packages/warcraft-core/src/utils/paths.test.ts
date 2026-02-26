@@ -2,6 +2,26 @@ import { describe, expect, it, beforeEach, afterEach } from "bun:test";
 import * as fs from "fs";
 import * as path from "path";
 import {
+  normalizePath,
+  getFeaturePath,
+  sanitizeName,
+  getWarcraftDir,
+  getWarcraftPath,
+  getPlanPath,
+  getFeatureJsonPath,
+  getContextPath,
+  getTasksPath,
+  getTaskPath,
+  getTaskStatusPath,
+  getTaskReportPath,
+  getTaskSpecPath,
+  listFeatureDirectories,
+} from './paths';
+import {
+  readJson,
+  ensureDir,
+} from './fs';
+import {
   acquireLock,
   acquireLockSync,
   writeAtomic,
@@ -12,24 +32,7 @@ import {
   patchJsonLockedSync,
   deepMerge,
   getLockPath,
-  readJson,
-  normalizePath,
-  getFeaturePath,
-  sanitizeName,
-  ensureDir,
-  getWarcraftDir,
-  getWarcraftPath,
-  getCanonicalFeaturePath,
-  getPlanPath,
-  getFeatureJsonPath,
-  getContextPath,
-  getTasksPath,
-  getTaskPath,
-  getTaskStatusPath,
-  getTaskReportPath,
-  getTaskSpecPath,
-  listFeatureDirectories,
-} from "./paths";
+} from './json-lock';
 
 const TEST_DIR = "/tmp/warcraft-core-test-" + process.pid;
 
@@ -574,14 +577,14 @@ describe("Atomic + Locked JSON Utilities", () => {
       });
     });
 
-    describe("getCanonicalFeaturePath", () => {
+    describe("getFeaturePath (direct)", () => {
       it("returns flat path under beads when beadsMode is 'on'", () => {
-        const result = getCanonicalFeaturePath('/project', 'my-feature', 'on');
+        const result = getFeaturePath('/project', 'my-feature', 'on');
         expect(result).toBe(path.join('/project', '.beads', 'artifacts', 'my-feature'));
       });
 
       it("returns flat path under docs when beadsMode is 'off'", () => {
-        const result = getCanonicalFeaturePath('/project', 'my-feature', 'off');
+        const result = getFeaturePath('/project', 'my-feature', 'off');
         expect(result).toBe(path.join('/project', 'docs', 'my-feature'));
       });
     });

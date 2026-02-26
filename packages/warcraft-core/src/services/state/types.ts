@@ -16,7 +16,7 @@ import type {
   PlanComment,
   WorkerSession,
 } from '../../types.js';
-import type { LockOptions } from '../../utils/paths.js';
+import type { LockOptions } from '../../utils/json-lock.js';
 import type { RunnableTasksResult } from '../taskService.js';
 import type { BackgroundPatchFields } from '../taskService.js';
 

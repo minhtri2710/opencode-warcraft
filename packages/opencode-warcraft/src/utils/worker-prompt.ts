@@ -3,7 +3,7 @@
  * Builds context-rich prompts for worker agents with all Warcraft context.
  */
 
-export interface ContextFile {
+export interface WorkerContextFile {
   name: string;
   content: string;
 }
@@ -26,7 +26,7 @@ export interface WorkerPromptParams {
   worktreePath: string;
   branch: string;
   plan: string;
-  contextFiles: ContextFile[];
+  contextFiles: WorkerContextFile[];
   spec: string;
   previousTasks?: CompletedTask[];
   continueFrom?: ContinueFromBlocked;

@@ -5,8 +5,8 @@ import type {
   TaskService,
   TaskStatusType,
 } from 'warcraft-core';
-import { detectWorkflowPath, validateLightweightPlan } from '../utils/workflow-path.js';
-import { validatePathSegment } from './index.js';
+import { detectWorkflowPath, validateLightweightPlan } from 'warcraft-core';
+import { resolveFeatureInput, validateTaskInput, validatePathSegment } from './tool-input.js';
 import { toolError, toolSuccess } from '../types.js';
 
 export interface TaskToolsDependencies {
@@ -38,10 +38,9 @@ export class TaskTools {
           .describe('Feature name (defaults to detection or single feature)'),
       },
       async execute({ feature: explicitFeature }) {
-        if (explicitFeature) validatePathSegment(explicitFeature, 'feature');
-        const feature = resolveFeature(explicitFeature);
-        if (!feature)
-          return toolError('No feature specified. Create a feature or provide feature param.');
+        const resolution = resolveFeatureInput(resolveFeature, explicitFeature);
+        if (!resolution.ok) return toolError(resolution.error);
+        const feature = resolution.feature;
         const featureData = featureService.get(feature);
         if (!featureData) {
           return toolError('Feature not found');
@@ -97,10 +96,9 @@ export class TaskTools {
         priority: tool.schema.number().optional().describe('Priority (1-5, default: 3)'),
       },
       async execute({ name, order, feature: explicitFeature, priority }) {
-        if (explicitFeature) validatePathSegment(explicitFeature, 'feature');
-        const feature = resolveFeature(explicitFeature);
-        if (!feature)
-          return toolError('No feature specified. Create a feature or provide feature param.');
+        const resolution = resolveFeatureInput(resolveFeature, explicitFeature);
+        if (!resolution.ok) return toolError(resolution.error);
+        const feature = resolution.feature;
         const priorityValue = priority ?? 3;
         if (!Number.isInteger(priorityValue) || priorityValue < 1 || priorityValue > 5) {
           return toolError(`Priority must be an integer between 1 and 5 (inclusive), got: ${priorityValue}`);
@@ -132,11 +130,10 @@ export class TaskTools {
           .describe('Feature name (defaults to detection or single feature)'),
       },
       async execute({ task, status, summary, feature: explicitFeature }) {
-        if (explicitFeature) validatePathSegment(explicitFeature, 'feature');
-        validatePathSegment(task, 'task');
-        const feature = resolveFeature(explicitFeature);
-        if (!feature)
-          return toolError('No feature specified. Create a feature or provide feature param.');
+        const resolution = resolveFeatureInput(resolveFeature, explicitFeature);
+        if (!resolution.ok) return toolError(resolution.error);
+        const feature = resolution.feature;
+        validateTaskInput(task);
         const updated = taskService.update(feature, task, {
           status: status ? validateTaskStatus(status) : undefined,
           summary,

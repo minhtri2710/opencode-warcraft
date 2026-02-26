@@ -1,24 +1,7 @@
-import { execFileSync } from 'child_process';
+import type { BvCommandExecutor, BvHealth } from './bv-runner.js';
+import { defaultBvExecutor, runBvCommand } from './bv-runner.js';
 
-/**
- * Type for executing BV commands - allows for dependency injection in tests
- */
-export type BvCommandExecutor = (
-  command: string,
-  args: string[],
-  options: { cwd: string; encoding: 'utf-8'; timeout?: number },
-) => string;
-
-/**
- * Health status for BeadsViewerGateway
- */
-export interface BvHealth {
-  enabled: boolean;
-  available: boolean;
-  lastError: string | null;
-  lastErrorAt: number | null;
-  lastSuccessAt: number | null;
-}
+export type { BvCommandExecutor, BvHealth };
 
 /**
  * Summary of a robot plan
@@ -48,13 +31,6 @@ export interface RobotPlanResult {
 }
 
 /**
- * Default executor that uses child_process.execFileSync
- */
-const defaultExecutor: BvCommandExecutor = (command, args, options) => {
-  return execFileSync(command, args, options);
-};
-
-/**
  * BeadsViewerGateway manages BV (Beads Viewer) operations for parallel execution planning.
  *
  * Responsibilities:
@@ -73,7 +49,7 @@ export class BeadsViewerGateway {
   constructor(
     private readonly directory: string,
     private readonly enabled: boolean,
-    private readonly executor: BvCommandExecutor = defaultExecutor,
+    private readonly executor: BvCommandExecutor = defaultBvExecutor,
   ) {}
 
   /**
@@ -95,37 +71,29 @@ export class BeadsViewerGateway {
    * Calls `bv --robot-plan --format json` and parses the output
    */
   getRobotPlan(): RobotPlanResult | null {
-    if (!this.enabled) {
-      this.lastError = 'disabled by beadsMode=off';
+    const { result, error } = runBvCommand(['--robot-plan'], {
+      directory: this.directory,
+      enabled: this.enabled,
+      executor: this.executor,
+    });
+
+    if (error) {
+      this.lastError = error;
       this.lastErrorAt = Date.now();
       return null;
     }
 
-    try {
-      const output = this.executor('bv', ['--robot-plan', '--format', 'json'], {
-        cwd: this.directory,
-        encoding: 'utf-8',
-        timeout: 30_000,
-      });
+    const parsed = this.parseRobotPlan(result);
 
-      const parsed = JSON.parse(output) as unknown;
-      const result = this.parseRobotPlan(parsed);
-
-      if (result) {
-        this.lastError = null;
-        this.lastSuccessAt = Date.now();
-      } else {
-        this.lastError = 'failed to parse robot plan output';
-        this.lastErrorAt = Date.now();
-      }
-
-      return result;
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
-      this.lastError = reason;
+    if (parsed) {
+      this.lastError = null;
+      this.lastSuccessAt = Date.now();
+    } else {
+      this.lastError = 'failed to parse robot plan output';
       this.lastErrorAt = Date.now();
-      return null;
     }
+
+    return parsed;
   }
 
   /**

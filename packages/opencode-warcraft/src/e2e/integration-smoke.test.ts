@@ -9,7 +9,7 @@ import {
   createTempProjectRoot,
   getHostPreflightSkipReason,
   setupGitProject,
-} from '../e2e/helpers/test-env.js';
+} from './helpers/test-env.js';
 
 const OPENCODE_CLIENT = createOpencodeClient({ baseUrl: 'http://localhost:1' }) as unknown as PluginInput['client'];
 

@@ -1,15 +1,5 @@
-import { execFileSync } from 'child_process';
-
-/**
- * Health status for BV triage service
- */
-export interface BvHealth {
-  enabled: boolean;
-  available: boolean;
-  lastError: string | null;
-  lastErrorAt: number | null;
-  lastSuccessAt: number | null;
-}
+import type { BvCommandExecutor, BvHealth } from './bv-runner.js';
+import { defaultBvExecutor, runBvCommand } from './bv-runner.js';
 
 /**
  * Triage result containing a summary
@@ -34,22 +24,6 @@ export interface BvGlobalTriageDetails extends BvTriageResult {
 }
 
 /**
- * Type for executing BV commands - allows for dependency injection in tests
- */
-export type BvCommandExecutor = (
-  command: string,
-  args: string[],
-  options: { cwd: string; encoding: 'utf-8'; timeout?: number },
-) => string;
-
-/**
- * Default executor that uses child_process.execFileSync
- */
-const defaultExecutor: BvCommandExecutor = (command, args, options) => {
-  return execFileSync(command, args, options);
-};
-
-/**
  * BvTriageService manages BV (Beads Viewer) triage operations with explicit state ownership.
  *
  * Responsibilities:
@@ -71,7 +45,7 @@ export class BvTriageService {
   constructor(
     private readonly directory: string,
     private readonly enabled: boolean,
-    private readonly executor: BvCommandExecutor = defaultExecutor,
+    private readonly executor: BvCommandExecutor = defaultBvExecutor,
   ) {}
 
   /**
@@ -263,27 +237,21 @@ export class BvTriageService {
    * Execute bv CLI command and return parsed JSON payload
    */
   private runBvRobot(args: string[]): unknown | null {
-    if (!this.enabled) {
-      this.lastError = 'disabled by beadsMode=off';
+    const { result, error } = runBvCommand(args, {
+      directory: this.directory,
+      enabled: this.enabled,
+      executor: this.executor,
+    });
+
+    if (error) {
+      this.lastError = error;
       this.lastErrorAt = Date.now();
       return null;
     }
 
-    try {
-      const output = this.executor('bv', [...args, '--format', 'json'], {
-        cwd: this.directory,
-        encoding: 'utf-8',
-        timeout: 30_000,
-      });
-      this.lastError = null;
-      this.lastSuccessAt = Date.now();
-      return JSON.parse(output) as unknown;
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
-      this.lastError = reason;
-      this.lastErrorAt = Date.now();
-      return null;
-    }
+    this.lastError = null;
+    this.lastSuccessAt = Date.now();
+    return result;
   }
 
   /**

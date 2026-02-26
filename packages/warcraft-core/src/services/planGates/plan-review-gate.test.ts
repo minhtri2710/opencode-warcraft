@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import {
   formatPlanReviewChecklistIssues,
   validatePlanReviewChecklist,
-} from '../utils/plan-review-gate';
+} from './plan-review-gate.js';
 
 const COMPLETE_CHECKLIST = `## Plan Review Checklist
 - [x] Discovery is complete and current

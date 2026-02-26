@@ -19,7 +19,11 @@ export type { Result } from './beads/BeadsRepository.js';
 export { BeadsViewerGateway } from './beads/BeadsViewerGateway.js';
 export { getTaskBeadActions } from './beads/beadMapping.js';
 export type { BeadArtifactKind, TaskBeadArtifacts, BeadGatewayErrorCode } from './beads/BeadGateway.types.js';
-export type { BvCommandExecutor, BvHealth, RobotPlanResult, RobotPlanSummary, ExecutionTrack } from './beads/BeadsViewerGateway.js';
+export type { RobotPlanResult, RobotPlanSummary, ExecutionTrack } from './beads/BeadsViewerGateway.js';
+export { BvTriageService } from './beads/BvTriageService.js';
+export type { BvTriageResult, BvBlockerTriageDetails, BvGlobalTriageDetails } from './beads/BvTriageService.js';
+export { runBvCommand, defaultBvExecutor } from './beads/bv-runner.js';
+export type { BvCommandExecutor, BvHealth } from './beads/bv-runner.js';
 
 
 // Storage ports and adapters
@@ -39,3 +43,5 @@ export { BeadsTaskStore } from './state/index.js';
 export { FilesystemTaskStore } from './state/index.js';
 export { BeadsPlanStore } from './state/index.js';
 export { FilesystemPlanStore } from './state/index.js';
+
+export * from './planGates/index.js';

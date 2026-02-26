@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeEach, afterEach, mock, spyOn } from 'bun:test';
-import { DockerSandboxService } from '../services/dockerSandboxService.js';
+import { DockerSandboxService } from './dockerSandboxService.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';

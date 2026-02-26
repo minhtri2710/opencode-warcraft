@@ -1,7 +1,8 @@
 import * as fs from "fs/promises";
 import * as path from "path";
 import simpleGit, { SimpleGit } from "simple-git";
-import { acquireLock, getWarcraftPath, sanitizeName } from '../utils/paths.js';
+import { getWarcraftPath, sanitizeName } from '../utils/paths.js';
+import { acquireLock } from '../utils/json-lock.js';
 export interface WorktreeInfo {
   path: string;
   branch: string;

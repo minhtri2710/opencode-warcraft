@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { getContextPath, ensureDir, fileExists, readText, writeText, sanitizeName } from '../utils/paths.js';
+import { getContextPath, sanitizeName } from '../utils/paths.js';
+import { ensureDir, fileExists, readText, writeText } from '../utils/fs.js';
 import type { BeadsModeProvider, ContextFile } from '../types.js';
 import { ConfigService } from './configService.js';
 export type { ContextFile };

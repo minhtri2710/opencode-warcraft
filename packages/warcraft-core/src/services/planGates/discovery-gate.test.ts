@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'bun:test';
-import { validateDiscoverySection } from '../utils/discovery-gate';
+import { validateDiscoverySection } from './discovery-gate.js';
 
 /**
  * Discovery Gate Tests

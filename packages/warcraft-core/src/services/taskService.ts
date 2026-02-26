@@ -1,11 +1,10 @@
 import {
   getPlanPath,
-  readText,
   sanitizeName,
-  deriveTaskFolder,
-  slugifyTaskName,
 } from '../utils/paths.js';
-import type { LockOptions } from '../utils/paths.js';
+import { readText } from '../utils/fs.js';
+import { deriveTaskFolder, slugifyTaskName } from '../utils/slug.js';
+import type { LockOptions } from '../utils/json-lock.js';
 import { TaskStatus, TaskStatusType, TaskOrigin, TasksSyncResult, TaskInfo, WorkerSession, SpecData } from '../types.js';
 import { computeRunnableAndBlocked } from './taskDependencyGraph.js';
 import { formatSpecContent } from './specFormatter.js';

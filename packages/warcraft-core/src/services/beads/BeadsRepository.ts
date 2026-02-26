@@ -15,7 +15,8 @@
 
 import { BeadGateway, BeadGatewayError } from './BeadGateway.js';
 import { BeadsViewerGateway } from './BeadsViewerGateway.js';
-import type { BvHealth, RobotPlanResult } from './BeadsViewerGateway.js';
+import type { RobotPlanResult } from './BeadsViewerGateway.js';
+import type { BvHealth } from './bv-runner.js';
 import type { BeadArtifactKind } from './BeadGateway.types.js';
 import {
   encodeFeatureState,

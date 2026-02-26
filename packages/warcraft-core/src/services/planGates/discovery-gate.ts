@@ -1,4 +1,4 @@
-import { detectWorkflowPath, hasLightweightMiniRecord } from './workflow-path';
+import { detectWorkflowPath, hasLightweightMiniRecord } from './workflow-path.js';
 
 export function validateDiscoverySection(content: string): string | null {
   const workflowPath = detectWorkflowPath(content);
@@ -44,8 +44,7 @@ Include these fields in the plan:
 - Verify
 - Rollback
 
-Then try \
-\`warcraft_plan_write\` again.`;
+Then try \`warcraft_plan_write\` again.`;
   }
 
   return null;

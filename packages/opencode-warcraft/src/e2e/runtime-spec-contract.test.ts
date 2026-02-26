@@ -5,7 +5,7 @@ import { createOpencodeClient, type Config as OpencodeConfig } from '@opencode-a
 import {
   createTempProjectRoot,
   getHostPreflightSkipReason,
-} from '../e2e/helpers/test-env.js';
+} from './helpers/test-env.js';
 
 const PRECONDITION_SKIP_REASON = getHostPreflightSkipReason({ requireBr: true });
 const describeIfHostReady = PRECONDITION_SKIP_REASON ? describe.skip : describe;
@@ -84,7 +84,7 @@ describeIfHostReady('integration: runtime spec contract verification', () => {
 
   runIfHostReady('BV triage service can be instantiated', async () => {
     // Import the BV triage service directly
-    const { BvTriageService } = await import('../services/bv-triage-service.js');
+    const { BvTriageService } = await import('warcraft-core');
     
     const testRoot = createTempProjectRoot('bv-triage-runtime-test');
     
@@ -110,8 +110,8 @@ describeIfHostReady('integration: runtime spec contract verification', () => {
   });
 
   runIfHostReady('BV triage service tracks health state correctly', async () => {
-    const { BvTriageService } = await import('../services/bv-triage-service.js');
-    type BvCommandExecutor = import('../services/bv-triage-service.js').BvCommandExecutor;
+    const { BvTriageService } = await import('warcraft-core');
+    type BvCommandExecutor = import('warcraft-core').BvCommandExecutor;
     
     const testRoot = createTempProjectRoot('bv-health-test');
     
@@ -144,8 +144,8 @@ describeIfHostReady('integration: runtime spec contract verification', () => {
   });
 
   runIfHostReady('BV triage service caches results correctly', async () => {
-    const { BvTriageService } = await import('../services/bv-triage-service.js');
-    type BvCommandExecutor = import('../services/bv-triage-service.js').BvCommandExecutor;
+    const { BvTriageService } = await import('warcraft-core');
+    type BvCommandExecutor = import('warcraft-core').BvCommandExecutor;
     
     const testRoot = createTempProjectRoot('bv-cache-test');
     let callCount = 0;

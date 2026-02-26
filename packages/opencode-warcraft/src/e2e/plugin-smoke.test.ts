@@ -96,6 +96,15 @@ function createProject(worktree: string): PluginInput["project"] {
   };
 }
 
+/**
+ * Parse a tool response string, unwrapping the `data` property from `toolSuccess`.
+ * For `toolError` responses (success: false), returns the raw parsed object.
+ */
+function parseToolResponse<T>(output: string): T {
+  const parsed = JSON.parse(output);
+  return (parsed.data ?? parsed) as T;
+}
+
 describeIfHostReady("e2e: opencode-warcraft plugin (in-process)", () => {
   let testRoot: string;
   let originalHome: string | undefined;
@@ -222,7 +231,7 @@ Do it
       { feature: "smoke-feature" },
       toolContext
     );
-    const warcraftStatus = JSON.parse(statusRaw as string) as {
+    const warcraftStatus = parseToolResponse<{
       tasks?: {
         list?: Array<{
           folder: string;
@@ -237,7 +246,7 @@ Do it
           blockedTaskInsights?: Record<string, unknown>;
         };
       };
-    };
+    }>(statusRaw as string);
 
     expect(warcraftStatus.tasks?.list?.[0]?.folder).toBe("01-first-task");
     expect(warcraftStatus.tasks?.list?.[0]?.dependsOn).toEqual([]);
@@ -253,21 +262,21 @@ Do it
       { feature: "smoke-feature", task: "01-first-task" },
       toolContext
     );
-    const execStart = JSON.parse(execStartOutput as string) as {
+    const execStart = parseToolResponse<{
       instructions?: string;
       backgroundTaskCall?: Record<string, unknown>;
-    };
+    }>(execStartOutput as string);
     expect(execStart.backgroundTaskCall).toBeUndefined();
 
     const statusOutput = await hooks.tool!.warcraft_status.execute(
       { feature: "smoke-feature" },
       toolContext
     );
-    const status = JSON.parse(statusOutput as string) as {
+    const status = parseToolResponse<{
       tasks?: {
         list?: Array<{ folder: string }>;
       };
-    };
+    }>(statusOutput as string);
     expect(status.tasks?.list?.[0]?.folder).toBe("01-first-task");
   });
 
@@ -340,7 +349,7 @@ Do it
       { feature: "task-mode-feature", task: "01-first-task" },
       toolContext
     );
-    const execStart = JSON.parse(execStartOutput as string) as {
+    const execStart = parseToolResponse<{
       instructions?: string;
       taskPromptMode?: string;
       taskToolCall?: {
@@ -348,7 +357,7 @@ Do it
         description?: string;
         prompt?: string;
       };
-    };
+    }>(execStartOutput as string);
     // DEBUG: Log the actual output to diagnose the issue
     console.log('[DEBUG] execStartOutput:', execStartOutput);
     console.log('[DEBUG] execStart:', JSON.stringify(execStart, null, 2));
@@ -607,9 +616,9 @@ Do it
       toolContext
     );
 
-    const execStart = JSON.parse(execStartOutput as string) as {
+    const execStart = parseToolResponse<{
       taskPromptMode?: string;
-    };
+    }>(execStartOutput as string);
 
     expect(execStart.taskPromptMode).toBe("opencode-inline");
   });
@@ -684,13 +693,13 @@ Do gamma work (depends on alpha and beta)
       { mode: "preview", feature: "batch-feature" },
       toolContext
     );
-    const preview = JSON.parse(previewOutput as string) as {
+    const preview = parseToolResponse<{
       feature: string;
       parallelPolicy?: { strategy: string; maxConcurrency: number };
       summary: { runnable: number; blocked: number };
       runnable: Array<{ folder: string }>;
       blocked?: Array<{ folder: string; waitingOn: string[] }>;
-    };
+    }>(previewOutput as string);
 
     expect(preview.feature).toBe("batch-feature");
     expect(preview.summary.runnable).toBe(2);
@@ -712,15 +721,14 @@ Do gamma work (depends on alpha and beta)
       },
       toolContext
     );
-    const result = JSON.parse(executeOutput as string) as {
-      success: boolean;
+    const result = parseToolResponse<{
       parallelPolicy?: { strategy: string; maxConcurrency: number };
       dispatched: { total: number; succeeded: number; failed: number };
       taskToolCalls: Array<{ subagent_type: string; description: string; prompt: string }>;
       instructions: string;
-    };
+    }>(executeOutput as string);
 
-    expect(result.success).toBe(true);
+    expect(result.dispatched.succeeded).toBe(2);
     expect(result.dispatched.succeeded).toBe(2);
     expect(result.dispatched.failed).toBe(0);
     expect(result.parallelPolicy).toEqual({
@@ -743,11 +751,11 @@ Do gamma work (depends on alpha and beta)
     );
     const blockedResult = JSON.parse(blockedOutput as string) as {
       success: boolean;
-      notRunnable: string[];
+      error?: string;
     };
 
     expect(blockedResult.success).toBe(false);
-    expect(blockedResult.notRunnable).toContain("03-task-gamma (dependencies not met)");
+    expect(blockedResult.error).toContain('03-task-gamma (dependencies not met)');
   });
 
 });

@@ -6,10 +6,8 @@ import {
   getFeaturePath,
   getFeatureJsonPath,
   getContextPath,
-  ensureDir,
-  writeJson,
-  fileExists,
 } from '../../utils/paths.js';
+import { ensureDir, writeJson, fileExists } from '../../utils/fs.js';
 import type { FeatureStore, CreateFeatureInput } from './types.js';
 
 /**

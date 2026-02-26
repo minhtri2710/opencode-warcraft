@@ -1,12 +1,29 @@
-import { validatePathSegment } from './index.js';
+import { sanitizeName } from 'warcraft-core';
+
+/**
+ * Validate that a string is safe for use as a filesystem path segment.
+ * Delegates to warcraft-core's sanitizeName.
+ * @param value - The string to validate
+ * @param label - Parameter name for error messages (e.g. 'feature', 'task')
+ * @returns The validated string
+ * @throws Error if the value is not a safe path segment
+ */
+export function validatePathSegment(value: string, label: string): string {
+	try {
+		return sanitizeName(value);
+	} catch (error) {
+		const msg = error instanceof Error ? error.message : String(error);
+		throw new Error(`${label}: ${msg}`);
+	}
+}
 
 /**
  * Result of resolving a feature from tool input.
  * Either a resolved feature name or an error message.
  */
 export type FeatureResolution =
-	| { ok: true; feature: string }
-	| { ok: false; error: string };
+	| { ok: true; feature: string; error?: undefined }
+	| { ok: false; feature?: undefined; error: string };
 
 /**
  * Resolve and validate a feature name from tool input.

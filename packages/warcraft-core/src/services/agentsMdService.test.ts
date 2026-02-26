@@ -1,8 +1,8 @@
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
-import { AgentsMdService } from '../services/agentsMdService.js';
-import { ContextService } from '../services/contextService.js';
+import { AgentsMdService } from './agentsMdService.js';
+import { ContextService } from './contextService.js';
 
 // Mock BeadsModeProvider for tests
 const mockBeadsModeProvider = {

@@ -1,13 +1,8 @@
 import { tool, type ToolDefinition } from '@opencode-ai/plugin';
 import type { FeatureService, PlanService } from 'warcraft-core';
+import { validateDiscoverySection, formatPlanReviewChecklistIssues, validatePlanReviewChecklist, detectWorkflowPath } from 'warcraft-core';
 import type { ToolContext } from '../types.js';
-import { validatePathSegment } from './index.js';
-import { validateDiscoverySection } from '../utils/discovery-gate.js';
-import {
-  formatPlanReviewChecklistIssues,
-  validatePlanReviewChecklist,
-} from '../utils/plan-review-gate.js';
-import { detectWorkflowPath } from '../utils/workflow-path.js';
+import { resolveFeatureInput } from './tool-input.js';
 
 import { toolError, toolSuccess } from '../types.js';
 export interface PlanToolsDependencies {
@@ -50,10 +45,9 @@ export class PlanTools {
         { content, feature: explicitFeature },
         toolContext: ToolContext,
       ) {
-        if (explicitFeature) validatePathSegment(explicitFeature, 'feature');
-        const feature = resolveFeature(explicitFeature);
-        if (!feature)
-          return toolError('No feature specified. Create a feature or provide feature param.');
+        const resolution = resolveFeatureInput(resolveFeature, explicitFeature);
+        if (!resolution.ok) return toolError(resolution.error);
+        const feature = resolution.feature;
 
         const discoveryError = validateDiscoverySection(content);
         if (discoveryError) {
@@ -88,10 +82,9 @@ export class PlanTools {
         { feature: explicitFeature },
         toolContext: ToolContext,
       ) {
-        if (explicitFeature) validatePathSegment(explicitFeature, 'feature');
-        const feature = resolveFeature(explicitFeature);
-        if (!feature)
-          return toolError('No feature specified. Create a feature or provide feature param.');
+        const resolution = resolveFeatureInput(resolveFeature, explicitFeature);
+        if (!resolution.ok) return toolError(resolution.error);
+        const feature = resolution.feature;
         captureSession(feature, toolContext);
         const result = planService.read(feature);
         if (!result) return toolError('No plan.md found');
@@ -118,10 +111,9 @@ export class PlanTools {
         { feature: explicitFeature },
         toolContext: ToolContext,
       ) {
-        if (explicitFeature) validatePathSegment(explicitFeature, 'feature');
-        const feature = resolveFeature(explicitFeature);
-        if (!feature)
-          return toolError('No feature specified. Create a feature or provide feature param.');
+        const resolution = resolveFeatureInput(resolveFeature, explicitFeature);
+        if (!resolution.ok) return toolError(resolution.error);
+        const feature = resolution.feature;
         captureSession(feature, toolContext);
         const comments = planService.getComments(feature);
         if (comments.length > 0) {

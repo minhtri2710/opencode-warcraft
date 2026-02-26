@@ -9,15 +9,10 @@ import {
   getTaskPath,
   getTaskStatusPath,
   getTaskReportPath,
-  ensureDir,
-  readJson,
-  writeJson,
-  writeJsonLockedSync,
-  patchJsonLockedSync,
-  writeText,
-  fileExists,
-  LockOptions,
 } from '../../utils/paths.js';
+import { ensureDir, readJson, writeJson, fileExists, readText, writeText } from '../../utils/fs.js';
+import { writeJsonLockedSync, patchJsonLockedSync } from '../../utils/json-lock.js';
+import type { LockOptions } from '../../utils/json-lock.js';
 
 /**
  * TaskStore implementation for beadsMode='off'.

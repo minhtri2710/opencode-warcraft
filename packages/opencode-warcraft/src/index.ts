@@ -13,7 +13,7 @@ import { BRANN_PROMPT } from "./agents/brann.js";
 import { MEKKATORQUE_PROMPT } from "./agents/mekkatorque.js";
 import { ALGALON_PROMPT } from "./agents/algalon.js";
 import { createBuiltinMcps } from "./mcp/index.js";
-import { BvTriageService } from "./services/bv-triage-service.js";
+import { BvTriageService } from 'warcraft-core';
 
 // ============================================================================
 // Skill Tool - Uses generated registry (no file-based discovery)
@@ -110,7 +110,7 @@ import {
 import {
   createVariantHook,
 } from "./hooks/variant-hook.js";
-import type { BlockedResult } from "./types.js";
+import type { BlockedResult, ToolContext } from "./types.js";
 import {
   FeatureTools,
   PlanTools,
@@ -213,12 +213,6 @@ During execution, call \`warcraft_status\` periodically to:
 - Get reminded of next actions
 `;
 
-type ToolContext = {
-  sessionID: string;
-  messageID: string;
-  agent: string;
-  abort: AbortSignal;
-};
 
 const plugin: Plugin = async (ctx) => {
   const { directory } = ctx;
@@ -627,137 +621,84 @@ To unblock: Remove ${blockedPath}`;
       configService.init();
 
       // Build auto-loaded skill content for each agent
-      const khadgarUserConfig = configService.getAgentConfig("khadgar");
-      const khadgarAutoLoadedSkills = await buildAutoLoadedSkillsContent(
-        "khadgar",
-        configService,
-        directory,
-      );
-      const khadgarConfig = {
-        model: khadgarUserConfig.model,
-        variant: khadgarUserConfig.variant,
-        temperature: khadgarUserConfig.temperature ?? 0.5,
-        description:
-          "Khadgar (Hybrid) - Plans + orchestrates. Detects phase, loads skills on-demand.",
-        prompt: KHADGAR_PROMPT + khadgarAutoLoadedSkills,
-        permission: {
-          question: "allow",
-          skill: "allow",
-          todowrite: "allow",
-          todoread: "allow",
-        },
-      };
+      type AgentName = 'khadgar' | 'mimiron' | 'saurfang' | 'brann' | 'mekkatorque' | 'algalon';
+      interface AgentSpec {
+        name: AgentName;
+        prompt: string;
+        description: string;
+        temperature: number;
+        mode?: 'subagent';
+        permission: Record<string, string>;
+      }
 
-      const mimironUserConfig = configService.getAgentConfig("mimiron");
-      const mimironAutoLoadedSkills = await buildAutoLoadedSkillsContent(
-        "mimiron",
-        configService,
-        directory,
-      );
-      const mimironConfig = {
-        model: mimironUserConfig.model,
-        variant: mimironUserConfig.variant,
-        temperature: mimironUserConfig.temperature ?? 0.7,
-        description:
-          "Mimiron (Planner) - Plans features, interviews, writes plans. NEVER executes.",
-        prompt: MIMIRON_PROMPT + mimironAutoLoadedSkills,
-        permission: {
-          edit: "deny", // Planners don't edit code
-          task: "allow",
-          question: "allow",
-          skill: "allow",
-          todowrite: "allow",
-          todoread: "allow",
-          webfetch: "allow",
-        },
-      };
+      async function buildAgentConfig(spec: AgentSpec) {
+        const userConfig = configService.getAgentConfig(spec.name);
+        const autoLoadedSkills = await buildAutoLoadedSkillsContent(spec.name, configService, directory);
+        return {
+          model: userConfig.model,
+          variant: userConfig.variant,
+          temperature: userConfig.temperature ?? spec.temperature,
+          ...(spec.mode ? { mode: spec.mode } : {}),
+          description: spec.description,
+          prompt: spec.prompt + autoLoadedSkills,
+          permission: spec.permission,
+        };
+      }
 
-      const saurfangUserConfig = configService.getAgentConfig("saurfang");
-      const saurfangAutoLoadedSkills = await buildAutoLoadedSkillsContent(
-        "saurfang",
-        configService,
-        directory,
-      );
-      const saurfangConfig = {
-        model: saurfangUserConfig.model,
-        variant: saurfangUserConfig.variant,
-        temperature: saurfangUserConfig.temperature ?? 0.5,
-        description:
-          "Saurfang (Orchestrator) - Orchestrates execution. Delegates, spawns workers, verifies, merges.",
-        prompt: SAURFANG_PROMPT + saurfangAutoLoadedSkills,
-        permission: {
-          question: "allow",
-          skill: "allow",
-          todowrite: "allow",
-          todoread: "allow",
-        },
-      };
-
-      const brannUserConfig = configService.getAgentConfig("brann");
-      const brannAutoLoadedSkills = await buildAutoLoadedSkillsContent(
-        "brann",
-        configService,
-        directory,
-      );
-      const brannConfig = {
-        model: brannUserConfig.model,
-        variant: brannUserConfig.variant,
-        temperature: brannUserConfig.temperature ?? 0.5,
-        mode: "subagent" as const,
-        description:
-          "Brann (Explorer/Researcher/Retrieval) - Researches codebase + external docs/data.",
-        prompt: BRANN_PROMPT + brannAutoLoadedSkills,
-        permission: {
-          edit: "deny", // Researchers don't edit code
-          task: "deny",
-          delegate: "deny",
-          skill: "allow",
-          webfetch: "allow",
-        },
-      };
-
-      const mekkatorqueUserConfig = configService.getAgentConfig("mekkatorque");
-      const mekkatorqueAutoLoadedSkills = await buildAutoLoadedSkillsContent(
-        "mekkatorque",
-        configService,
-        directory,
-      );
-      const mekkatorqueConfig = {
-        model: mekkatorqueUserConfig.model,
-        variant: mekkatorqueUserConfig.variant,
-        temperature: mekkatorqueUserConfig.temperature ?? 0.3,
-        mode: "subagent" as const,
-        description:
-          "Mekkatorque (Worker/Coder) - Executes tasks directly in isolated worktrees. Never delegates.",
-        prompt: MEKKATORQUE_PROMPT + mekkatorqueAutoLoadedSkills,
-        permission: {
-          task: "deny",
-          delegate: "deny",
-          skill: "allow",
-        },
-      };
-
-      const algalonUserConfig = configService.getAgentConfig("algalon");
-      const algalonAutoLoadedSkills = await buildAutoLoadedSkillsContent(
-        "algalon",
-        configService,
-        directory,
-      );
-      const algalonConfig = {
-        model: algalonUserConfig.model,
-        variant: algalonUserConfig.variant,
-        temperature: algalonUserConfig.temperature ?? 0.3,
-        mode: "subagent" as const,
-        description:
-          "Algalon (Consultant/Reviewer/Debugger) - Reviews plan documentation quality. OKAY/REJECT verdict.",
-        prompt: ALGALON_PROMPT + algalonAutoLoadedSkills,
-        permission: {
-          edit: "deny", // Reviewers don't edit
-          task: "deny",
-          delegate: "deny",
-          skill: "allow",
-        },
-      };
+      const [
+        khadgarConfig,
+        mimironConfig,
+        saurfangConfig,
+        brannConfig,
+        mekkatorqueConfig,
+        algalonConfig,
+      ] = await Promise.all([
+        buildAgentConfig({
+          name: 'khadgar',
+          prompt: KHADGAR_PROMPT,
+          description: 'Khadgar (Hybrid) - Plans + orchestrates. Detects phase, loads skills on-demand.',
+          temperature: 0.5,
+          permission: { question: 'allow', skill: 'allow', todowrite: 'allow', todoread: 'allow' },
+        }),
+        buildAgentConfig({
+          name: 'mimiron',
+          prompt: MIMIRON_PROMPT,
+          description: 'Mimiron (Planner) - Plans features, interviews, writes plans. NEVER executes.',
+          temperature: 0.7,
+          permission: { edit: 'deny', task: 'allow', question: 'allow', skill: 'allow', todowrite: 'allow', todoread: 'allow', webfetch: 'allow' },
+        }),
+        buildAgentConfig({
+          name: 'saurfang',
+          prompt: SAURFANG_PROMPT,
+          description: 'Saurfang (Orchestrator) - Orchestrates execution. Delegates, spawns workers, verifies, merges.',
+          temperature: 0.5,
+          permission: { question: 'allow', skill: 'allow', todowrite: 'allow', todoread: 'allow' },
+        }),
+        buildAgentConfig({
+          name: 'brann',
+          prompt: BRANN_PROMPT,
+          description: 'Brann (Explorer/Researcher/Retrieval) - Researches codebase + external docs/data.',
+          temperature: 0.5,
+          mode: 'subagent',
+          permission: { edit: 'deny', task: 'deny', delegate: 'deny', skill: 'allow', webfetch: 'allow' },
+        }),
+        buildAgentConfig({
+          name: 'mekkatorque',
+          prompt: MEKKATORQUE_PROMPT,
+          description: 'Mekkatorque (Worker/Coder) - Executes tasks directly in isolated worktrees. Never delegates.',
+          temperature: 0.3,
+          mode: 'subagent',
+          permission: { task: 'deny', delegate: 'deny', skill: 'allow' },
+        }),
+        buildAgentConfig({
+          name: 'algalon',
+          prompt: ALGALON_PROMPT,
+          description: 'Algalon (Consultant/Reviewer/Debugger) - Reviews plan documentation quality. OKAY/REJECT verdict.',
+          temperature: 0.3,
+          mode: 'subagent',
+          permission: { edit: 'deny', task: 'deny', delegate: 'deny', skill: 'allow' },
+        }),
+      ]);
 
       // Build agents map based on agentMode
       const warcraftConfigData = configService.get();

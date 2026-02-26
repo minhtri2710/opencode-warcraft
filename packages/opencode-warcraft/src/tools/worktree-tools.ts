@@ -9,21 +9,13 @@ import type {
   WorktreeService,
   TaskStatusType,
 } from 'warcraft-core';
-import { formatSpecContent } from 'warcraft-core';
-import { validatePathSegment } from './index.js';
-import type { ContextFile, CompletedTask } from '../utils/worker-prompt.js';
+import { resolveFeatureInput, validateTaskInput } from './tool-input.js';
+import { prepareTaskDispatch, DEFAULT_BUDGET } from './task-dispatch.js';
 import {
   calculatePromptMeta,
   calculatePayloadMeta,
   checkWarnings,
 } from '../utils/prompt-observability.js';
-import {
-  applyTaskBudget,
-  applyContextBudget,
-  DEFAULT_BUDGET,
-  type TruncationEvent,
-} from '../utils/prompt-budgeting.js';
-import { buildWorkerPrompt } from '../utils/worker-prompt.js';
 
 export interface WorktreeToolsDependencies {
   featureService: FeatureService;
@@ -77,11 +69,10 @@ export class WorktreeTools {
         { task, feature: explicitFeature, continueFrom, decision },
         _toolContext,
       ) {
-        if (explicitFeature) validatePathSegment(explicitFeature, 'feature');
-        validatePathSegment(task, 'task');
-        const feature = resolveFeature(explicitFeature);
-        if (!feature)
-          return toolError('No feature specified. Create a feature or provide feature param.');
+        validateTaskInput(task);
+        const resolution = resolveFeatureInput(resolveFeature, explicitFeature);
+        if (!resolution.ok) return toolError(resolution.error);
+        const feature = resolution.feature;
 
         const blockedResult = checkBlocked(feature);
         if (blockedResult.blocked) {
@@ -101,14 +92,10 @@ export class WorktreeTools {
         if (continueFrom !== 'blocked') {
           const depCheck = checkDependencies(feature, task);
           if (!depCheck.allowed) {
-            return JSON.stringify({
-              success: false,
-              error: depCheck.error,
-              hints: [
-                'Complete the required dependencies before starting this task.',
-                'Use warcraft_status to see current task states.',
-              ],
-            });
+            return toolError(depCheck.error || 'Dependencies not met', [
+              'Complete the required dependencies before starting this task.',
+              'Use warcraft_status to see current task states.',
+            ]);
           }
         }
 
@@ -128,100 +115,30 @@ export class WorktreeTools {
         taskService.update(feature, task, updatePayload);
 
         // Generate spec.md with context for task
-        const planResult = planService.read(feature);
-        const allTasks = taskService.list(feature);
-
-        const rawContextFiles = contextService.list(feature).map((f: { name: string; content: string }) => ({
-          name: f.name,
-          content: f.content,
-        }));
-
-        const rawPreviousTasks = allTasks
-          .filter((t: { status: string; summary?: string }) => t.status === 'done' && t.summary)
-          .map((t: { folder: string; summary?: string }) => ({ name: t.folder, summary: t.summary! }));
-
-        const taskBudgetResult = applyTaskBudget(rawPreviousTasks, {
-          ...DEFAULT_BUDGET,
-          feature,
-        });
-
-        const contextBudgetResult = applyContextBudget(rawContextFiles, {
-          ...DEFAULT_BUDGET,
-          feature,
-        });
-
-        const contextFiles: ContextFile[] = contextBudgetResult.files.map(
-          (f: { name: string; content: string }) => ({
-            name: f.name,
-            content: f.content,
-          }),
-        );
-        const previousTasks: CompletedTask[] = taskBudgetResult.tasks.map(
-          (t: { name: string; summary: string }) => ({
-            name: t.name,
-            summary: t.summary,
-          }),
-        );
-
-        const truncationEvents: TruncationEvent[] = [
-          ...taskBudgetResult.truncationEvents,
-          ...contextBudgetResult.truncationEvents,
-        ];
-
-        const droppedTasksHint = taskBudgetResult.droppedTasksHint;
-
-        const taskOrder = parseInt(
-          taskInfo.folder.match(/^(\d+)/)?.[1] || '0',
-          10,
-        );
-        const status = taskService.getRawStatus(feature, task);
-        const dependsOn = status?.dependsOn ?? [];
-        
-        // Build structured spec data in core, then format in plugin layer
-        const specData = taskService.buildSpecData({
-          featureName: feature,
-          task: {
-            folder: task,
-            name: taskInfo.planTitle ?? taskInfo.name,
-            order: taskOrder,
+        const prep = prepareTaskDispatch(
+          {
+            feature,
+            task,
+            taskInfo,
+            worktree,
+            continueFrom:
+              continueFrom === 'blocked'
+                ? {
+                    status: 'blocked',
+                    previousSummary:
+                      taskInfo.summary || 'No previous summary',
+                    decision: decision || 'No decision provided',
+                  }
+                : undefined,
           },
-          dependsOn,
-          allTasks: allTasks.map((t: { folder: string; name: string }) => ({
-            folder: t.folder,
-            name: t.name,
-            order: parseInt(t.folder.match(/^(\d+)/)?.[1] || '0', 10),
-          })),
-          planContent: planResult?.content ?? null,
-          contextFiles,
-          completedTasks: previousTasks,
-        });
-        const specContent = formatSpecContent(specData);
+          { planService, taskService, contextService },
+        );
 
-        const taskBeadId = taskService.writeSpec(feature, task, specContent);
+        const { specContent, workerPrompt, persistedWorkerPrompt, contextFiles, previousTasks, truncationEvents, droppedTasksHint, taskBeadId, planContent } = prep;
 
-        const workerPrompt = buildWorkerPrompt({
-          feature,
-          task,
-          taskOrder: parseInt(
-            taskInfo.folder.match(/^(\d+)/)?.[1] || '0',
-            10,
-          ),
-          worktreePath: worktree.path,
-          branch: worktree.branch,
-          plan: planResult?.content || 'No plan available',
-          contextFiles,
-          spec: specContent,
-          previousTasks,
-          continueFrom:
-            continueFrom === 'blocked'
-              ? {
-                  status: 'blocked',
-                  previousSummary:
-                    taskInfo.summary || 'No previous summary',
-                  decision: decision || 'No decision provided',
-                }
-              : undefined,
-        });
+        if (!persistedWorkerPrompt || persistedWorkerPrompt.trim().length === 0) {
+          return toolError(`Failed to load worker prompt from task bead '${taskBeadId}' for task '${task}'`);
+        }
 
         const agent = 'mekkatorque';
 
@@ -238,23 +155,12 @@ export class WorktreeTools {
           .map((t) => `- **${t.name}**: ${t.summary}`)
           .join('\n');
         const promptMeta = calculatePromptMeta({
-          plan: planResult?.content || '',
+          plan: planContent || '',
           context: contextContent,
           previousTasks: previousTasksContent,
           spec: specContent,
           workerPrompt,
         });
-
-        taskService.writeWorkerPrompt(feature, task, workerPrompt);
-
-        const persistedWorkerPrompt = taskService.readTaskBeadArtifact(
-          feature,
-          task,
-          'worker_prompt',
-        );
-        if (!persistedWorkerPrompt || persistedWorkerPrompt.trim().length === 0) {
-          return toolError(`Failed to load worker prompt from task bead '${taskBeadId}' for task '${task}'`);
-        }
 
         const PREVIEW_MAX_LENGTH = 200;
         const workerPromptPreview =
@@ -316,8 +222,7 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
 
         const allWarnings = [...sizeWarnings, ...budgetWarnings];
 
-        return JSON.stringify(
-          {
+        return toolSuccess({
             ...responseBase,
             promptMeta,
             payloadMeta,
@@ -327,14 +232,13 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
               maxContextChars: DEFAULT_BUDGET.maxContextChars,
               maxTotalContextChars: DEFAULT_BUDGET.maxTotalContextChars,
               tasksIncluded: previousTasks.length,
-              tasksDropped: rawPreviousTasks.length - previousTasks.length,
+              tasksDropped: truncationEvents
+                .filter((e) => e.type === 'tasks_dropped')
+                .reduce((sum, e) => sum + (e.count ?? 0), 0),
               droppedTasksHint,
             },
             warnings: allWarnings.length > 0 ? allWarnings : undefined,
-          },
-          null,
-          2,
-        );
+        });
       },
     });
   }
@@ -386,11 +290,10 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
         blocker,
         feature: explicitFeature,
       }) {
-        if (explicitFeature) validatePathSegment(explicitFeature, 'feature');
-        validatePathSegment(task, 'task');
-        const feature = resolveFeature(explicitFeature);
-        if (!feature)
-          return toolError('No feature specified. Create a feature or provide feature param.');
+        validateTaskInput(task);
+        const resolution = resolveFeatureInput(resolveFeature, explicitFeature);
+        if (!resolution.ok) return toolError(resolution.error);
+        const feature = resolution.feature;
 
         const taskInfo = taskService.get(feature, task);
         if (!taskInfo) return toolError(`Task "${task}" not found`);
@@ -419,19 +322,14 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
           });
 
           const worktree = await worktreeService.get(feature, task);
-          return JSON.stringify(
-            {
+          return toolSuccess({
               status: 'blocked',
               task,
               summary,
               blocker,
               worktreePath: worktree?.path,
-              message:
-                'Task blocked. Warcraft Master will ask user and resume with warcraft_worktree_create(continueFrom: "blocked", decision: answer)',
-            },
-            null,
-            2,
-          );
+              message: 'Task blocked. Warcraft Master will ask user and resume with warcraft_worktree_create(continueFrom: "blocked", decision: answer)',
+          });
         }
 
         const commitResult = await worktreeService.commitChanges(
@@ -528,11 +426,10 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
           .describe('Feature name (defaults to detection or single feature)'),
       },
       async execute({ task, feature: explicitFeature }) {
-        if (explicitFeature) validatePathSegment(explicitFeature, 'feature');
-        validatePathSegment(task, 'task');
-        const feature = resolveFeature(explicitFeature);
-        if (!feature)
-          return toolError('No feature specified. Create a feature or provide feature param.');
+        validateTaskInput(task);
+        const resolution = resolveFeatureInput(resolveFeature, explicitFeature);
+        if (!resolution.ok) return toolError(resolution.error);
+        const feature = resolution.feature;
 
         await worktreeService.remove(feature, task);
         taskService.update(feature, task, { status: 'pending' });
@@ -563,11 +460,10 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
           .describe('Feature name (defaults to active)'),
       },
       async execute({ task, strategy = 'merge', feature: explicitFeature }) {
-        if (explicitFeature) validatePathSegment(explicitFeature, 'feature');
-        validatePathSegment(task, 'task');
-        const feature = resolveFeature(explicitFeature);
-        if (!feature)
-          return toolError('No feature specified. Create a feature or provide feature param.');
+        validateTaskInput(task);
+        const resolution = resolveFeatureInput(resolveFeature, explicitFeature);
+        if (!resolution.ok) return toolError(resolution.error);
+        const feature = resolution.feature;
 
         const taskInfo = taskService.get(feature, task);
         if (!taskInfo) return toolError(`Task "${task}" not found`);

@@ -12,8 +12,7 @@ It wires Warcraft prompts, tools, hooks, skills, and MCP integrations into runti
 - `src/mcp/`: built-in MCP provider wiring (`websearch`, `context7`, `grep-app`)
 - `src/skills/`: skill registry, loading, filtering, and generated registry integration
 - `src/utils/`: prompt assembly, workflow gates, observability, formatting helpers
-- `src/__tests__/`: cross-cutting unit tests for workflow gates and sandbox behavior
-- `src/e2e/`: runtime/plugin smoke and integration-level tests
+- `src/e2e/`: runtime/plugin smoke, integration, and end-to-end tests
 - `docs/`: package-specific design notes and internal docs
 - `schema/`: configuration schema assets
 - `skills/`: built-in skill markdown content distributed with the plugin

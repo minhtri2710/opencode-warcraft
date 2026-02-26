@@ -6,12 +6,9 @@ import {
   getContextPath,
   getTasksPath,
   listFeatureDirectories,
-  ensureDir,
-  readJson,
-  writeJson,
-  writeJsonLockedSync,
-  fileExists,
 } from '../../utils/paths.js';
+import { ensureDir, readJson, writeJson, fileExists } from '../../utils/fs.js';
+import { writeJsonLockedSync } from '../../utils/json-lock.js';
 import type { FeatureStore, CreateFeatureInput } from './types.js';
 
 /**

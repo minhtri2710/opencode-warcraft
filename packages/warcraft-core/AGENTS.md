@@ -18,7 +18,7 @@ It owns feature/plan/task/worktree services, path utilities, and shared types us
 - `src/utils/`: path resolution and environment/context detection helpers
 - `src/types.ts`: shared TypeScript domain types
 - `src/index.ts`: package export surface (single entry point)
-- `src/__tests__/` and `*.test.ts`: unit tests for services and utilities
+- `*.test.ts`: unit tests colocated next to source modules
 
 ## Change Workflow
 

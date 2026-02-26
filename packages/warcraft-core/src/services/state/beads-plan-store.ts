@@ -4,10 +4,8 @@ import type { BeadsRepository } from '../beads/BeadsRepository.js';
 import {
   getFeatureJsonPath,
   getPlanPath,
-  readJson,
-  readText,
-  writeJson,
 } from '../../utils/paths.js';
+import { readJson, readText, writeJson } from '../../utils/fs.js';
 
 type FeatureJsonWithPlanState = FeatureJson & {
   planApprovalHash?: string;

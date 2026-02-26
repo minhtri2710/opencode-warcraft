@@ -2,8 +2,8 @@ import type { FeatureJson, PlanComment } from '../../types.js';
 import type { PlanStore } from './types.js';
 import {
   getFeatureJsonPath,
-  readJson,
 } from '../../utils/paths.js';
+import { readJson } from '../../utils/fs.js';
 import { updateJsonLockedSync } from '../../utils/json-lock.js';
 
 type FeatureJsonWithPlanState = FeatureJson & {

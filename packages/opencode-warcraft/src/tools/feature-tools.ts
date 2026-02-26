@@ -1,6 +1,6 @@
 import { tool, type ToolDefinition } from '@opencode-ai/plugin';
 import type { FeatureService } from 'warcraft-core';
-import { validatePathSegment } from './index.js';
+import { resolveFeatureInput } from './tool-input.js';
 import { toolError, toolSuccess } from '../types.js';
 
 export interface FeatureToolsDependencies {
@@ -86,10 +86,9 @@ NEXT: Ask your first clarifying question about this feature.` });
           .describe('Feature name (defaults to active)'),
       },
       async execute({ name }) {
-        if (name) validatePathSegment(name, 'feature');
-        const feature = resolveFeature(name);
-        if (!feature)
-          return toolError('No feature specified. Create a feature or provide name.');
+        const resolution = resolveFeatureInput(resolveFeature, name);
+        if (!resolution.ok) return toolError(resolution.error);
+        const feature = resolution.feature;
         featureService.complete(feature);
         return toolSuccess({ message: `Feature "${feature}" marked as completed` });
       },

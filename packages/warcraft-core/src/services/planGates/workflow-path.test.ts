@@ -4,7 +4,7 @@ import {
   detectWorkflowPath,
   hasLightweightMiniRecord,
   validateLightweightPlan,
-} from '../utils/workflow-path';
+} from './workflow-path.js';
 
 describe('workflow path utilities', () => {
   test('defaults to standard path', () => {

@@ -1,9 +1,7 @@
 import {
   getPlanPath,
-  readText,
-  writeText,
-  fileExists,
 } from '../utils/paths.js';
+import { readText, writeText, fileExists } from '../utils/fs.js';
 import type { PlanComment, PlanReadResult } from '../types.js';
 import type { BeadsMode } from '../types.js';
 import * as fs from 'fs';

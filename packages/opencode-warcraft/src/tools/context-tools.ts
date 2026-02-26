@@ -7,13 +7,13 @@ import type {
   WorktreeService,
   AgentsMdService,
 } from 'warcraft-core';
-import { validatePathSegment } from './index.js';
+import { resolveFeatureInput, validatePathSegment } from './tool-input.js';
 import {
   buildEffectiveDependencies,
   computeRunnableAndBlocked,
   type TaskWithDeps,
 } from 'warcraft-core';
-import type { BvTriageService } from '../services/bv-triage-service.js';
+import type { BvTriageService } from 'warcraft-core';
 import type { BlockedResult } from '../types.js';
 import { toolError, toolSuccess } from '../types.js';
 
@@ -56,10 +56,9 @@ export class ContextTools {
           .describe('Feature name (defaults to active)'),
       },
       async execute({ name, content, feature: explicitFeature }) {
-        if (explicitFeature) validatePathSegment(explicitFeature, 'feature');
-        const feature = resolveFeature(explicitFeature);
-        if (!feature)
-          return toolError('No feature specified. Create a feature or provide feature param.');
+        const resolution = resolveFeatureInput(resolveFeature, explicitFeature);
+        if (!resolution.ok) return toolError(resolution.error);
+        const feature = resolution.feature;
 
         const filePath = contextService.write(feature, name, content);
         return toolSuccess({ message: `Context file written: ${filePath}` });
@@ -83,11 +82,9 @@ export class ContextTools {
           .describe('Feature name (defaults to active)'),
       },
       async execute({ feature: explicitFeature }) {
-        if (explicitFeature) validatePathSegment(explicitFeature, 'feature');
-        const feature = resolveFeature(explicitFeature);
-        if (!feature) {
-          return toolError('No feature specified and no active feature found', ['Use warcraft_feature_create to create a new feature']);
-        }
+        const resolution = resolveFeatureInput(resolveFeature, explicitFeature);
+        if (!resolution.ok) return toolError(resolution.error);
+        const feature = resolution.feature;
 
         const featureData = featureService.get(feature);
         if (!featureData) {
@@ -237,7 +234,7 @@ export class ContextTools {
                 ? 'locked'
                 : 'none';
 
-        return JSON.stringify({
+        return toolSuccess({
           feature: {
             name: feature,
             status: featureData.status,

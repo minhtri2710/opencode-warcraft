@@ -5,7 +5,8 @@ import * as child_process from "child_process";
 import { TaskService, TASK_STATUS_SCHEMA_VERSION } from "./taskService";
 import { BeadsRepository } from "./beads/BeadsRepository";
 import { TaskStatus } from "../types";
-import { getLockPath, readJson } from "../utils/paths";
+import { getLockPath } from '../utils/json-lock';
+import { readJson } from '../utils/fs';
 import { createStores } from "./state/index.js";
 import { formatSpecContent } from './specFormatter';
 

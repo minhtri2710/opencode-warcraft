@@ -1,6 +1,7 @@
 import * as path from 'path';
 import * as fs from 'fs';
-import { getFeaturePath, readJson, normalizePath, listFeatureDirectories } from './paths.js';
+import { getFeaturePath, normalizePath, listFeatureDirectories } from './paths.js';
+import { readJson } from './fs.js';
 import { FeatureJson } from '../types.js';
 
 export interface DetectionResult {

@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach } from 'bun:test';
 import { BeadsViewerGateway } from './BeadsViewerGateway.js';
-import type { BvCommandExecutor } from './BeadsViewerGateway.js';
+import type { BvCommandExecutor } from './bv-runner.js';
 
 describe('BeadsViewerGateway', () => {
   const TEST_DIRECTORY = '/tmp/test-project';

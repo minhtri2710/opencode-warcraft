@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { fileExists, readText, writeText } from '../utils/paths.js';
+import { fileExists, readText, writeText } from '../utils/fs.js';
 import type { ContextFile } from '../types.js';
 import type { ContextService } from './contextService.js';
 

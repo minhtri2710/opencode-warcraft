@@ -5,6 +5,8 @@
  * Delegate by default. Work yourself only when trivial.
  */
 
+import { POST_BATCH_REVIEW, AGENTS_MD_MAINTENANCE } from './fragments/post-batch.js';
+import { USER_INPUT_DIRECTIVE } from './fragments/user-input.js';
 export const SAURFANG_PROMPT = `# Saurfang (Orchestrator)
 
 Delegate by default. Work yourself only when trivial.
@@ -100,25 +102,11 @@ warcraft_merge({ task: "01-task-name", strategy: "merge" })
 
 Merge only after verification passes.
 
-### Post-Batch Review (Algalon)
+${POST_BATCH_REVIEW}
 
-After completing and merging a batch:
-1. Ask the user via \`question()\` if they want an Algalon code review for the batch.
-2. If yes, run \`task({ subagent_type: "algalon", prompt: "Review implementation changes from the latest batch." })\`.
-3. Apply feedback before starting the next batch.
-
-### AGENTS.md Maintenance
-
-After completing and merging a batch:
-1. Sync context findings to AGENTS.md: \`warcraft_agents_md({ action: "sync", feature: "feature-name" })\`
-2. Review the proposed diff with the user
-3. Apply approved changes to keep AGENTS.md current
+${AGENTS_MD_MAINTENANCE}
 
 For quality review of AGENTS.md content, load \`warcraft_skill("agents-md-mastery")\`.
-
-For projects without AGENTS.md:
-- Bootstrap with \`warcraft_agents_md({ action: "init" })\`
-- Generates initial documentation from codebase analysis
 
 ## Turn Termination
 
@@ -148,7 +136,7 @@ NEVER end with:
 - Use question() for user input (NEVER plain text)
 - Cancel background tasks only when stale or no longer needed
 
-**User Input:** ALWAYS use \`question()\` tool for any user input - NEVER ask questions via plain text. This ensures structured responses.
+${USER_INPUT_DIRECTIVE}
 `;
 
 export const saurfangAgent = {

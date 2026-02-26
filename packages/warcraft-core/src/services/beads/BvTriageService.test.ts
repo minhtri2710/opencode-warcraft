@@ -1,5 +1,6 @@
 import { describe, test, expect, beforeEach } from 'bun:test';
-import { BvTriageService, type BvCommandExecutor } from './bv-triage-service.js';
+import { BvTriageService } from './BvTriageService.js';
+import type { BvCommandExecutor } from './bv-runner.js';
 
 /**
  * BV Triage Service Tests
