@@ -1,6 +1,7 @@
 import { tool, type ToolDefinition } from '@opencode-ai/plugin';
 import type { FeatureService } from 'warcraft-core';
 import { validatePathSegment } from './index.js';
+import { toolError, toolSuccess } from '../types.js';
 
 export interface FeatureToolsDependencies {
   featureService: FeatureService;
@@ -28,11 +29,11 @@ export class FeatureTools {
       async execute({ name, ticket, priority }) {
         const priorityValue = priority ?? 3;
         if (!Number.isInteger(priorityValue) || priorityValue < 1 || priorityValue > 5) {
-          return `Error: Priority must be an integer between 1 and 5 (inclusive), got: ${priorityValue}`;
+          return toolError(`Priority must be an integer between 1 and 5 (inclusive), got: ${priorityValue}`);
         }
         const feature = featureService.create(name, ticket, priorityValue);
         const epicBeadId = (feature as { epicBeadId?: string }).epicBeadId;
-        return `Feature "${name}" created (epic: ${epicBeadId || 'unknown'}).
+        return toolSuccess({ message: `Feature "${name}" created (epic: ${epicBeadId || 'unknown'}}).
 
 ## Discovery Phase Required
 
@@ -65,7 +66,7 @@ When writing your plan, include:
 
 These prevent scope creep and re-proposing rejected solutions.
 
-NEXT: Ask your first clarifying question about this feature.`;
+NEXT: Ask your first clarifying question about this feature.` });
       },
     });
   }
@@ -88,9 +89,9 @@ NEXT: Ask your first clarifying question about this feature.`;
         if (name) validatePathSegment(name, 'feature');
         const feature = resolveFeature(name);
         if (!feature)
-          return 'Error: No feature specified. Create a feature or provide name.';
+          return toolError('No feature specified. Create a feature or provide name.');
         featureService.complete(feature);
-        return `Feature "${feature}" marked as completed`;
+        return toolSuccess({ message: `Feature "${feature}" marked as completed` });
       },
     });
   }

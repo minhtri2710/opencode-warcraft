@@ -42,7 +42,7 @@ describe('WorktreeService helpers', () => {
       raw: async (): Promise<string> => 'not-a-number\n',
     });
 
-    expect(manyCommits).toBe('HEAD~1');
+    expect(manyCommits).toBe('HEAD');
     expect(singleCommit).toBe('HEAD');
     expect(parseFailure).toBe('HEAD');
   });

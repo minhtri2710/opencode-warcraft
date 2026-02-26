@@ -3,6 +3,11 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { ContextService } from '../services/contextService.js';
 
+// Mock BeadsModeProvider for tests
+const mockBeadsModeProvider = {
+  getBeadsMode: () => 'on' as const,
+};
+
 const TEST_DIR = '/tmp/warcraft-core-contextservice-test-' + process.pid;
 const PROJECT_ROOT = TEST_DIR;
 
@@ -27,7 +32,7 @@ describe('ContextService', () => {
   beforeEach(() => {
     cleanup();
     fs.mkdirSync(TEST_DIR, { recursive: true });
-    service = new ContextService(PROJECT_ROOT);
+    service = new ContextService(PROJECT_ROOT, mockBeadsModeProvider);
   });
 
   afterEach(() => {

@@ -95,8 +95,9 @@ describe('FeatureTools', () => {
         ticket: undefined,
         priority: 0,
       });
-      expect(result0).toContain('Error');
-      expect(result0).toContain('Priority must be an integer between 1 and 5');
+      const parsed0 = JSON.parse(result0);
+      expect(parsed0.success).toBe(false);
+      expect(parsed0.error).toContain('Priority must be an integer between 1 and 5');
 
       // Test priority 6 (invalid)
       const result6 = await tool.execute({
@@ -104,8 +105,9 @@ describe('FeatureTools', () => {
         ticket: undefined,
         priority: 6,
       });
-      expect(result6).toContain('Error');
-      expect(result6).toContain('Priority must be an integer between 1 and 5');
+      const parsed6 = JSON.parse(result6);
+      expect(parsed6.success).toBe(false);
+      expect(parsed6.error).toContain('Priority must be an integer between 1 and 5');
 
       // Test non-integer priority (invalid)
       const resultDecimal = await tool.execute({
@@ -113,8 +115,9 @@ describe('FeatureTools', () => {
         ticket: undefined,
         priority: 2.5,
       });
-      expect(resultDecimal).toContain('Error');
-      expect(resultDecimal).toContain('Priority must be an integer between 1 and 5');
+      const parsedDecimal = JSON.parse(resultDecimal);
+      expect(parsedDecimal.success).toBe(false);
+      expect(parsedDecimal.error).toContain('Priority must be an integer between 1 and 5');
     });
 
     it('accepts valid priorities 1-5', async () => {
@@ -138,7 +141,8 @@ describe('FeatureTools', () => {
         ticket: undefined,
         priority: 0,
       });
-      expect(result).toContain('0');
+      const parsed = JSON.parse(result);
+      expect(parsed.error).toContain('0');
     });
   });
 });

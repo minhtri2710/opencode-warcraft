@@ -7,6 +7,7 @@ import type {
 } from 'warcraft-core';
 import { detectWorkflowPath, validateLightweightPlan } from '../utils/workflow-path.js';
 import { validatePathSegment } from './index.js';
+import { toolError, toolSuccess } from '../types.js';
 
 export interface TaskToolsDependencies {
   featureService: FeatureService;
@@ -40,19 +41,19 @@ export class TaskTools {
         if (explicitFeature) validatePathSegment(explicitFeature, 'feature');
         const feature = resolveFeature(explicitFeature);
         if (!feature)
-          return 'Error: No feature specified. Create a feature or provide feature param.';
+          return toolError('No feature specified. Create a feature or provide feature param.');
         const featureData = featureService.get(feature);
         if (!featureData) {
-          return 'Error: Feature not found';
+          return toolError('Feature not found');
         }
 
         const planResult = planService.read(feature);
         if (!planResult) {
-          return 'Error: No plan.md found';
+          return toolError('No plan.md found');
         }
 
         if (planResult.status !== 'approved') {
-          return 'Error: Plan must be approved first';
+          return toolError('Plan must be approved first');
         }
 
         let warning = '';
@@ -63,7 +64,7 @@ export class TaskTools {
             const issueBlock = lightweightIssues.map((issue) => `- ${issue}`).join('\n');
             const message = `Lightweight workflow requirements are not satisfied:\n${issueBlock}`;
             if (workflowGatesMode === 'enforce') {
-              return `Error: ${message}`;
+              return toolError(message);
             }
             warning = `\nWarning (mode=${workflowGatesMode}): ${message}`;
           }
@@ -73,7 +74,7 @@ export class TaskTools {
         if (featureData.status === 'approved') {
           featureService.updateStatus(feature, 'executing');
         }
-        return `Tasks synced: ${result.created.length} created, ${result.removed.length} removed, ${result.kept.length} kept${warning}`;
+        return toolSuccess({ message: `Tasks synced: ${result.created.length} created, ${result.removed.length} removed, ${result.kept.length} kept${warning}` });
       },
     });
   }
@@ -99,13 +100,13 @@ export class TaskTools {
         if (explicitFeature) validatePathSegment(explicitFeature, 'feature');
         const feature = resolveFeature(explicitFeature);
         if (!feature)
-          return 'Error: No feature specified. Create a feature or provide feature param.';
+          return toolError('No feature specified. Create a feature or provide feature param.');
         const priorityValue = priority ?? 3;
         if (!Number.isInteger(priorityValue) || priorityValue < 1 || priorityValue > 5) {
-          return `Error: Priority must be an integer between 1 and 5 (inclusive), got: ${priorityValue}`;
+          return toolError(`Priority must be an integer between 1 and 5 (inclusive), got: ${priorityValue}`);
         }
         const folder = taskService.create(feature, name, order, priorityValue);
-        return `Manual task created: ${folder}\nReminder: start work with warcraft_worktree_create to use its worktree, and ensure any subagents work in that worktree too.`;
+          return toolSuccess({ message: `Manual task created: ${folder}\nReminder: start work with warcraft_worktree_create to use its worktree, and ensure any subagents work in that worktree too.` });
       },
     });
   }
@@ -135,12 +136,12 @@ export class TaskTools {
         validatePathSegment(task, 'task');
         const feature = resolveFeature(explicitFeature);
         if (!feature)
-          return 'Error: No feature specified. Create a feature or provide feature param.';
+          return toolError('No feature specified. Create a feature or provide feature param.');
         const updated = taskService.update(feature, task, {
           status: status ? validateTaskStatus(status) : undefined,
           summary,
         });
-        return `Task "${task}" updated: status=${updated.status}`;
+        return toolSuccess({ message: `Task "${task}" updated: status=${updated.status}` });
       },
     });
   }

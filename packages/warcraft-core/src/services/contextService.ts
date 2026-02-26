@@ -8,8 +8,8 @@ export type { ContextFile };
 export class ContextService {
   constructor(
     private readonly projectRoot: string,
-    private readonly beadsModeProvider: BeadsModeProvider = new ConfigService(),
-  ) {}
+    private readonly beadsModeProvider: BeadsModeProvider,
+ ) {}
 
   write(featureName: string, fileName: string, content: string): string {
     const contextPath = getContextPath(this.projectRoot, featureName, this.beadsModeProvider.getBeadsMode());
@@ -113,7 +113,7 @@ export class ContextService {
 
   private normalizeFileName(name: string): string {
     const normalized = name.replace(/\.md$/, '');
-    sanitizeName(normalized);
-    return `${normalized}.md`;
+    const sanitized = sanitizeName(normalized);
+    return `${sanitized}.md`;
   }
 }

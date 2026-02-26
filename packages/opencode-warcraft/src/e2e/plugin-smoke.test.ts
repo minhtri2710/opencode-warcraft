@@ -144,7 +144,9 @@ describeIfHostReady("e2e: opencode-warcraft plugin (in-process)", () => {
       { name: "smoke-feature" },
       toolContext
     );
-    expect(createOutput).toContain('Feature "smoke-feature" created');
+    const createParsed = JSON.parse(createOutput as string);
+    expect(createParsed.success).toBe(true);
+    expect(createParsed.data?.message).toContain('Feature "smoke-feature" created');
 
     const plan = `# Smoke Feature
 
@@ -184,13 +186,19 @@ Do it
       { content: plan, feature: "smoke-feature" },
       toolContext
     );
-    expect(planOutput).toContain("Plan written");
+    const planParsed = JSON.parse(planOutput as string);
+    expect(planParsed.success).toBe(true);
+    expect(planParsed.data?.message).toContain("Plan written");
 
     const approveOutput = await hooks.tool!.warcraft_plan_approve.execute({ feature: "smoke-feature" }, toolContext);
-    expect(approveOutput).toContain("Plan approved");
+    const approveParsed = JSON.parse(approveOutput as string);
+    expect(approveParsed.success).toBe(true);
+    expect(approveParsed.data?.message).toContain("Plan approved");
 
     const syncOutput = await hooks.tool!.warcraft_tasks_sync.execute({ feature: "smoke-feature" }, toolContext);
-    expect(syncOutput).toContain("Tasks synced");
+    const syncParsed = JSON.parse(syncOutput as string);
+    expect(syncParsed.success).toBe(true);
+    expect(syncParsed.data?.message).toContain("Tasks synced");
 
     // In beads-on mode, task state lives in bead artifacts (no local docs/ cache).
     // Verify task was created by checking the status tool output below.

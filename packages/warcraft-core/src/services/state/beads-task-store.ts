@@ -360,7 +360,8 @@ export class BeadsTaskStore implements TaskStore {
       };
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
-      console.warn(`[warcraft] Failed to get runnable tasks from beads: ${reason}`);
+      // Log at error level so issues are visible in agent output
+      console.error(`[warcraft] Failed to get runnable tasks from beads: ${reason}`);
       return null;
     }
   }

@@ -1,6 +1,7 @@
 import { tool, type ToolDefinition } from '@opencode-ai/plugin';
 import type { SkillDefinition } from '../skills/types.js';
 import { loadBuiltinSkill } from '../skills/builtin.js';
+import { toolError, toolSuccess } from '../types.js';
 
 export interface SkillToolsDependencies {
   filteredSkills: SkillDefinition[];
@@ -54,28 +55,24 @@ Use this when a task matches an available skill's description. The descriptions 
       async execute({ name }) {
         if (!availableNames.has(name)) {
           const available = filteredSkills.map((s: SkillDefinition) => s.name).join(', ');
-          throw new Error(
-            `Skill "${name}" not available. Available Warcraft skills: ${available || 'none'}`,
-          );
+          return toolError(`Skill "${name}" not available. Available Warcraft skills: ${available || 'none'}`);
         }
 
         const result = loadBuiltinSkill(name);
 
         if (!result.found || !result.skill) {
           const available = filteredSkills.map((s: SkillDefinition) => s.name).join(', ');
-          throw new Error(
-            `Skill "${name}" not found. Available Warcraft skills: ${available || 'none'}`,
-          );
+          return toolError(`Skill "${name}" not found. Available Warcraft skills: ${available || 'none'}`);
         }
 
         const skill = result.skill;
-        return [
+        return toolSuccess({ message: [
           `## Warcraft Skill: ${skill.name}`,
           '',
           `**Description**: ${skill.description}`,
           '',
           skill.template,
-        ].join('\n');
+        ].join('\n') });
       },
     });
   }

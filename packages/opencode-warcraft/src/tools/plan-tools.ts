@@ -9,6 +9,7 @@ import {
 } from '../utils/plan-review-gate.js';
 import { detectWorkflowPath } from '../utils/workflow-path.js';
 
+import { toolError, toolSuccess } from '../types.js';
 export interface PlanToolsDependencies {
   featureService: FeatureService;
   planService: PlanService;
@@ -52,11 +53,11 @@ export class PlanTools {
         if (explicitFeature) validatePathSegment(explicitFeature, 'feature');
         const feature = resolveFeature(explicitFeature);
         if (!feature)
-          return 'Error: No feature specified. Create a feature or provide feature param.';
+          return toolError('No feature specified. Create a feature or provide feature param.');
 
         const discoveryError = validateDiscoverySection(content);
         if (discoveryError) {
-          return discoveryError;
+          return toolError(discoveryError);
         }
 
         captureSession(feature, toolContext);
@@ -64,7 +65,7 @@ export class PlanTools {
         updateFeatureMetadata(feature, {
           workflowPath: detectWorkflowPath(content),
         });
-        return `Plan written to ${planPath}. Comments cleared for fresh review.`;
+        return toolSuccess({ message: `Plan written to ${planPath}. Comments cleared for fresh review.` });
       },
     });
   }
@@ -90,11 +91,11 @@ export class PlanTools {
         if (explicitFeature) validatePathSegment(explicitFeature, 'feature');
         const feature = resolveFeature(explicitFeature);
         if (!feature)
-          return 'Error: No feature specified. Create a feature or provide feature param.';
+          return toolError('No feature specified. Create a feature or provide feature param.');
         captureSession(feature, toolContext);
         const result = planService.read(feature);
-        if (!result) return 'Error: No plan.md found';
-        return JSON.stringify(result, null, 2);
+        if (!result) return toolError('No plan.md found');
+        return toolSuccess(result);
       },
     });
   }
@@ -120,21 +121,21 @@ export class PlanTools {
         if (explicitFeature) validatePathSegment(explicitFeature, 'feature');
         const feature = resolveFeature(explicitFeature);
         if (!feature)
-          return 'Error: No feature specified. Create a feature or provide feature param.';
+          return toolError('No feature specified. Create a feature or provide feature param.');
         captureSession(feature, toolContext);
         const comments = planService.getComments(feature);
         if (comments.length > 0) {
-          return `Error: Cannot approve - ${comments.length} unresolved comment(s). Address them first.`;
+          return toolError(`Cannot approve - ${comments.length} unresolved comment(s). Address them first.`);
         }
 
         const planResult = planService.read(feature);
         if (!planResult) {
-          return 'Error: No plan.md found';
+          return toolError('No plan.md found');
         }
 
         const checklistResult = validatePlanReviewChecklist(planResult.content);
         if (!checklistResult.ok && workflowGatesMode === 'enforce') {
-          return `Error: ${formatPlanReviewChecklistIssues(checklistResult.issues)}`;
+          return toolError(formatPlanReviewChecklistIssues(checklistResult.issues));
         }
 
         planService.approve(feature);
@@ -147,10 +148,10 @@ export class PlanTools {
         });
 
         if (!checklistResult.ok && workflowGatesMode === 'warn') {
-          return `Plan approved with warning (mode=${workflowGatesMode}).\n${formatPlanReviewChecklistIssues(checklistResult.issues)}\n\nRun warcraft_tasks_sync to generate tasks.`;
+          return toolSuccess({ message: `Plan approved with warning (mode=${workflowGatesMode}).\n${formatPlanReviewChecklistIssues(checklistResult.issues)}\n\nRun warcraft_tasks_sync to generate tasks.` });
         }
 
-        return 'Plan approved. Run warcraft_tasks_sync to generate tasks.';
+        return toolSuccess({ message: 'Plan approved. Run warcraft_tasks_sync to generate tasks.' });
       },
     });
   }

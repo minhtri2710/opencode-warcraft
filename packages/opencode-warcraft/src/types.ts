@@ -29,6 +29,14 @@ export interface ToolWarning {
 	count?: number;
 }
 
+export interface BlockedResult {
+  blocked: boolean;
+  reason?: string;
+  message?: string;
+  blockedPath?: string;
+}
+
+
 /** Helper to create a success ToolResult JSON string. */
 export function toolSuccess<T>(data: T): string {
 	return JSON.stringify({ success: true, data } satisfies ToolResult<T>, null, 2);

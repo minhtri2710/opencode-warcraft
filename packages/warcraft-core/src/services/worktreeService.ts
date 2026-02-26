@@ -75,16 +75,7 @@ export class WorktreeService {
   }
 
   private async getDefaultBaseCommit(git: SimpleGit): Promise<string> {
-    try {
-      const countRaw = (await git.raw(["rev-list", "--count", "HEAD"])).trim();
-      const count = Number.parseInt(countRaw, 10);
-      if (!Number.isFinite(count) || count <= 1) {
-        return "HEAD";
-      }
-      return "HEAD~1";
-    } catch {
-      return "HEAD";
-    }
+    return "HEAD";
   }
 
   async create(feature: string, step: string, baseBranch?: string): Promise<WorktreeInfo> {
@@ -314,24 +305,30 @@ export class WorktreeService {
     const branchName = this.getBranchName(feature, step);
     const git = this.getGit();
 
+    const lockPath = path.join(this.getWorktreesDir(), `${feature}-${step}.create`);
+    const release = await acquireLock(lockPath, { timeout: 10000 });
     try {
-      await git.raw(["worktree", "remove", worktreePath, "--force"]);
-    } catch {
-      await fs.rm(worktreePath, { recursive: true, force: true });
-    }
-
-    try {
-      await git.raw(["worktree", "prune"]);
-    } catch {
-      /* intentional */
-    }
-
-    if (deleteBranch) {
       try {
-        await git.deleteLocalBranch(branchName, true);
+        await git.raw(["worktree", "remove", worktreePath, "--force"]);
+      } catch {
+        await fs.rm(worktreePath, { recursive: true, force: true });
+      }
+
+      try {
+        await git.raw(["worktree", "prune"]);
       } catch {
         /* intentional */
       }
+
+      if (deleteBranch) {
+        try {
+          await git.deleteLocalBranch(branchName, true);
+        } catch {
+          /* intentional */
+        }
+      }
+    } finally {
+      release();
     }
   }
 

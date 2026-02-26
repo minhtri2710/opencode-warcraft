@@ -1,4 +1,7 @@
 import { tool, type ToolDefinition } from '@opencode-ai/plugin';
+import type { BlockedResult } from '../types.js';
+import { toolError, toolSuccess } from '../types.js';
+
 import type {
   FeatureService,
   PlanService,
@@ -31,7 +34,7 @@ export interface WorktreeToolsDependencies {
     list: (feature: string) => Array<{ name: string; content: string }>;
   };
   validateTaskStatus: (status: string) => TaskStatusType;
-  checkBlocked: (feature: string) => string | null;
+  checkBlocked: (feature: string) => BlockedResult;
   checkDependencies: (
     feature: string,
     taskFolder: string,
@@ -78,27 +81,21 @@ export class WorktreeTools {
         validatePathSegment(task, 'task');
         const feature = resolveFeature(explicitFeature);
         if (!feature)
-          return JSON.stringify({ error: 'No feature specified. Create a feature or provide feature param.' });
+          return toolError('No feature specified. Create a feature or provide feature param.');
 
-        const blockedMessage = checkBlocked(feature);
-        if (blockedMessage) {
-          // If blockedMessage is already a JSON string, return it as-is
-          try {
-            JSON.parse(blockedMessage);
-            return blockedMessage;
-          } catch {
-            return JSON.stringify({ error: blockedMessage });
-          }
+        const blockedResult = checkBlocked(feature);
+        if (blockedResult.blocked) {
+          return toolError(blockedResult.message || 'Feature is blocked');
         }
 
         const taskInfo = taskService.get(feature, task);
-        if (!taskInfo) return JSON.stringify({ error: `Task "${task}" not found` });
+        if (!taskInfo) return toolError(`Task "${task}" not found`);
 
         // Allow continuing blocked tasks, but not completed ones
         if (taskInfo.status === 'done')
-          return JSON.stringify({ error: 'Task already completed' });
+          return toolError('Task already completed');
         if (continueFrom === 'blocked' && taskInfo.status !== 'blocked') {
-          return JSON.stringify({ error: 'Task is not in blocked state. Use without continueFrom.' });
+          return toolError('Task is not in blocked state. Use without continueFrom.');
         }
 
         if (continueFrom !== 'blocked') {
@@ -119,7 +116,7 @@ export class WorktreeTools {
         let worktree: Awaited<ReturnType<typeof worktreeService.create>>;
         if (continueFrom === 'blocked') {
           worktree = await worktreeService.get(feature, task);
-          if (!worktree) return JSON.stringify({ error: 'No worktree found for blocked task' });
+          if (!worktree) return toolError('No worktree found for blocked task');
         } else {
           worktree = await worktreeService.create(feature, task);
         }
@@ -256,11 +253,7 @@ export class WorktreeTools {
           'worker_prompt',
         );
         if (!persistedWorkerPrompt || persistedWorkerPrompt.trim().length === 0) {
-          return JSON.stringify({
-            error: `Failed to load worker prompt from task bead '${taskBeadId}' for task '${task}'`,
-            taskBeadId,
-            task,
-          });
+          return toolError(`Failed to load worker prompt from task bead '${taskBeadId}' for task '${task}'`);
         }
 
         const PREVIEW_MAX_LENGTH = 200;
@@ -397,15 +390,15 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
         validatePathSegment(task, 'task');
         const feature = resolveFeature(explicitFeature);
         if (!feature)
-          return 'Error: No feature specified. Create a feature or provide feature param.';
+          return toolError('No feature specified. Create a feature or provide feature param.');
 
         const taskInfo = taskService.get(feature, task);
-        if (!taskInfo) return `Error: Task "${task}" not found`;
+        if (!taskInfo) return toolError(`Task "${task}" not found`);
         if (
           taskInfo.status !== 'in_progress' &&
           taskInfo.status !== 'blocked'
         )
-          return 'Error: Task not in progress';
+          return toolError('Task not in progress');
 
         // GATE: Check for explicit build/test/lint pass evidence when completing
         if (status === 'completed') {
@@ -414,20 +407,8 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
           );
 
           if (missingGates.length > 0) {
-            return `BLOCKED: Missing explicit verification evidence for ${missingGates.join(', ')}.
-
-Before claiming completion, you must:
-1. Run build, test, and lint gates
-2. Include one pass signal per gate in summary (for example: "build: exit 0")
-3. Ensure each gate appears on its own line for machine parsing
-
-Example summary:
-- build: bun run build (exit 0)
-- test: bun run test (exit 0)
-- lint: bun run lint (exit 0)
-
-Re-run with updated summary showing verification results.`;
-          }
+            return toolError(`Missing explicit verification evidence for ${missingGates.join(', ')}. Before claiming completion, run build, test, and lint gates. Include one pass signal per gate in summary (e.g. "build: exit 0"). Re-run with updated summary showing verification results.`);
+        }
         }
 
         if (status === 'blocked') {
@@ -516,7 +497,7 @@ Re-run with updated summary showing verification results.`;
         taskService.writeReport(feature, task, reportLines.join('\n'));
 
         if (status === 'completed' && !commitResult.committed) {
-          return `Error: Cannot mark task "${task}" completed because no commit was created (${commitResult.message}). Task status unchanged.`;
+          return toolError(`Cannot mark task "${task}" completed because no commit was created (${commitResult.message}). Task status unchanged.`);
         }
 
         const finalStatus = status === 'completed' ? 'done' : status;
@@ -526,7 +507,7 @@ Re-run with updated summary showing verification results.`;
         });
 
         const worktree = await worktreeService.get(feature, task);
-        return `Task "${task}" ${status}. Changes committed to branch ${worktree?.branch || 'unknown'}.\nUse warcraft_merge to integrate changes. Worktree preserved at ${worktree?.path || 'unknown'}.`;
+        return toolSuccess({ message: `Task "${task}" ${status}. Changes committed to branch ${worktree?.branch || 'unknown'}.\nUse warcraft_merge to integrate changes. Worktree preserved at ${worktree?.path || 'unknown'}.` });
       },
     });
   }
@@ -551,12 +532,12 @@ Re-run with updated summary showing verification results.`;
         validatePathSegment(task, 'task');
         const feature = resolveFeature(explicitFeature);
         if (!feature)
-          return 'Error: No feature specified. Create a feature or provide feature param.';
+          return toolError('No feature specified. Create a feature or provide feature param.');
 
         await worktreeService.remove(feature, task);
         taskService.update(feature, task, { status: 'pending' });
 
-        return `Task "${task}" aborted. Status reset to pending.`;
+        return toolSuccess({ message: `Task "${task}" aborted. Status reset to pending.` });
       },
     });
   }
@@ -586,23 +567,23 @@ Re-run with updated summary showing verification results.`;
         validatePathSegment(task, 'task');
         const feature = resolveFeature(explicitFeature);
         if (!feature)
-          return 'Error: No feature specified. Create a feature or provide feature param.';
+          return toolError('No feature specified. Create a feature or provide feature param.');
 
         const taskInfo = taskService.get(feature, task);
-        if (!taskInfo) return `Error: Task "${task}" not found`;
+        if (!taskInfo) return toolError(`Task "${task}" not found`);
         if (taskInfo.status !== 'done')
-          return 'Error: Task must be completed before merging. Use warcraft_worktree_commit first.';
+          return toolError('Task must be completed before merging. Use warcraft_worktree_commit first.');
 
         const result = await worktreeService.merge(feature, task, strategy);
 
         if (!result.success) {
           if (result.conflicts && result.conflicts.length > 0) {
-            return `Merge failed with conflicts in:\n${result.conflicts.map((f: string) => `- ${f}`).join('\n')}\n\nResolve conflicts manually or try a different strategy.`;
+            return toolError(`Merge failed with conflicts in:\n${result.conflicts.map((f: string) => `- ${f}`).join('\n')}\n\nResolve conflicts manually or try a different strategy.`);
           }
-          return `Merge failed: ${result.error}`;
+          return toolError(`Merge failed: ${result.error}`);
         }
 
-        return `Task "${task}" merged successfully using ${strategy} strategy.\nCommit: ${result.sha}\nFiles changed: ${result.filesChanged?.length || 0}`;
+        return toolSuccess({ message: `Task "${task}" merged successfully using ${strategy} strategy.\nCommit: ${result.sha}\nFiles changed: ${result.filesChanged?.length || 0}` });
       },
     });
   }

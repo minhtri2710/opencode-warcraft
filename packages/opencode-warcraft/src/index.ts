@@ -110,6 +110,7 @@ import {
 import {
   createVariantHook,
 } from "./hooks/variant-hook.js";
+import type { BlockedResult } from "./types.js";
 import {
   FeatureTools,
   PlanTools,
@@ -229,7 +230,7 @@ const plugin: Plugin = async (ctx) => {
   const planService = new PlanService(directory, stores.planStore, beadsMode);
   const taskService = new TaskService(directory, stores.taskStore, beadsMode);
   const featureService = new FeatureService(directory, stores.featureStore, planService, beadsMode, taskService);
-  const contextService = new ContextService(directory);
+  const contextService = new ContextService(directory, configService);
   const agentsMdService = new AgentsMdService(directory, contextService);
   const disabledMcps = configService.getDisabledMcps();
   const disabledSkills = configService.getDisabledSkills();
@@ -312,21 +313,22 @@ const plugin: Plugin = async (ctx) => {
    * - If file exists, feature is blocked
    * - File contents = reason for blocking
    */
-  const checkBlocked = (feature: string): string | null => {
+  const checkBlocked = (feature: string): BlockedResult => {
     const blockedPath = path.join(
       getFeaturePath(directory, feature, configService.getBeadsMode()),
       'BLOCKED',
     );
     try {
       const reason = fs.readFileSync(blockedPath, "utf-8").trim();
-      return `⛔ BLOCKED by Commander
+      const message = `⛔ BLOCKED by Commander
 
 ${reason || "(No reason provided)"}
 
 The human has blocked this feature. Wait for them to unblock it.
 To unblock: Remove ${blockedPath}`;
+      return { blocked: true, reason, message, blockedPath };
     } catch {
-      return null;
+      return { blocked: false };
     }
   };
 

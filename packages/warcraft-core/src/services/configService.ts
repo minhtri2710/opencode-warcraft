@@ -7,6 +7,41 @@ import type { ParallelExecutionConfig } from "../types.js";
 import type { SandboxConfig } from "./dockerSandboxService.js";
 
 /**
+ * All supported agent names for config merging.
+ * Used to iterate over agent configs without duplication.
+ */
+const AGENT_KEYS = [
+  "khadgar",
+  "mimiron",
+  "saurfang",
+  "brann",
+  "mekkatorque",
+  "algalon",
+] as const;
+
+/**
+ * Deep merge agent configs from defaults and stored config.
+ * Handles each agent in AGENT_KEYS with proper deep merge semantics.
+ */
+function mergeAgentConfigs(
+  defaultAgents: WarcraftConfig["agents"],
+  storedAgents: Record<string, unknown>,
+): WarcraftConfig["agents"] {
+  const merged: WarcraftConfig["agents"] = {
+    ...defaultAgents,
+    ...storedAgents,
+  };
+
+  for (const key of AGENT_KEYS) {
+    merged[key] = {
+      ...defaultAgents?.[key],
+      ...(storedAgents[key] as Record<string, unknown> | undefined),
+    };
+  }
+
+  return merged;
+}
+/**
  * ConfigService manages user config at ~/.config/opencode/opencode_warcraft.json
  *
  * This is USER config (not project-scoped):
@@ -56,52 +91,10 @@ export class ConfigService {
           ...DEFAULT_WARCRAFT_CONFIG.parallelExecution,
           ...storedParallelExecution,
         },
-        agents: {
-          ...DEFAULT_WARCRAFT_CONFIG.agents,
-          ...storedAgents,
-          // Deep merge khadgar agent config
-          khadgar: {
-            ...DEFAULT_WARCRAFT_CONFIG.agents?.["khadgar"],
-            ...(storedAgents["khadgar"] as
-              | Record<string, unknown>
-              | undefined),
-          },
-          // Deep merge mimiron agent config
-          mimiron: {
-            ...DEFAULT_WARCRAFT_CONFIG.agents?.["mimiron"],
-            ...(storedAgents["mimiron"] as
-              | Record<string, unknown>
-              | undefined),
-          },
-          // Deep merge saurfang agent config
-          saurfang: {
-            ...DEFAULT_WARCRAFT_CONFIG.agents?.["saurfang"],
-            ...(storedAgents["saurfang"] as
-              | Record<string, unknown>
-              | undefined),
-          },
-          // Deep merge brann agent config
-          brann: {
-            ...DEFAULT_WARCRAFT_CONFIG.agents?.["brann"],
-            ...(storedAgents["brann"] as
-              | Record<string, unknown>
-              | undefined),
-          },
-          // Deep merge mekkatorque agent config
-          mekkatorque: {
-            ...DEFAULT_WARCRAFT_CONFIG.agents?.["mekkatorque"],
-            ...(storedAgents["mekkatorque"] as
-              | Record<string, unknown>
-              | undefined),
-          },
-          // Deep merge algalon agent config
-          algalon: {
-            ...DEFAULT_WARCRAFT_CONFIG.agents?.["algalon"],
-            ...(storedAgents["algalon"] as
-              | Record<string, unknown>
-              | undefined),
-          },
-        },
+        agents: mergeAgentConfigs(
+          DEFAULT_WARCRAFT_CONFIG.agents,
+          storedAgents
+        ),
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -302,33 +295,6 @@ export class ConfigService {
       return currentAgents;
     }
 
-    return {
-      ...currentAgents,
-      ...updateAgents,
-      khadgar: {
-        ...currentAgents?.khadgar,
-        ...updateAgents.khadgar,
-      },
-      mimiron: {
-        ...currentAgents?.mimiron,
-        ...updateAgents.mimiron,
-      },
-      saurfang: {
-        ...currentAgents?.saurfang,
-        ...updateAgents.saurfang,
-      },
-      brann: {
-        ...currentAgents?.brann,
-        ...updateAgents.brann,
-      },
-      mekkatorque: {
-        ...currentAgents?.mekkatorque,
-        ...updateAgents.mekkatorque,
-      },
-      algalon: {
-        ...currentAgents?.algalon,
-        ...updateAgents.algalon,
-      },
-    };
+    return mergeAgentConfigs(currentAgents, updateAgents);
   }
 }

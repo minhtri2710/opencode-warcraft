@@ -129,7 +129,9 @@ describe('TaskTools', () => {
         feature: undefined,
         priority: 0,
       });
-      expect(result0).toContain('Error');
+      const parsed0 = JSON.parse(result0);
+      expect(parsed0.success).toBe(false);
+      expect(parsed0.error).toContain('Priority must be an integer between 1 and 5');
       expect(result0).toContain('Priority must be an integer between 1 and 5');
 
       // Test priority 6 (invalid)
@@ -139,7 +141,9 @@ describe('TaskTools', () => {
         feature: undefined,
         priority: 6,
       });
-      expect(result6).toContain('Error');
+      const parsed6 = JSON.parse(result6);
+      expect(parsed6.success).toBe(false);
+      expect(parsed6.error).toContain('Priority must be an integer between 1 and 5');
       expect(result6).toContain('Priority must be an integer between 1 and 5');
 
       // Test non-integer priority (invalid)
@@ -149,7 +153,9 @@ describe('TaskTools', () => {
         feature: undefined,
         priority: 2.5,
       });
-      expect(resultDecimal).toContain('Error');
+      const parsedDecimal = JSON.parse(resultDecimal);
+      expect(parsedDecimal.success).toBe(false);
+      expect(parsedDecimal.error).toContain('Priority must be an integer between 1 and 5');
       expect(resultDecimal).toContain('Priority must be an integer between 1 and 5');
     });
 

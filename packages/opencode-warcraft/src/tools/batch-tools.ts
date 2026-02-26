@@ -19,6 +19,8 @@ import {
   DEFAULT_BUDGET,
 } from '../utils/prompt-budgeting.js';
 import { buildWorkerPrompt } from '../utils/worker-prompt.js';
+import type { BlockedResult } from '../types.js';
+import { toolError, toolSuccess } from '../types.js';
 
 export interface BatchToolsDependencies {
   featureService: FeatureService;
@@ -28,7 +30,7 @@ export interface BatchToolsDependencies {
   contextService: {
     list: (feature: string) => Array<{ name: string; content: string }>;
   };
-  checkBlocked: (feature: string) => string | null;
+  checkBlocked: (feature: string) => BlockedResult;
   checkDependencies: (
     feature: string,
     taskFolder: string,
@@ -134,18 +136,20 @@ export class BatchTools {
         if (explicitFeature) validatePathSegment(explicitFeature, 'feature');
         const feature = resolveFeature(explicitFeature);
         if (!feature)
-          return JSON.stringify({ error: 'No feature specified. Create a feature or provide feature param.' });
+          return toolError('No feature specified. Create a feature or provide feature param.');
 
-        const blockedMessage = checkBlocked(feature);
-        if (blockedMessage) return blockedMessage;
+        const blockedResult = checkBlocked(feature);
+        if (blockedResult.blocked) {
+          return toolError(blockedResult.message || 'Feature is blocked');
+        }
 
         const featureData = featureService.get(feature);
         if (!featureData)
-          return JSON.stringify({ error: `Feature '${feature}' not found` });
+          return toolError(`Feature '${feature}' not found`);
 
         const allTasks = taskService.list(feature);
         if (allTasks.length === 0)
-          return JSON.stringify({ error: 'No tasks found. Run warcraft_tasks_sync first.' });
+          return toolError('No tasks found. Run warcraft_tasks_sync first.');
 
         const tasksWithDeps: TaskWithDeps[] = allTasks.map((t) => {
           const rawStatus = taskService.getRawStatus(feature, t.folder);
@@ -202,7 +206,7 @@ export class BatchTools {
 
         // Execute mode
         if (!selectedTasks || selectedTasks.length === 0)
-          return JSON.stringify({ error: 'tasks array is required for execute mode. Use preview mode first to see runnable tasks.' });
+          return toolError('tasks array is required for execute mode. Use preview mode first to see runnable tasks.');
 
         for (const task of selectedTasks) {
           validatePathSegment(task, 'task');

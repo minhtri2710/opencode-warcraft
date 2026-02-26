@@ -3,8 +3,8 @@ import type { PlanStore } from './types.js';
 import {
   getFeatureJsonPath,
   readJson,
-  writeJson,
 } from '../../utils/paths.js';
+import { updateJsonLockedSync } from '../../utils/json-lock.js';
 
 type FeatureJsonWithPlanState = FeatureJson & {
   planApprovalHash?: string;
@@ -27,17 +27,23 @@ export class FilesystemPlanStore implements PlanStore {
     timestamp: string,
     _sessionId?: string,
   ): void {
-    const feature = this.readFeature(featureName);
-    if (!feature) return;
-
-    feature.status = 'approved';
-    feature.approvedAt = timestamp;
-    feature.planApprovalHash = planHash;
-    this.writeFeature(featureName, feature);
+    const filePath = getFeatureJsonPath(this.projectRoot, featureName, 'off');
+    updateJsonLockedSync<FeatureJsonWithPlanState>(
+      filePath,
+      (current) => ({
+        ...current,
+        status: 'approved',
+        approvedAt: timestamp,
+        planApprovalHash: planHash,
+      }),
+      {} as FeatureJsonWithPlanState,
+    );
   }
 
   isApproved(featureName: string, currentPlanHash: string): boolean {
-    const feature = this.readFeature(featureName);
+    const feature = readJson<FeatureJsonWithPlanState>(
+      getFeatureJsonPath(this.projectRoot, featureName, 'off'),
+    );
     if (!feature || feature.status !== 'approved') {
       return false;
     }
@@ -48,26 +54,37 @@ export class FilesystemPlanStore implements PlanStore {
   }
 
   revokeApproval(featureName: string): void {
-    const feature = this.readFeature(featureName);
-    if (!feature || feature.status !== 'approved') return;
-
-    feature.status = 'planning';
-    delete feature.approvedAt;
-    delete feature.planApprovalHash;
-    this.writeFeature(featureName, feature);
+    const filePath = getFeatureJsonPath(this.projectRoot, featureName, 'off');
+    updateJsonLockedSync<FeatureJsonWithPlanState>(
+      filePath,
+      (current) => {
+        if (!current || current.status !== 'approved') return current;
+        const updated = { ...current, status: 'planning' as const };
+        delete updated.approvedAt;
+        delete updated.planApprovalHash;
+        return updated;
+      },
+      {} as FeatureJsonWithPlanState,
+    );
   }
 
   getComments(featureName: string): PlanComment[] {
-    const feature = this.readFeature(featureName);
+    const feature = readJson<FeatureJsonWithPlanState>(
+      getFeatureJsonPath(this.projectRoot, featureName, 'off'),
+    );
     return feature?.planComments ?? [];
   }
 
   setComments(featureName: string, comments: PlanComment[]): void {
-    const feature = this.readFeature(featureName);
-    if (!feature) return;
-
-    feature.planComments = comments;
-    this.writeFeature(featureName, feature);
+    const filePath = getFeatureJsonPath(this.projectRoot, featureName, 'off');
+    updateJsonLockedSync<FeatureJsonWithPlanState>(
+      filePath,
+      (current) => {
+        if (!current) return current;
+        return { ...current, planComments: comments };
+      },
+      {} as FeatureJsonWithPlanState,
+    );
   }
 
   syncPlanDescription(_featureName: string, _content: string): void {
@@ -78,17 +95,4 @@ export class FilesystemPlanStore implements PlanStore {
     // No-op: filesystem mode has no external store to sync to.
   }
 
-  // ---------------------------------------------------------------------------
-  // Private helpers
-  // ---------------------------------------------------------------------------
-
-  private readFeature(featureName: string): FeatureJsonWithPlanState | null {
-    return readJson<FeatureJsonWithPlanState>(
-      getFeatureJsonPath(this.projectRoot, featureName, 'off'),
-    );
-  }
-
-  private writeFeature(featureName: string, feature: FeatureJsonWithPlanState): void {
-    writeJson(getFeatureJsonPath(this.projectRoot, featureName, 'off'), feature);
-  }
 }

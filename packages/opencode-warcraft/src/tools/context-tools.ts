@@ -14,6 +14,8 @@ import {
   type TaskWithDeps,
 } from 'warcraft-core';
 import type { BvTriageService } from '../services/bv-triage-service.js';
+import type { BlockedResult } from '../types.js';
+import { toolError, toolSuccess } from '../types.js';
 
 export interface ContextToolsDependencies {
   featureService: FeatureService;
@@ -22,7 +24,7 @@ export interface ContextToolsDependencies {
   contextService: ContextService;
   agentsMdService: AgentsMdService;
   worktreeService: WorktreeService;
-  checkBlocked: (feature: string) => string | null;
+  checkBlocked: (feature: string) => BlockedResult;
   bvTriageService: BvTriageService;
 }
 
@@ -57,10 +59,10 @@ export class ContextTools {
         if (explicitFeature) validatePathSegment(explicitFeature, 'feature');
         const feature = resolveFeature(explicitFeature);
         if (!feature)
-          return 'Error: No feature specified. Create a feature or provide feature param.';
+          return toolError('No feature specified. Create a feature or provide feature param.');
 
         const filePath = contextService.write(feature, name, content);
-        return `Context file written: ${filePath}`;
+        return toolSuccess({ message: `Context file written: ${filePath}` });
       },
     });
   }
@@ -84,22 +86,18 @@ export class ContextTools {
         if (explicitFeature) validatePathSegment(explicitFeature, 'feature');
         const feature = resolveFeature(explicitFeature);
         if (!feature) {
-          return JSON.stringify({
-            error: 'No feature specified and no active feature found',
-            hint: 'Use warcraft_feature_create to create a new feature',
-          });
+          return toolError('No feature specified and no active feature found', ['Use warcraft_feature_create to create a new feature']);
         }
 
         const featureData = featureService.get(feature);
         if (!featureData) {
-          return JSON.stringify({
-            error: `Feature '${feature}' not found`,
-            availableFeatures: featureService.list(),
-          });
+          return toolError(`Feature '${feature}' not found`);
         }
 
-        const blocked = checkBlocked(feature);
-        if (blocked) return blocked;
+        const blockedResult = checkBlocked(feature);
+        if (blockedResult.blocked) {
+          return toolError(blockedResult.message || 'Feature is blocked');
+        }
 
         const plan = planService.read(feature);
         const tasks = taskService.list(feature);
@@ -317,28 +315,28 @@ export class ContextTools {
         if (action === 'init') {
           const result = await agentsMdService.init();
           if (result.existed) {
-            return `AGENTS.md already exists (${result.content.length} chars). Use 'sync' to propose updates.`;
+            return toolSuccess({ message: `AGENTS.md already exists (${result.content.length} chars). Use 'sync' to propose updates.` });
           }
-          return `Generated AGENTS.md from codebase scan (${result.content.length} chars):\n\n${result.content}\n\n⚠️ This has NOT been written to disk. Ask the user via question() whether to write it to AGENTS.md.`;
+          return toolSuccess({ message: `Generated AGENTS.md from codebase scan (${result.content.length} chars):\n\n${result.content}\n\n⚠️ This has NOT been written to disk. Ask the user via question() whether to write it to AGENTS.md.` });
         }
 
         if (action === 'sync') {
-          if (!feature) return 'Error: feature name required for sync action';
+          if (!feature) return toolError('feature name required for sync action');
           const result = await agentsMdService.sync(feature);
           if (result.proposals.length === 0) {
-            return 'No new findings to sync to AGENTS.md.';
+            return toolSuccess({ message: 'No new findings to sync to AGENTS.md.' });
           }
-          return `Proposed AGENTS.md updates from feature "${feature}":\n\n${result.diff}\n\n⚠️ These changes have NOT been applied. Ask the user via question() whether to apply them.`;
+          return toolSuccess({ message: `Proposed AGENTS.md updates from feature "${feature}":\n\n${result.diff}\n\n⚠️ These changes have NOT been applied. Ask the user via question() whether to apply them.` });
         }
 
         if (action === 'apply') {
           if (!content)
-            return 'Error: content required for apply action. Use init or sync first to get content, then apply with the approved content.';
+            return toolError('content required for apply action. Use init or sync first to get content, then apply with the approved content.');
           const result = agentsMdService.apply(content);
-          return `AGENTS.md ${result.isNew ? 'created' : 'updated'} (${result.chars} chars) at ${result.path}`;
+          return toolSuccess({ message: `AGENTS.md ${result.isNew ? 'created' : 'updated'} (${result.chars} chars) at ${result.path}` });
         }
 
-        return 'Error: unknown action';
+        return toolError('unknown action');
       },
     });
   }

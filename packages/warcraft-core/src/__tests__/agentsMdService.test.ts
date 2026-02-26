@@ -4,6 +4,11 @@ import * as path from 'path';
 import { AgentsMdService } from '../services/agentsMdService.js';
 import { ContextService } from '../services/contextService.js';
 
+// Mock BeadsModeProvider for tests
+const mockBeadsModeProvider = {
+  getBeadsMode: () => 'on' as const,
+};
+
 describe('AgentsMdService', () => {
   let testDir: string;
   let service: AgentsMdService;
@@ -12,7 +17,7 @@ describe('AgentsMdService', () => {
   beforeEach(() => {
     // Create temp directory for each test
     testDir = fs.mkdtempSync(path.join('/tmp', 'agents-md-test-'));
-    contextService = new ContextService(testDir);
+    contextService = new ContextService(testDir, mockBeadsModeProvider);
     service = new AgentsMdService(testDir, contextService);
   });
 
