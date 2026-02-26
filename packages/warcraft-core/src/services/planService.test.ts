@@ -217,6 +217,27 @@ describe('PlanService bead sync', () => {
     expect(mockRepo.appendedComments).toEqual([]);
   });
 
+  it('addComment() generates unique comment-prefixed IDs', () => {
+    setupFeature('feature-comment-ids');
+    const stores = createStores(testRoot, 'off', new MockBeadsRepository() as any);
+    const service = new PlanService(testRoot, stores.planStore, 'off');
+
+    const first = service.addComment('feature-comment-ids', {
+      line: 1,
+      body: 'first',
+      author: 'test-user',
+    });
+    const second = service.addComment('feature-comment-ids', {
+      line: 2,
+      body: 'second',
+      author: 'test-user',
+    });
+
+    expect(first.id).toMatch(/^comment-/);
+    expect(second.id).toMatch(/^comment-/);
+    expect(first.id).not.toBe(second.id);
+  });
+
   it('clearComments() in off mode updates canonical feature.json only', () => {
     const featureName = 'feature-clear-comments-off';
     const docsFeaturePath = path.join(testRoot, 'docs', featureName);

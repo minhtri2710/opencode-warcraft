@@ -307,6 +307,13 @@ export class BeadsRepository {
 
       const partialFeatureJson = featureStateToFeatureJson(artifact);
       // Convert to full FeatureJson by ensuring required fields
+      if (!partialFeatureJson.name || !partialFeatureJson.status || !partialFeatureJson.createdAt) {
+        return {
+          success: false,
+          error: new RepositoryError('invalid_artifact', `Invalid feature_state artifact for epic '${epicBeadId}': missing required fields`),
+        };
+      }
+
       const featureJson: FeatureJson = {
         name: partialFeatureJson.name,
         epicBeadId: epicBeadId,

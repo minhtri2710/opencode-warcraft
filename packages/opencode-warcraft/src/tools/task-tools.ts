@@ -6,7 +6,7 @@ import type {
   TaskStatusType,
 } from 'warcraft-core';
 import { detectWorkflowPath, validateLightweightPlan } from 'warcraft-core';
-import { resolveFeatureInput, validateTaskInput, validatePathSegment } from './tool-input.js';
+import { resolveFeatureInput, validateTaskInput } from './tool-input.js';
 import { toolError, toolSuccess } from '../types.js';
 
 export interface TaskToolsDependencies {

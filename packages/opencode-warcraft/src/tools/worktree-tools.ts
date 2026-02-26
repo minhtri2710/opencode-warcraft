@@ -17,6 +17,8 @@ import {
   checkWarnings,
 } from '../utils/prompt-observability.js';
 
+type CompletionGate = 'build' | 'test' | 'lint';
+
 export interface WorktreeToolsDependencies {
   featureService: FeatureService;
   planService: PlanService;
@@ -31,8 +33,8 @@ export interface WorktreeToolsDependencies {
     feature: string,
     taskFolder: string,
   ) => { allowed: boolean; error?: string };
-  hasCompletionGateEvidence: (summary: string, gate: string) => boolean;
-  completionGates: readonly string[];
+  hasCompletionGateEvidence: (summary: string, gate: CompletionGate) => boolean;
+  completionGates: readonly CompletionGate[];
 }
 
 /**
@@ -102,8 +104,9 @@ export class WorktreeTools {
         // Check if we're continuing from blocked - reuse existing worktree
         let worktree: Awaited<ReturnType<typeof worktreeService.create>>;
         if (continueFrom === 'blocked') {
-          worktree = await worktreeService.get(feature, task);
-          if (!worktree) return toolError('No worktree found for blocked task');
+          const existingWorktree = await worktreeService.get(feature, task);
+          if (!existingWorktree) return toolError('No worktree found for blocked task');
+          worktree = existingWorktree;
         } else {
           worktree = await worktreeService.create(feature, task);
         }
@@ -306,7 +309,7 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
         // GATE: Check for explicit build/test/lint pass evidence when completing
         if (status === 'completed') {
           const missingGates = completionGates.filter(
-            (gate: string) => !hasCompletionGateEvidence(summary, gate),
+            (gate) => !hasCompletionGateEvidence(summary, gate),
           );
 
           if (missingGates.length > 0) {

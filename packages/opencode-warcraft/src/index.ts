@@ -373,7 +373,7 @@ To unblock: Remove ${blockedPath}`;
       }
     }
 
-      if (unmetDeps.length > 0) {
+    if (unmetDeps.length > 0) {
       const depList = unmetDeps
         .map((d) => `"${d.folder}" (${d.status})`)
         .join(", ");

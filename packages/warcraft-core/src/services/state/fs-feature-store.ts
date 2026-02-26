@@ -23,7 +23,7 @@ export class FilesystemFeatureStore implements FeatureStore {
     return fileExists(getFeaturePath(this.projectRoot, name, 'off'));
   }
 
-  create(input: CreateFeatureInput, priority: number): FeatureJson {
+  create(input: CreateFeatureInput, _priority: number): FeatureJson {
     const featurePath = getFeaturePath(this.projectRoot, input.name, 'off');
 
     const epicBeadId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;

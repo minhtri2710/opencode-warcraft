@@ -75,9 +75,6 @@ export class WorktreeService {
     return `warcraft/${sanitizeName(feature)}/${sanitizeName(step)}`;
   }
 
-  private async getDefaultBaseCommit(git: SimpleGit): Promise<string> {
-    return "HEAD";
-  }
 
   async create(feature: string, step: string, baseBranch?: string): Promise<WorktreeInfo> {
     const worktreePath = this.getWorktreePath(feature, step);
@@ -156,7 +153,7 @@ export class WorktreeService {
     
     const worktreeGit = this.getGit(worktreePath);
     if (!base) {
-      base = await this.getDefaultBaseCommit(worktreeGit);
+      base = 'HEAD';
     }
 
     try {
@@ -209,7 +206,7 @@ export class WorktreeService {
     const worktreePath = this.getWorktreePath(feature, step);
     const patchPath = path.join(worktreePath, "..", `${step}.patch`);
     const worktreeGit = this.getGit(worktreePath);
-    const base = baseBranch || (await this.getDefaultBaseCommit(worktreeGit));
+    const base = baseBranch || 'HEAD';
 
     const diff = await worktreeGit.diff([`${base}...HEAD`]);
     await fs.writeFile(patchPath, diff);
@@ -289,7 +286,7 @@ export class WorktreeService {
 
     try {
       const git = this.getGit();
-      await git.applyPatch(diffContent, ["-R"]);
+      await git.applyPatch(diffPath, ["-R"]);
       return { success: true, filesAffected: filesChanged };
     } catch (error: unknown) {
       const err = error as { message?: string };

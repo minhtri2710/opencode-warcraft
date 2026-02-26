@@ -10,11 +10,8 @@ import type {
   FeatureJson,
   FeatureStatusType,
   TaskStatus,
-  TaskStatusType,
   TaskInfo,
-  TaskOrigin,
   PlanComment,
-  WorkerSession,
 } from '../../types.js';
 import type { LockOptions } from '../../utils/json-lock.js';
 import type { RunnableTasksResult } from '../taskService.js';

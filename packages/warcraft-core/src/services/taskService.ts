@@ -5,7 +5,7 @@ import {
 import { readText } from '../utils/fs.js';
 import { deriveTaskFolder, slugifyTaskName } from '../utils/slug.js';
 import type { LockOptions } from '../utils/json-lock.js';
-import { TaskStatus, TaskStatusType, TaskOrigin, TasksSyncResult, TaskInfo, WorkerSession, SpecData } from '../types.js';
+import { TaskStatus, TaskStatusType, TasksSyncResult, TaskInfo, WorkerSession, SpecData } from '../types.js';
 import { computeRunnableAndBlocked } from './taskDependencyGraph.js';
 import { formatSpecContent } from './specFormatter.js';
 import type { TaskWithDeps } from './taskDependencyGraph.js';
@@ -201,7 +201,7 @@ export class TaskService {
     updates: Partial<
       Pick<TaskStatus, 'status' | 'summary' | 'baseCommit' | 'blocker'>
     >,
-    lockOptions?: LockOptions
+    _lockOptions?: LockOptions
   ): TaskStatus {
     const current = this.store.getRawStatus(featureName, taskFolder);
     

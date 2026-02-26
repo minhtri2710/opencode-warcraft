@@ -1,7 +1,7 @@
-import type { McpConfig } from './types';
-import { websearchMcp } from './websearch';
-import { context7Mcp } from './context7';
-import { grepAppMcp } from './grep-app';
+import type { McpConfig } from './types.js';
+import { websearchMcp } from './websearch.js';
+import { context7Mcp } from './context7.js';
+import { grepAppMcp } from './grep-app.js';
 
 const allBuiltinMcps: Record<string, McpConfig> = {
   websearch: websearchMcp,

@@ -122,9 +122,22 @@ export class FeatureService {
     const feature = this.get(name);
     if (!feature) throw new Error(`Feature '${name}' not found`);
 
+    const immutableKeys: Array<keyof FeatureJson> = ['name', 'epicBeadId', 'createdAt'];
+    const blockedKeys = immutableKeys.filter((key) => patch[key] !== undefined);
+    if (blockedKeys.length > 0) {
+      console.warn(
+        `[warcraft] Ignoring immutable feature metadata fields: ${blockedKeys.join(', ')}`,
+      );
+    }
+
+    const mutablePatch: Partial<FeatureJson> = { ...patch };
+    for (const key of blockedKeys) {
+      delete mutablePatch[key];
+    }
+
     const updated: FeatureJson = {
       ...feature,
-      ...patch,
+      ...mutablePatch,
     };
     this.store.save(updated);
     return updated;

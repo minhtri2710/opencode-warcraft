@@ -29,22 +29,33 @@ describe('WorktreeService helpers', () => {
     expect(statusPath).toBe(v2);
   });
 
-  it('derives default base commit from git history count', async () => {
+  it('revertFromSavedDiff applies the saved patch file path in reverse', async () => {
     const service = createService('off');
+    const diffPath = path.join(testRoot, 'saved.patch');
+    const diffContent = [
+      'diff --git a/src/a.ts b/src/a.ts',
+      'index 1111111..2222222 100644',
+      '--- a/src/a.ts',
+      '+++ b/src/a.ts',
+      '@@ -1 +1 @@',
+      "-old",
+      "+new",
+      '',
+    ].join('\n');
+    fs.writeFileSync(diffPath, diffContent, 'utf-8');
 
-    const manyCommits = await (service as any).getDefaultBaseCommit({
-      raw: async (): Promise<string> => '5\n',
-    });
-    const singleCommit = await (service as any).getDefaultBaseCommit({
-      raw: async (): Promise<string> => '1\n',
-    });
-    const parseFailure = await (service as any).getDefaultBaseCommit({
-      raw: async (): Promise<string> => 'not-a-number\n',
+    const applyCalls: Array<{ patchPath: string; options?: string[] }> = [];
+    (service as any).getGit = () => ({
+      applyPatch: async (patchPath: string, options?: string[]) => {
+        applyCalls.push({ patchPath, options });
+      },
     });
 
-    expect(manyCommits).toBe('HEAD');
-    expect(singleCommit).toBe('HEAD');
-    expect(parseFailure).toBe('HEAD');
+    const result = await service.revertFromSavedDiff(diffPath);
+
+    expect(result).toEqual({ success: true, filesAffected: ['src/a.ts'] });
+    expect(applyCalls).toHaveLength(1);
+    expect(applyCalls[0]).toEqual({ patchPath: diffPath, options: ['-R'] });
   });
 
   it('parses conflict file names from merge error output', () => {

@@ -560,3 +560,53 @@ describe('FeatureService getTasks folder stability', () => {
     expect(tasks[2].folder).toBe('03-setup');
   });
 });
+
+describe('FeatureService.patchMetadata', () => {
+  it('ignores immutable fields and warns when callers attempt to overwrite them', () => {
+    const stores = createStores(testRoot, 'off', createMockRepository());
+    const planService = new PlanService(testRoot, stores.planStore, 'off');
+    const service = new FeatureService(testRoot, stores.featureStore, planService, 'off');
+    const created = service.create('immutable-fields');
+
+    const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const updated = service.patchMetadata('immutable-fields', {
+        name: 'renamed-feature',
+        epicBeadId: 'bd-other',
+        createdAt: '2000-01-01T00:00:00.000Z',
+        ticket: 'NEW-TICKET',
+      });
+
+      expect(updated.name).toBe(created.name);
+      expect(updated.epicBeadId).toBe(created.epicBeadId);
+      expect(updated.createdAt).toBe(created.createdAt);
+      expect(updated.ticket).toBe('NEW-TICKET');
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[warcraft] Ignoring immutable feature metadata fields: name, epicBeadId, createdAt',
+      );
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it('updates mutable metadata fields without warning', () => {
+    const stores = createStores(testRoot, 'off', createMockRepository());
+    const planService = new PlanService(testRoot, stores.planStore, 'off');
+    const service = new FeatureService(testRoot, stores.featureStore, planService, 'off');
+    service.create('mutable-fields');
+
+    const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const updated = service.patchMetadata('mutable-fields', {
+        status: 'approved',
+        ticket: 'ABC-123',
+      });
+
+      expect(updated.status).toBe('approved');
+      expect(updated.ticket).toBe('ABC-123');
+      expect(warnSpy).not.toHaveBeenCalled();
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+});

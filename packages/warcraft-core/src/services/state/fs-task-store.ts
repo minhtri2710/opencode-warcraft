@@ -10,7 +10,7 @@ import {
   getTaskStatusPath,
   getTaskReportPath,
 } from '../../utils/paths.js';
-import { ensureDir, readJson, writeJson, fileExists, readText, writeText } from '../../utils/fs.js';
+import { ensureDir, readJson, writeJson, fileExists, writeText } from '../../utils/fs.js';
 import { writeJsonLockedSync, patchJsonLockedSync } from '../../utils/json-lock.js';
 import type { LockOptions } from '../../utils/json-lock.js';
 

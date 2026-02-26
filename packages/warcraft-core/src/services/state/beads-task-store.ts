@@ -139,7 +139,7 @@ export class BeadsTaskStore implements TaskStore {
   }
 
   save(
-    featureName: string,
+    _featureName: string,
     folder: string,
     status: TaskStatus,
     options?: TaskSaveOptions,

@@ -4,7 +4,6 @@ import {
 import { readText, writeText, fileExists } from '../utils/fs.js';
 import type { PlanComment, PlanReadResult } from '../types.js';
 import type { BeadsMode } from '../types.js';
-import * as fs from 'fs';
 import * as crypto from 'crypto';
 import type { PlanStore } from './state/types.js';
 
@@ -68,7 +67,10 @@ export class PlanService {
       throw new Error(`No plan.md found for feature '${featureName}'`);
     }
 
-    const planContent = fs.readFileSync(planPath, 'utf-8');
+    const planContent = readText(planPath);
+    if (planContent === null) {
+      throw new Error(`No plan.md found for feature '${featureName}'`);
+    }
     const planHash = computePlanHash(planContent);
     const timestamp = new Date().toISOString();
 
@@ -81,7 +83,10 @@ export class PlanService {
       return false;
     }
 
-    const currentPlanContent = fs.readFileSync(planPath, 'utf-8');
+    const currentPlanContent = readText(planPath);
+    if (currentPlanContent === null) {
+      return false;
+    }
     const currentHash = computePlanHash(currentPlanContent);
     return this.store.isApproved(featureName, currentHash);
   }
@@ -97,7 +102,7 @@ export class PlanService {
   addComment(featureName: string, comment: Omit<PlanComment, 'id' | 'timestamp'>): PlanComment {
     const newComment: PlanComment = {
       ...comment,
-      id: `comment-${Date.now()}`,
+      id: `comment-${crypto.randomUUID()}`,
       timestamp: new Date().toISOString(),
     };
 

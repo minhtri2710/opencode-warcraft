@@ -9,3 +9,9 @@
 
 # warcraft worker worktrees are local scratch checkouts
 .beads/artifacts/.worktrees/
+
+
+dist/
+*.tsbuildinfo
+.test-tmp/
+*.patch

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
@@ -236,6 +236,31 @@ describe("ConfigService defaults", () => {
 
     expect(brannConfig.autoLoadSkills).not.toContain("parallel-exploration");
   });
+  it("caches merged config after a successful file read", () => {
+    const service = new ConfigService();
+    const configPath = service.getPath();
+
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify({
+        agentMode: "dedicated",
+      }),
+    );
+
+    const readSpy = spyOn(fs, 'readFileSync');
+    try {
+      const first = service.get();
+      const second = service.get();
+
+      expect(first.agentMode).toBe('dedicated');
+      expect(second).toBe(first);
+      expect(readSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      readSpy.mockRestore();
+    }
+  });
+
 });
 
 describe("ConfigService disabled skills/mcps", () => {

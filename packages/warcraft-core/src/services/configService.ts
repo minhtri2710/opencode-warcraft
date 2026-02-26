@@ -84,7 +84,7 @@ export class ConfigService {
       const storedParallelExecution = (stored.parallelExecution ?? {}) as ParallelExecutionConfig;
 
       // Deep merge with defaults
-      return {
+      const result: WarcraftConfig = {
         ...DEFAULT_WARCRAFT_CONFIG,
         ...stored,
         parallelExecution: {
@@ -96,6 +96,8 @@ export class ConfigService {
           storedAgents
         ),
       };
+      this.cachedConfig = result;
+      return result;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.warn(
