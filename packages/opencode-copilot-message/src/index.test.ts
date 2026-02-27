@@ -38,7 +38,7 @@ describe('CopilotMessage plugin', () => {
     expect(output.messages[0].parts).toEqual([{ type: 'text', text: 'response' }]);
   });
 
-  it('sets message role to tool for github-copilot provider messages', async () => {
+  it('sets message role to assistant for github-copilot user messages', async () => {
     const hooks = await CopilotMessage(ctx);
     const transformHook = hooks['experimental.chat.messages.transform'] as TransformHook;
 
@@ -46,9 +46,9 @@ describe('CopilotMessage plugin', () => {
       messages: [
         {
           info: {
-            role: 'assistant',
-            providerID: 'github-copilot',
-            id: 'a-2',
+            role: 'user',
+            model: { providerID: 'github-copilot' },
+            id: 'u-2',
           },
           parts: [{ type: 'text', text: 'copilot response' }],
         },
@@ -57,7 +57,7 @@ describe('CopilotMessage plugin', () => {
 
     await transformHook({}, output);
 
-    expect(output.messages[0].info.role).toBe('tool');
+    expect(output.messages[0].info.role).toBe('assistant');
     expect(output.messages[0].parts).toEqual([{ type: 'text', text: 'copilot response' }]);
   });
 });

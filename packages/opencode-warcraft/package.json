@@ -26,6 +26,8 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
+    "predev": "bun run --filter warcraft-core build",
+    "prebuild": "bun run --filter warcraft-core build",
     "clean": "rm -rf dist",
     "generate-skills": "bun run scripts/generate-skills.ts",
     "build": "bun run clean && bun run generate-skills && bun build src/index.ts --outdir dist --target node --format esm --packages=bundle && tsc --emitDeclarationOnly",
