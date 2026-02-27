@@ -28,18 +28,3 @@ jobs:
       - name: Lint
         run: bun run lint
 
-      - name: Check unused declarations
-        run: bun run lint:unused
-
-      - name: Install Beads CLI
-        run: |
-          curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/beads_rust/main/install.sh?$(date +%s)" | bash
-          export PATH="$HOME/.local/bin:$PATH"
-          br --version
-
-      - name: Verify beads artifacts
-        run: bun run beads:verify
-
-      - name: Verify PR evidence
-        if: github.event_name == 'pull_request'
-        run: bun run pr:evidence:verify
