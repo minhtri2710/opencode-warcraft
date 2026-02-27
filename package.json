@@ -7,10 +7,10 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "bun run --filter warcraft-core build && bun run --filter opencode-warcraft build && bun run --filter opencode-copilot-auth build",
+    "build": "bun run --filter warcraft-core build && bun run --filter opencode-warcraft build && bun run --filter opencode-copilot-message build",
     "test": "bun run --filter warcraft-core build && bun run --filter '*' test",
-    "lint": "bun run --filter warcraft-core typecheck && bun run --filter opencode-warcraft typecheck && bun run --filter opencode-copilot-auth typecheck",
-    "lint:unused": "bunx tsc -p packages/warcraft-core/tsconfig.json --noEmit --noUnusedLocals --noUnusedParameters && bunx tsc -p packages/opencode-warcraft/tsconfig.json --noEmit --noUnusedLocals --noUnusedParameters && bunx tsc -p packages/opencode-copilot-auth/tsconfig.json --noEmit --noUnusedLocals --noUnusedParameters",
+    "lint": "bun run --filter warcraft-core typecheck && bun run --filter opencode-warcraft typecheck && bun run --filter opencode-copilot-message typecheck",
+    "lint:unused": "bunx tsc -p packages/warcraft-core/tsconfig.json --noEmit --noUnusedLocals --noUnusedParameters && bunx tsc -p packages/opencode-warcraft/tsconfig.json --noEmit --noUnusedLocals --noUnusedParameters && bunx tsc -p packages/opencode-copilot-message/tsconfig.json --noEmit --noUnusedLocals --noUnusedParameters",
     "beads:verify": "node scripts/ci/check-beads-artifacts.mjs",
     "pr:evidence:verify": "node scripts/ci/validate-pr-evidence.mjs",
     "workflow:verify": "bun run beads:verify && bun run pr:evidence:verify",

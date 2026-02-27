@@ -20,7 +20,7 @@ This repository is a Bun workspace monorepo containing shared core services and 
 | --- | --- |
 | `packages/warcraft-core/` | Shared domain services, task/plan/worktree logic, filesystem utilities |
 | `packages/opencode-warcraft/` | OpenCode plugin (agents, tools, hooks, MCP wiring, built-in skills) |
-| `packages/opencode-copilot-auth/` | Internal auth plugin for GitHub Copilot OAuth/device-flow and request header shaping |
+| `packages/opencode-copilot-message/` | Internal plugin for `experimental.chat.messages.transform` logging and pass-through behavior |
 | `scripts/` | CI and release verification scripts |
 | `.beads/artifacts/` | Beads artifact cache and task execution records |
 
