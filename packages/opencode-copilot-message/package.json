@@ -4,6 +4,22 @@
   "type": "module",
   "description": "OpenCode plugin for Copilot message hook logging",
   "license": "MIT",
+  "author": "minhtri2710",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/minhtri2710/opencode-warcraft.git",
+    "directory": "packages/opencode-copilot-message"
+  },
+  "homepage": "https://github.com/minhtri2710/opencode-warcraft#readme",
+  "bugs": {
+    "url": "https://github.com/minhtri2710/opencode-warcraft/issues"
+  },
+  "keywords": [
+    "opencode",
+    "ai",
+    "warcraft",
+    "agent"
+  ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {

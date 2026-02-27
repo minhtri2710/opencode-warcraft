@@ -1,7 +1,13 @@
 {
-  "name": "opencode-warcraft",
+  "name": "@minhtri2710/opencode-warcraft",
   "version": "0.0.1",
-  "private": true,
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com/minhtri2710"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/minhtri2710/opencode-warcraft.git"
+  },
   "description": "Context-Driven Development for AI coding assistants",
   "workspaces": [
     "packages/*"

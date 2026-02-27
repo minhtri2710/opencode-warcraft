@@ -1,0 +1,98 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build warcraft-core
+        working-directory: packages/warcraft-core
+        run: bun run build
+
+      - name: Reinstall to link workspace packages
+        run: bun install --frozen-lockfile
+
+      - name: Build opencode-warcraft
+        working-directory: packages/opencode-warcraft
+        run: bun run build
+
+      - name: Build opencode-copilot-message
+        working-directory: packages/opencode-copilot-message
+        run: bun run build
+
+      - name: Test warcraft-core
+        working-directory: packages/warcraft-core
+        run: bun test
+
+      - name: Test opencode-warcraft
+        working-directory: packages/opencode-warcraft
+        run: bun test
+
+      - name: Test opencode-copilot-message
+        working-directory: packages/opencode-copilot-message
+        run: bun test
+
+      - name: Upload npm package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-package
+          path: packages/opencode-warcraft/
+
+  publish-npm:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download npm package artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: npm-package
+          path: packages/opencode-warcraft
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Publish to npm
+        working-directory: packages/opencode-warcraft
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_KEY }}
+
+  release:
+    needs: [build, publish-npm]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
