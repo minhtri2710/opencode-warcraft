@@ -21,13 +21,16 @@
     "packages/opencode-warcraft": {
       "name": "opencode-warcraft",
       "version": "0.0.1",
+      "dependencies": {
+        "opencode-copilot-message": "workspace:*",
+      },
       "devDependencies": {
         "@opencode-ai/plugin": "^1.0.143",
         "@opencode-ai/sdk": "^0.13.0",
         "@types/bun": "^1.2.0",
         "@types/node": "^20.0.0",
         "typescript": "^5.0.0",
-        "warcraft-core": "file:../warcraft-core",
+        "warcraft-core": "workspace:*",
       },
       "optionalDependencies": {
         "@upstash/context7-mcp": "^2.1.0",
@@ -471,8 +474,6 @@
     "mlly/pathe": ["pathe@2.0.3", "", {}, "sha512-WUjGcAqP1gQacoQe+OBJsFA7Ld4DyXuUIjZ5cc75cLHvJ7dtNsTugphxIADwspS+AraAUePCKrSVtPLFj/F88w=="],
 
     "nypm/pathe": ["pathe@2.0.3", "", {}, "sha512-WUjGcAqP1gQacoQe+OBJsFA7Ld4DyXuUIjZ5cc75cLHvJ7dtNsTugphxIADwspS+AraAUePCKrSVtPLFj/F88w=="],
-
-    "opencode-warcraft/warcraft-core": ["warcraft-core@file:packages/warcraft-core", { "dependencies": { "simple-git": "^3.27.0" }, "devDependencies": { "@types/bun": "^1.2.0", "@types/node": "^20.0.0", "typescript": "^5.0.0" } }],
 
     "pkg-types/pathe": ["pathe@2.0.3", "", {}, "sha512-WUjGcAqP1gQacoQe+OBJsFA7Ld4DyXuUIjZ5cc75cLHvJ7dtNsTugphxIADwspS+AraAUePCKrSVtPLFj/F88w=="],
 
