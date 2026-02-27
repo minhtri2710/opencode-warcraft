@@ -7,7 +7,7 @@
     },
     "packages/opencode-copilot-message": {
       "name": "opencode-copilot-message",
-      "version": "0.0.2",
+      "version": "0.0.4",
       "devDependencies": {
         "@opencode-ai/plugin": "^1.0.143",
         "@types/bun": "^1.2.0",
@@ -20,7 +20,7 @@
     },
     "packages/opencode-warcraft": {
       "name": "opencode-warcraft",
-      "version": "0.0.2",
+      "version": "0.0.4",
       "devDependencies": {
         "@opencode-ai/plugin": "^1.0.143",
         "@opencode-ai/sdk": "^0.13.0",
@@ -41,7 +41,7 @@
     },
     "packages/warcraft-core": {
       "name": "warcraft-core",
-      "version": "0.0.2",
+      "version": "0.0.4",
       "dependencies": {
         "simple-git": "^3.27.0",
       },

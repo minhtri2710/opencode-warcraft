@@ -1,6 +1,6 @@
 {
   "name": "warcraft-core",
-  "version": "0.0.2",
+  "version": "0.0.4",
   "type": "module",
   "description": "Core services and types for Project Warcraft - shared by opencode-warcraft and related tooling",
   "license": "MIT WITH Commons-Clause",

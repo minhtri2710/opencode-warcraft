@@ -1,6 +1,6 @@
 {
   "name": "opencode-copilot-message",
-  "version": "0.0.2",
+  "version": "0.0.4",
   "type": "module",
   "description": "OpenCode plugin for Copilot message hook logging",
   "license": "MIT",
