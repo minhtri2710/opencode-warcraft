@@ -1,6 +1,6 @@
 {
   "name": "opencode-warcraft",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "type": "module",
   "description": "OpenCode plugin for Project Warcraft - from vibe coding to warcraft coding",
   "license": "MIT WITH Commons-Clause",
