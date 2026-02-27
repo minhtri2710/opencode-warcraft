@@ -7,6 +7,7 @@ import { BeadsRepository, RepositoryError } from './BeadsRepository.js';
 import { BeadGateway } from './BeadGateway.js';
 import { BeadsViewerGateway } from './BeadsViewerGateway.js';
 import type { FeatureJson, TaskStatus, PlanComment } from '../../types.js';
+import { BeadGatewayError } from './BeadGateway.types.js';
 
 // Mock BeadGateway
 class MockBeadGateway {
@@ -545,6 +546,24 @@ describe('BeadsRepository', () => {
       if (result.success === false) {
         expect(result.error.code).toBe('gateway_error');
         expect(result.error.message).toContain('Bead gateway error');
+      }
+    });
+
+    it('should include internal gateway codes in normalized errors', () => {
+      mockGateway.readArtifact = () => {
+        throw new BeadGatewayError(
+          'command_error',
+          'Failed to initialize beads repository [BR_INIT_FAILED]: br command failed',
+          'BR_INIT_FAILED',
+        );
+      };
+
+      const result = repository.getFeatureState('epic-123');
+      expect(result.success).toBe(false);
+      if (result.success === false) {
+        expect(result.error.code).toBe('gateway_error');
+        expect(result.error.message).toContain('[BR_INIT_FAILED]');
+        expect(result.error.message).toContain('Failed to initialize beads repository');
       }
     });
   });

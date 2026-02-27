@@ -55,47 +55,154 @@ describe('BeadGateway', () => {
     execSpy.mockRestore();
   });
 
-  it('runs preflight check before first operational command', () => {
+  it('runs preflight check and initialization before first operational command', () => {
     const execSpy = spyOn(childProcess, 'execFileSync')
       .mockReturnValueOnce('beads_rust 1.2.3')
+      .mockReturnValueOnce('Initialized')
       .mockReturnValueOnce('{"id":"epic-1"}');
+
     const gateway = new BeadGateway('/repo');
     gateway.createEpic('my-feature', 3);
-    expect(execSpy).toHaveBeenCalledTimes(2);
+
+    expect(execSpy).toHaveBeenCalledTimes(3);
     expect(execSpy).toHaveBeenNthCalledWith(1, 'br', ['--version'], {
       cwd: '/repo',
       encoding: 'utf-8',
       timeout: 30_000,
     });
-    expect(execSpy).toHaveBeenNthCalledWith(2, 'br', ['create', 'my-feature', '-t', 'epic', '-p', '2', '--json'], {
+    expect(execSpy).toHaveBeenNthCalledWith(2, 'br', ['init'], {
       cwd: '/repo',
       encoding: 'utf-8',
       timeout: 30_000,
     });
+    expect(execSpy).toHaveBeenNthCalledWith(3, 'br', ['create', 'my-feature', '-t', 'epic', '-p', '2', '--json'], {
+      cwd: '/repo',
+      encoding: 'utf-8',
+      timeout: 30_000,
+    });
+
+    execSpy.mockRestore();
+  });
+
+  it('skips br init when .beads/beads.db already exists', () => {
+    const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'bead-gateway-init-skip-'));
+    fs.mkdirSync(path.join(projectRoot, '.beads'), { recursive: true });
+    fs.writeFileSync(path.join(projectRoot, '.beads', 'beads.db'), '');
+
+    const execSpy = spyOn(childProcess, 'execFileSync')
+      .mockReturnValueOnce('beads_rust 1.2.3')
+      .mockReturnValueOnce('{"id":"epic-1"}');
+
+    const gateway = new BeadGateway(projectRoot);
+    expect(gateway.createEpic('my-feature', 3)).toBe('epic-1');
+
+    expect(execSpy).toHaveBeenCalledTimes(2);
+    expect(execSpy).toHaveBeenNthCalledWith(1, 'br', ['--version'], expect.any(Object));
+    expect(execSpy).toHaveBeenNthCalledWith(2, 'br', ['create', 'my-feature', '-t', 'epic', '-p', '2', '--json'], expect.any(Object));
+
+    execSpy.mockRestore();
+    fs.rmSync(projectRoot, { recursive: true, force: true });
+  });
+  it('tolerates already-initialized response during preflight and proceeds', () => {
+    const initError = new Error('Command failed');
+    (initError as Error & { stderr?: string }).stderr = 'Repository already initialized';
+
+    const execSpy = spyOn(childProcess, 'execFileSync')
+      .mockReturnValueOnce('beads_rust 1.2.3')
+      .mockImplementationOnce(() => {
+        throw initError;
+      })
+      .mockReturnValueOnce('{"id":"epic-1"}');
+
+    const gateway = new BeadGateway('/repo');
+    expect(gateway.createEpic('my-feature', 3)).toBe('epic-1');
+    expect(execSpy).toHaveBeenCalledTimes(3);
+    expect(execSpy).toHaveBeenNthCalledWith(2, 'br', ['init'], expect.any(Object));
+
+    execSpy.mockRestore();
+  });
+
+  it('treats ALREADY_INITIALIZED init payload as already initialized and proceeds', () => {
+    const alreadyInitializedPayload = JSON.stringify({
+      error: {
+        code: 'ALREADY_INITIALIZED',
+        message: "Already initialized at './.beads/beads.db'",
+        hint: 'Use --force to reinitialize',
+        retryable: false,
+        context: {
+          path: './.beads/beads.db',
+        },
+      },
+    });
+
+    const execSpy = spyOn(childProcess, 'execFileSync')
+      .mockReturnValueOnce('beads_rust 1.2.3')
+      .mockReturnValueOnce(alreadyInitializedPayload)
+      .mockReturnValueOnce('{"id":"epic-1"}');
+
+    const gateway = new BeadGateway('/repo');
+    expect(gateway.createEpic('my-feature', 3)).toBe('epic-1');
+    expect(execSpy).toHaveBeenCalledTimes(3);
+    expect(execSpy).toHaveBeenNthCalledWith(2, 'br', ['init'], expect.any(Object));
+
+    execSpy.mockRestore();
+  });
+  it('fails fast when preflight initialization fails with a non-benign error', () => {
+    const initError = new Error('Command failed');
+    (initError as Error & { stderr?: string; stdout?: string }).stderr = 'permission denied';
+    (initError as Error & { stderr?: string; stdout?: string }).stdout = 'init output details';
+    const execSpy = spyOn(childProcess, 'execFileSync')
+      .mockReturnValueOnce('beads_rust 1.2.3')
+      .mockImplementationOnce(() => {
+        throw initError;
+      });
+
+    const gateway = new BeadGateway('/repo');
+
+    try {
+      gateway.createEpic('my-feature', 3);
+      throw new Error('should have thrown');
+    } catch (error) {
+      expect(error).toBeInstanceOf(BeadGatewayError);
+      expect((error as BeadGatewayError).code).toBe('command_error');
+      expect((error as BeadGatewayError).message).toContain('Failed to initialize beads repository');
+      expect((error as BeadGatewayError).message).not.toContain('permission denied');
+      expect((error as BeadGatewayError).message).not.toContain('init output details');
+    }
+    expect(execSpy).toHaveBeenCalledTimes(2);
+    expect(execSpy).toHaveBeenNthCalledWith(2, 'br', ['init'], expect.any(Object));
+
     execSpy.mockRestore();
   });
 
   it('memoizes preflight success and does not run again', () => {
     const execSpy = spyOn(childProcess, 'execFileSync')
       .mockReturnValueOnce('beads_rust 1.2.3')
+      .mockReturnValueOnce('Initialized')
       .mockReturnValueOnce('{"id":"epic-1"}')
       .mockReturnValueOnce('{"id":"task-1"}');
+
     const gateway = new BeadGateway('/repo');
     gateway.createEpic('my-feature', 3);
     gateway.createTask('Task A', 'epic-1', 2);
-    expect(execSpy).toHaveBeenCalledTimes(3);
+
+    expect(execSpy).toHaveBeenCalledTimes(4);
     expect(execSpy).toHaveBeenNthCalledWith(1, 'br', ['--version'], expect.any(Object));
-    expect(execSpy).toHaveBeenNthCalledWith(2, 'br', ['create', 'my-feature', '-t', 'epic', '-p', '2', '--json'], expect.any(Object));
-    expect(execSpy).toHaveBeenNthCalledWith(3, 'br', ['create', 'Task A', '-t', 'task', '--parent', 'epic-1', '-p', '1', '--json'], expect.any(Object));
+    expect(execSpy).toHaveBeenNthCalledWith(2, 'br', ['init'], expect.any(Object));
+    expect(execSpy).toHaveBeenNthCalledWith(3, 'br', ['create', 'my-feature', '-t', 'epic', '-p', '2', '--json'], expect.any(Object));
+    expect(execSpy).toHaveBeenNthCalledWith(4, 'br', ['create', 'Task A', '-t', 'task', '--parent', 'epic-1', '-p', '1', '--json'], expect.any(Object));
+
     execSpy.mockRestore();
   });
 
-  it('includes operation context and stderr in command errors', () => {
+  it('includes operation context without exposing CLI stderr/stdout in command errors', () => {
     const execSpy = spyOn(childProcess, 'execFileSync')
       .mockReturnValueOnce('beads_rust 1.2.3')
+      .mockReturnValueOnce('Initialized')
       .mockImplementationOnce(() => {
         const error = new Error('Command failed');
-        (error as Error & { stderr: string }).stderr = 'Error: invalid argument';
+        (error as Error & { stderr?: string; stdout?: string }).stderr = 'Error: invalid argument';
+        (error as Error & { stderr?: string; stdout?: string }).stdout = 'raw cli stdout details';
         throw error;
       });
     const gateway = new BeadGateway('/repo');
@@ -106,14 +213,150 @@ describe('BeadGateway', () => {
       expect(error).toBeInstanceOf(BeadGatewayError);
       expect((error as BeadGatewayError).code).toBe('command_error');
       expect((error as BeadGatewayError).message).toContain('create epic bead');
-      expect((error as BeadGatewayError).message).toContain('invalid argument');
+      expect((error as BeadGatewayError).message).not.toContain('invalid argument');
+      expect((error as BeadGatewayError).message).not.toContain('raw cli stdout details');
     }
     execSpy.mockRestore();
   });
 
+  it('re-initializes and retries when a command fails with NOT_INITIALIZED', () => {
+    const commandError = new Error('Command failed');
+    (commandError as Error & { stderr?: string }).stderr = 'NOT_INITIALIZED: repository not initialized';
+
+    const execSpy = spyOn(childProcess, 'execFileSync')
+      .mockReturnValueOnce('beads_rust 1.2.3')
+      .mockReturnValueOnce('Initialized')
+      .mockImplementationOnce(() => {
+        throw commandError;
+      })
+      .mockReturnValueOnce('Initialized')
+      .mockReturnValueOnce('{"id":"epic-1"}');
+
+    const gateway = new BeadGateway('/repo');
+    expect(gateway.createEpic('my-feature', 3)).toBe('epic-1');
+
+    expect(execSpy).toHaveBeenCalledTimes(5);
+    expect(execSpy).toHaveBeenNthCalledWith(4, 'br', ['init'], expect.any(Object));
+    expect(execSpy).toHaveBeenNthCalledWith(5, 'br', ['create', 'my-feature', '-t', 'epic', '-p', '2', '--json'], expect.any(Object));
+
+    execSpy.mockRestore();
+  });
+
+  it('throws sanitized initialization failure when NOT_INITIALIZED persists after retry', () => {
+    const commandError = new Error('Command failed');
+    (commandError as Error & { stderr?: string }).stderr = 'NOT_INITIALIZED: repository not initialized';
+
+    const execSpy = spyOn(childProcess, 'execFileSync')
+      .mockReturnValueOnce('beads_rust 1.2.3')
+      .mockReturnValueOnce('Initialized')
+      .mockImplementationOnce(() => {
+        throw commandError;
+      })
+      .mockReturnValueOnce('Initialized')
+      .mockImplementationOnce(() => {
+        throw commandError;
+      });
+
+    const gateway = new BeadGateway('/repo');
+    try {
+      gateway.createEpic('my-feature', 3);
+      throw new Error('should have thrown');
+    } catch (error) {
+      expect(error).toBeInstanceOf(BeadGatewayError);
+      expect((error as BeadGatewayError).code).toBe('command_error');
+      expect((error as BeadGatewayError).message).toContain('create epic bead');
+      expect((error as BeadGatewayError).message).toContain('beads repository initialization failed');
+      expect((error as BeadGatewayError).message).toContain('[BR_NOT_INITIALIZED]');
+      expect((error as BeadGatewayError).message).not.toContain('repository not initialized');
+    }
+
+    execSpy.mockRestore();
+  });
+  it('fails immediately without retrying the original command when re-initialization fails', () => {
+    const commandError = new Error('Command failed');
+    (commandError as Error & { stderr?: string }).stderr = 'NOT_INITIALIZED: repository not initialized';
+
+    const initFailure = new Error('init failed');
+    (initFailure as Error & { stderr?: string }).stderr = 'permission denied';
+
+    const execSpy = spyOn(childProcess, 'execFileSync')
+      .mockReturnValueOnce('beads_rust 1.2.3')
+      .mockReturnValueOnce('Initialized')
+      .mockImplementationOnce(() => {
+        throw commandError;
+      })
+      .mockImplementationOnce(() => {
+        throw initFailure;
+      });
+
+    const gateway = new BeadGateway('/repo');
+
+    expect(() => gateway.createEpic('my-feature', 3)).toThrow('Failed to initialize beads repository [BR_INIT_FAILED]');
+    expect(execSpy).toHaveBeenCalledTimes(4);
+    expect(execSpy).toHaveBeenLastCalledWith('br', ['init'], expect.any(Object));
+
+    execSpy.mockRestore();
+  });
+  it('re-initializes and retries when command returns NOT_INITIALIZED payload', () => {
+    const notInitializedPayload = JSON.stringify({
+      error: {
+        code: 'NOT_INITIALIZED',
+        message: "Beads not initialized: run 'br init' first",
+        hint: 'Run: br init',
+      },
+    });
+
+    const execSpy = spyOn(childProcess, 'execFileSync')
+      .mockReturnValueOnce('beads_rust 1.2.3')
+      .mockReturnValueOnce('Initialized')
+      .mockReturnValueOnce(notInitializedPayload)
+      .mockReturnValueOnce('Initialized')
+      .mockReturnValueOnce('{"id":"epic-1"}');
+
+    const gateway = new BeadGateway('/repo');
+    expect(gateway.createEpic('my-feature', 3)).toBe('epic-1');
+
+    expect(execSpy).toHaveBeenCalledTimes(5);
+    expect(execSpy).toHaveBeenNthCalledWith(4, 'br', ['init'], expect.any(Object));
+    expect(execSpy).toHaveBeenNthCalledWith(5, 'br', ['create', 'my-feature', '-t', 'epic', '-p', '2', '--json'], expect.any(Object));
+
+    execSpy.mockRestore();
+  });
+
+  it('throws sanitized error when NOT_INITIALIZED payload persists after retry', () => {
+    const notInitializedPayload = JSON.stringify({
+      error: {
+        code: 'NOT_INITIALIZED',
+        message: "Beads not initialized: run 'br init' first",
+        hint: 'Run: br init',
+      },
+    });
+
+    const execSpy = spyOn(childProcess, 'execFileSync')
+      .mockReturnValueOnce('beads_rust 1.2.3')
+      .mockReturnValueOnce('Initialized')
+      .mockReturnValueOnce(notInitializedPayload)
+      .mockReturnValueOnce('Initialized')
+      .mockReturnValueOnce(notInitializedPayload);
+
+    const gateway = new BeadGateway('/repo');
+    try {
+      gateway.createEpic('my-feature', 3);
+      throw new Error('should have thrown');
+    } catch (error) {
+      expect(error).toBeInstanceOf(BeadGatewayError);
+      expect((error as BeadGatewayError).code).toBe('command_error');
+      expect((error as BeadGatewayError).message).toContain('beads repository initialization failed');
+      expect((error as BeadGatewayError).message).toContain('[BR_NOT_INITIALIZED]');
+      expect((error as BeadGatewayError).message).not.toContain("Beads not initialized: run 'br init' first");
+    }
+
+    execSpy.mockRestore();
+  });
   it('creates epic and task beads via br with priority', () => {
     const execSpy = spyOn(childProcess, 'execFileSync')
       .mockReturnValueOnce('beads_rust 1.2.3')
+      .mockReturnValueOnce('Initialized')
       .mockReturnValueOnce('{"id":"epic-1"}')
       .mockReturnValueOnce('{"id":"task-1"}');
 
@@ -121,12 +364,12 @@ describe('BeadGateway', () => {
     expect(gateway.createEpic('my-feature', 3)).toBe('epic-1');
     expect(gateway.createTask('Task A', 'epic-1', 2)).toBe('task-1');
 
-    expect(execSpy).toHaveBeenNthCalledWith(2, 'br', ['create', 'my-feature', '-t', 'epic', '-p', '2', '--json'], {
+    expect(execSpy).toHaveBeenNthCalledWith(3, 'br', ['create', 'my-feature', '-t', 'epic', '-p', '2', '--json'], {
       cwd: '/repo',
       encoding: 'utf-8',
       timeout: 30_000,
     });
-    expect(execSpy).toHaveBeenNthCalledWith(3, 'br', ['create', 'Task A', '-t', 'task', '--parent', 'epic-1', '-p', '1', '--json'], {
+    expect(execSpy).toHaveBeenNthCalledWith(4, 'br', ['create', 'Task A', '-t', 'task', '--parent', 'epic-1', '-p', '1', '--json'], {
       cwd: '/repo',
       encoding: 'utf-8',
       timeout: 30_000,
@@ -137,7 +380,8 @@ describe('BeadGateway', () => {
 
   it('validates Warcraft priority must be integer between 1 and 5', () => {
     const execSpy = spyOn(childProcess, 'execFileSync')
-      .mockReturnValueOnce('beads_rust 1.2.3');
+      .mockReturnValueOnce('beads_rust 1.2.3')
+      .mockReturnValueOnce('Initialized');
 
     const gateway = new BeadGateway('/repo');
 
@@ -158,7 +402,8 @@ describe('BeadGateway', () => {
 
   it('includes priority in error message for invalid priority', () => {
     const execSpy = spyOn(childProcess, 'execFileSync')
-      .mockReturnValueOnce('beads_rust 1.2.3');
+      .mockReturnValueOnce('beads_rust 1.2.3')
+      .mockReturnValueOnce('Initialized');
 
     const gateway = new BeadGateway('/repo');
 
@@ -219,6 +464,7 @@ describe('BeadGateway', () => {
   it('upserts and reads artifact payload from bead description', () => {
     const execSpy = spyOn(childProcess, 'execFileSync')
       .mockReturnValueOnce('beads_rust 1.2.3')
+      .mockReturnValueOnce('Initialized')
       .mockReturnValueOnce('{}')
       .mockReturnValueOnce('')
       .mockReturnValueOnce('{"description":"Spec content"}');
@@ -229,7 +475,7 @@ describe('BeadGateway', () => {
 
     expect(spec).toBe('Spec content');
     expect(execSpy).toHaveBeenNthCalledWith(
-      2,
+      3,
       'br',
       ['show', 'bd-2', '--json'],
       {
@@ -239,7 +485,7 @@ describe('BeadGateway', () => {
       },
     );
     expect(execSpy).toHaveBeenNthCalledWith(
-      3,
+      4,
       'br',
       ['update', 'bd-2', '--description', 'Spec content'],
       {
@@ -257,6 +503,7 @@ describe('BeadGateway', () => {
     const expectedDesc = 'New spec content\n\n<!-- WARCRAFT:ARTIFACTS:BEGIN -->\n{\n  "task_state": "{\\"status\\":\\"pending\\",\\"dependsOn\\":[]}"\n}\n<!-- WARCRAFT:ARTIFACTS:END -->';
     const execSpy = spyOn(childProcess, 'execFileSync')
       .mockReturnValueOnce('beads_rust 1.2.3')
+      .mockReturnValueOnce('Initialized')
       .mockReturnValueOnce(JSON.stringify({ description: existingDesc }))
       .mockReturnValueOnce('')
       .mockReturnValueOnce(JSON.stringify({ description: expectedDesc }));
@@ -266,19 +513,19 @@ describe('BeadGateway', () => {
 
     // The update call should include both spec as prefix and preserved artifacts
     expect(execSpy).toHaveBeenNthCalledWith(
-      3,
+      4,
       'br',
       ['update', 'bd-2', '--description', expect.stringContaining('New spec content')],
       expect.any(Object),
     );
     expect(execSpy).toHaveBeenNthCalledWith(
-      3,
+      4,
       'br',
       ['update', 'bd-2', '--description', expect.stringContaining('WARCRAFT:ARTIFACTS:BEGIN')],
       expect.any(Object),
     );
     expect(execSpy).toHaveBeenNthCalledWith(
-      3,
+      4,
       'br',
       ['update', 'bd-2', '--description', expect.stringContaining('task_state')],
       expect.any(Object),

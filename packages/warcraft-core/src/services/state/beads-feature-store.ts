@@ -1,7 +1,7 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import type { FeatureJson, FeatureStatusType } from '../../types.js';
-import type { BeadsRepository } from '../beads/BeadsRepository.js';
+import { type BeadsRepository, isRepositoryInitFailure } from '../beads/BeadsRepository.js';
 import { mapBeadStatusToFeatureStatus } from '../beads/beadStatus.js';
 import {
   getFeaturePath,
@@ -76,6 +76,7 @@ export class BeadsFeatureStore implements FeatureStore {
   get(name: string): FeatureJson | null {
     const epicResult = this.repository.getEpicByFeatureName(name, false);
     if (epicResult.success === false) {
+      this.throwIfInitFailure(epicResult.error, `Failed to get epic for feature '${name}'`);
       console.warn(`Failed to get epic: ${epicResult.error.message}`);
       return null;
     }
@@ -89,7 +90,8 @@ export class BeadsFeatureStore implements FeatureStore {
     let details: Record<string, unknown>;
     try {
       details = gateway.show(epicId) as Record<string, unknown>;
-    } catch {
+    } catch (error) {
+      this.throwIfInitFailure(error, `Failed to show epic '${epicId}' for feature '${name}'`);
       return null;
     }
 
@@ -149,11 +151,19 @@ export class BeadsFeatureStore implements FeatureStore {
     try {
       const closeResult = this.repository.closeBead(feature.epicBeadId);
       if (closeResult.success === false) {
+        this.throwIfInitFailure(
+          closeResult.error,
+          `[warcraft] Failed to close epic bead '${feature.epicBeadId}' for feature '${feature.name}'`,
+        );
         console.warn(
           `[warcraft] Failed to close epic bead '${feature.epicBeadId}' for feature '${feature.name}': ${closeResult.error.message}`,
         );
       }
     } catch (error) {
+      this.throwIfInitFailure(
+        error,
+        `[warcraft] Failed to close epic bead '${feature.epicBeadId}' for feature '${feature.name}'`,
+      );
       const reason = error instanceof Error ? error.message : String(error);
       console.warn(
         `[warcraft] Failed to close epic bead '${feature.epicBeadId}' for feature '${feature.name}': ${reason}`,
@@ -165,7 +175,16 @@ export class BeadsFeatureStore implements FeatureStore {
     writeJson(getFeatureJsonPath(this.projectRoot, feature.name, 'on'), feature);
     const result = this.repository.setFeatureState(epicBeadId, feature);
     if (result.success === false) {
+      this.throwIfInitFailure(result.error, `Failed to write feature state for epic '${epicBeadId}'`);
       console.warn(`Failed to write feature state: ${result.error.message}`);
     }
+  }
+
+  private throwIfInitFailure(error: unknown, context: string): void {
+    if (!isRepositoryInitFailure(error)) {
+      return;
+    }
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(`${context}: ${reason}`);
   }
 }

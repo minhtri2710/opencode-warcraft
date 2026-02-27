@@ -5,7 +5,7 @@ import type { RunnableTasksResult, BackgroundPatchFields, RunnableTask } from '.
 import { TASK_STATUS_SCHEMA_VERSION } from '../taskService.js';
 import type { TaskWithDeps } from '../taskDependencyGraph.js';
 import { computeRunnableAndBlocked } from '../taskDependencyGraph.js';
-import { BeadsRepository } from '../beads/BeadsRepository.js';
+import { BeadsRepository, isRepositoryInitFailure } from '../beads/BeadsRepository.js';
 import { mapBeadStatusToTaskStatus } from '../beads/beadStatus.js';
 import { taskStateFromTaskStatus, encodeTaskState } from '../beads/artifactSchemas.js';
 import {
@@ -45,7 +45,11 @@ export class BeadsTaskStore implements TaskStore {
     const beadId = this.repository.getGateway().createTask(title, epicBeadId, priority);
     const statusWithBead: TaskStatus = { ...status, beadId };
 
-    this.repository.setTaskState(beadId, { ...statusWithBead, folder } as TaskStatus);
+    const setTaskStateResult = this.repository.setTaskState(beadId, { ...statusWithBead, folder } as TaskStatus);
+    if (setTaskStateResult.success === false) {
+      this.throwIfInitFailure(setTaskStateResult.error, `Failed to persist task state for '${beadId}'`);
+      throw new Error(`Failed to persist task state for '${beadId}': ${setTaskStateResult.error.message}`);
+    }
 
     return statusWithBead;
   }
@@ -85,6 +89,9 @@ export class BeadsTaskStore implements TaskStore {
       }
       const epicBeadId = epicResult.value!;
       const listResult = this.repository.listTaskBeadsForEpic(epicBeadId);
+      if (listResult.success === false) {
+        this.throwIfInitFailure(listResult.error, `Failed to list task beads for epic '${epicBeadId}'`);
+      }
       const taskBeads = listResult.success ? listResult.value : [];
       const sortedTaskBeads = [...taskBeads].sort((a, b) => a.title.localeCompare(b.title));
 
@@ -122,7 +129,8 @@ export class BeadsTaskStore implements TaskStore {
         const bOrder = parseInt(b.folder.split('-')[0], 10);
         return aOrder - bOrder;
       });
-    } catch {
+    } catch (error) {
+      this.throwIfInitFailure(error, `Failed to list tasks for feature '${featureName}'`);
       return [];
     }
   }
@@ -154,10 +162,14 @@ export class BeadsTaskStore implements TaskStore {
       try {
         this.repository.getGateway().syncTaskStatus(status.beadId, status.status);
       } catch (error) {
+        this.throwIfInitFailure(error, `[warcraft] Failed to sync bead status for '${status.beadId}'`);
         const reason = error instanceof Error ? error.message : String(error);
         console.warn(`[warcraft] Failed to sync bead status for '${status.beadId}': ${reason}`);
       }
-      this.repository.flushArtifacts();
+      const flushResult = this.repository.flushArtifacts();
+      if (flushResult.success === false) {
+        this.throwIfInitFailure(flushResult.error, `[warcraft] Failed to flush artifacts after syncing bead status for '${status.beadId}'`);
+      }
     }
   }
 
@@ -217,7 +229,10 @@ export class BeadsTaskStore implements TaskStore {
     }
 
     this.repository.upsertTaskArtifact(status.beadId, kind, content);
-    this.repository.flushArtifacts();
+    const flushResult = this.repository.flushArtifacts();
+    if (flushResult.success === false) {
+      this.throwIfInitFailure(flushResult.error, `[warcraft] Failed to flush artifacts after writing '${kind}' for '${status.beadId}'`);
+    }
     return status.beadId;
   }
 
@@ -226,7 +241,10 @@ export class BeadsTaskStore implements TaskStore {
     folder: string,
     kind: TaskArtifactKind,
   ): string | null {
-    this.repository.importArtifacts();
+    const importResult = this.repository.importArtifacts();
+    if (importResult.success === false) {
+      this.throwIfInitFailure(importResult.error, `[warcraft] Failed to import artifacts before reading '${kind}'`);
+    }
 
     const status = this.getRawStatus(featureName, folder);
     if (!status?.beadId) {
@@ -234,7 +252,11 @@ export class BeadsTaskStore implements TaskStore {
     }
 
     const readResult = this.repository.readTaskArtifact(status.beadId, kind);
-    return readResult.success ? readResult.value : null;
+    if (readResult.success === false) {
+      this.throwIfInitFailure(readResult.error, `[warcraft] Failed to read '${kind}' artifact for '${status.beadId}'`);
+      return null;
+    }
+    return readResult.value;
   }
 
   writeReport(featureName: string, folder: string, report: string): string {
@@ -357,6 +379,7 @@ export class BeadsTaskStore implements TaskStore {
         source: 'beads',
       };
     } catch (error) {
+      this.throwIfInitFailure(error, `[warcraft] Failed to get runnable tasks for feature '${featureName}'`);
       const reason = error instanceof Error ? error.message : String(error);
       // Log at error level so issues are visible in agent output
       console.error(`[warcraft] Failed to get runnable tasks from beads: ${reason}`);
@@ -365,7 +388,10 @@ export class BeadsTaskStore implements TaskStore {
   }
 
   flush(): void {
-    this.repository.flushArtifacts();
+    const flushResult = this.repository.flushArtifacts();
+    if (flushResult.success === false) {
+      this.throwIfInitFailure(flushResult.error, '[warcraft] Failed to flush bead artifacts');
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -382,9 +408,21 @@ export class BeadsTaskStore implements TaskStore {
 
   private readTaskState(beadId: string): TaskStatus | null {
     const result = this.repository.getTaskState(beadId);
-    if (result.success === false || !result.value) {
+    if (result.success === false) {
+      this.throwIfInitFailure(result.error, `[warcraft] Failed to read task state for bead '${beadId}'`);
+      return null;
+    }
+    if (!result.value) {
       return null;
     }
     return result.value;
+  }
+
+  private throwIfInitFailure(error: unknown, context: string): void {
+    if (!isRepositoryInitFailure(error)) {
+      return;
+    }
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(`${context}: ${reason}`);
   }
 }

@@ -74,6 +74,35 @@ export type Result<T> =
   | { success: true; value: T }
   | { success: false; error: RepositoryError };
 
+const INTERNAL_GATEWAY_CODE_PATTERN = /\[(BR_[A-Z_]+)\]/;
+const INIT_FAILURE_INTERNAL_CODES = new Set(['BR_INIT_FAILED', 'BR_NOT_INITIALIZED']);
+
+export function getRepositoryInternalCode(error: unknown): string | null {
+  if (error instanceof BeadGatewayError) {
+    return error.internalCode ?? extractInternalCodeFromMessage(error.message);
+  }
+
+  if (error instanceof RepositoryError) {
+    return getRepositoryInternalCode(error.cause) ?? extractInternalCodeFromMessage(error.message);
+  }
+
+  if (error instanceof Error) {
+    return extractInternalCodeFromMessage(error.message);
+  }
+
+  return null;
+}
+
+export function isRepositoryInitFailure(error: unknown): boolean {
+  const internalCode = getRepositoryInternalCode(error);
+  return internalCode !== null && INIT_FAILURE_INTERNAL_CODES.has(internalCode);
+}
+
+function extractInternalCodeFromMessage(message: string): string | null {
+  const matched = message.match(INTERNAL_GATEWAY_CODE_PATTERN);
+  return matched ? matched[1] : null;
+}
+
 // ============================================================================
 // Sync Policy
 // ============================================================================
@@ -827,17 +856,24 @@ export class BeadsRepository {
     }
 
     if (error instanceof BeadGatewayError) {
+      const internalCode = getRepositoryInternalCode(error);
+      const codePrefix = internalCode ? `[${internalCode}] ` : '';
+      const details = internalCode && error.message.includes(`[${internalCode}]`)
+        ? error.message
+        : `${codePrefix}${error.message}`;
       return new RepositoryError(
         'gateway_error',
-        `Bead gateway error: ${error.message}`,
+        `Bead gateway error: ${details}`,
         error,
       );
     }
 
     if (error instanceof Error) {
+      const internalCode = getRepositoryInternalCode(error);
+      const codePrefix = internalCode ? `[${internalCode}] ` : '';
       return new RepositoryError(
         'gateway_error',
-        `Bead gateway error: ${error.message}`,
+        `Bead gateway error: ${codePrefix}${error.message}`,
         error,
       );
     }
@@ -846,5 +882,5 @@ export class BeadsRepository {
       'gateway_error',
       String(error),
     );
-  }
+}
 }

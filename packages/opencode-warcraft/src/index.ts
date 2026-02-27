@@ -656,7 +656,7 @@ To unblock: Remove ${blockedPath}`;
           prompt: MIMIRON_PROMPT,
           description: 'Mimiron (Planner) - Plans features, interviews, writes plans. NEVER executes.',
           temperature: 0.7,
-          permission: { edit: 'deny', task: 'allow', question: 'allow', skill: 'allow', todowrite: 'allow', todoread: 'allow', webfetch: 'allow' },
+          permission: { edit: 'deny', task: 'allow', question: 'allow', skill: 'allow', todowrite: 'allow', todoread: 'allow', webfetch: 'allow', warcraft_plan_read: 'allow' },
         }),
         buildAgentConfig({
           name: 'saurfang',

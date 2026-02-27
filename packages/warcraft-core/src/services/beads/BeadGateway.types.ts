@@ -41,10 +41,17 @@ export type BeadGatewayErrorCode =
   | 'missing_field'
   | 'invalid_priority';
 
+export type BeadGatewayInternalCode =
+  | 'BR_NOT_FOUND'
+  | 'BR_INIT_FAILED'
+  | 'BR_NOT_INITIALIZED'
+  | 'BR_COMMAND_FAILED'
+  | 'BR_PARSE_FAILED';
 export class BeadGatewayError extends Error {
   constructor(
     public readonly code: BeadGatewayErrorCode,
     message: string,
+    public readonly internalCode?: BeadGatewayInternalCode,
   ) {
     super(message);
     this.name = 'BeadGatewayError';

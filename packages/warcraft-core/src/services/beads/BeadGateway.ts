@@ -1,4 +1,6 @@
 import { execFileSync } from 'child_process';
+import { existsSync } from 'fs';
+import { join } from 'path';
 import type { TaskStatusType } from '../../types.js';
 import { getTaskBeadActions } from './beadMapping.js';
 import type { BeadArtifactKind, TaskBeadArtifacts } from './BeadGateway.types.js';
@@ -14,19 +16,15 @@ export class BeadGateway {
 
   checkAvailable(): string {
     try {
-      const output = execFileSync('br', ['--version'], {
-        cwd: this.projectRoot,
-        encoding: 'utf-8',
-        timeout: 30_000,
-      });
+      const output = this.executeBr(['--version']);
       // Parse version from output like "beads_rust 1.2.3"
       const versionMatch = output.trim().match(/[\d.]+/);
       return versionMatch ? versionMatch[0] : output.trim();
     } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
       throw new BeadGatewayError(
         'br_not_found',
-        `br CLI not found or not usable: ${reason}. Install beads_rust from https://github.com/Dicklesworthstone/beads_rust`,
+        `br CLI not found or not usable [BR_NOT_FOUND]: ${this.getSafeFailureReason(error)}. Install beads_rust from https://github.com/Dicklesworthstone/beads_rust`,
+        'BR_NOT_FOUND',
       );
     }
   }
@@ -34,8 +32,142 @@ export class BeadGateway {
   private ensurePreflight(): void {
     if (!this.preflightCompleted) {
       this.checkAvailable();
+      this.ensureInitialized();
       this.preflightCompleted = true;
     }
+  }
+
+  private ensureInitialized(): void {
+    if (this.isRepositoryInitializedOnDisk()) {
+      return;
+    }
+    try {
+      const output = this.executeBr(['init']);
+      if (this.isAlreadyInitializedPayload(output)) {
+        return;
+      }
+      if (this.isErrorPayload(output)) {
+        throw new BeadGatewayError(
+          'command_error',
+          'Failed to initialize beads repository [BR_INIT_FAILED]: br command failed',
+          'BR_INIT_FAILED',
+        );
+      }
+    } catch (error) {
+      if (this.isAlreadyInitializedError(error)) {
+        return;
+      }
+
+      throw new BeadGatewayError(
+        'command_error',
+        `Failed to initialize beads repository [BR_INIT_FAILED]: ${this.getSafeFailureReason(error)}`,
+        'BR_INIT_FAILED',
+      );
+    }
+  }
+
+  private isRepositoryInitializedOnDisk(): boolean {
+    return existsSync(join(this.projectRoot, '.beads', 'beads.db'));
+  }
+  private getSafeFailureReason(error: unknown): string {
+    const errorCode = this.getErrorCode(error);
+    if (errorCode === 'ENOENT') {
+      return 'br executable is unavailable';
+    }
+
+    if (errorCode === 'ETIMEDOUT' || errorCode === 'ESRCH') {
+      return 'br command timed out';
+    }
+
+    if (this.isNotInitializedError(error)) {
+      return 'beads repository is not initialized';
+    }
+
+    return 'br command failed';
+  }
+
+  private getErrorCode(error: unknown): string | undefined {
+    if (!error || typeof error !== 'object') {
+      return undefined;
+    }
+    const code = (error as { code?: unknown }).code;
+    return typeof code === 'string' ? code : undefined;
+  }
+
+  private extractErrorDetails(error: unknown): string {
+    const reason = error instanceof Error ? error.message : String(error);
+    const stderr = (error as Error & { stderr?: string }).stderr ?? '';
+    const stdout = (error as Error & { stdout?: string }).stdout ?? '';
+    return `${reason}\n${stderr}\n${stdout}`.toLowerCase();
+  }
+
+  private isAlreadyInitializedError(error: unknown): boolean {
+    const details = this.extractErrorDetails(error);
+
+    return this.hasAlreadyInitializedDetails(details);
+
+  }
+  private isNotInitializedError(error: unknown): boolean {
+    const details = this.extractErrorDetails(error);
+
+    return details.includes('not initialized') || details.includes('not initialised') || details.includes('not_initialized');
+  }
+
+  private isErrorPayload(output: string): boolean {
+    return this.getErrorPayloadDetails(output) !== null;
+  }
+
+  private isAlreadyInitializedPayload(output: string): boolean {
+    const details = this.getErrorPayloadDetails(output);
+    if (!details) {
+      return false;
+    }
+    return this.hasAlreadyInitializedDetails(details);
+  }
+
+  private getErrorPayloadDetails(output: string): string | null {
+    try {
+      const parsed = JSON.parse(output) as unknown;
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return null;
+      }
+      const errorObj = (parsed as { error?: unknown }).error;
+      if (!errorObj || typeof errorObj !== 'object' || Array.isArray(errorObj)) {
+        return null;
+      }
+
+      const code = String((errorObj as { code?: unknown }).code ?? '').toLowerCase();
+      const message = String((errorObj as { message?: unknown }).message ?? '').toLowerCase();
+      const hint = String((errorObj as { hint?: unknown }).hint ?? '').toLowerCase();
+      return `${code}\n${message}\n${hint}`;
+    } catch {
+      return null;
+    }
+  }
+
+  private hasAlreadyInitializedDetails(details: string): boolean {
+    return (
+      details.includes('already initialized') ||
+      details.includes('already initialised') ||
+      details.includes('already been initialized') ||
+      details.includes('already been initialised') ||
+      details.includes('already_initialized')
+    );
+  }
+  private isNotInitializedPayload(output: string): boolean {
+    const details = this.getErrorPayloadDetails(output);
+    if (!details) {
+      return false;
+    }
+    return details.includes('not_initialized') || details.includes('not initialized') || details.includes('not initialised');
+  }
+
+  private executeBr(args: string[]): string {
+    return execFileSync('br', args, {
+      cwd: this.projectRoot,
+      encoding: 'utf-8',
+      timeout: 30_000,
+    });
   }
 
   createEpic(name: string, priority: number): string {
@@ -260,33 +392,75 @@ export class BeadGateway {
   }
 
   private runBr(args: string[], operation: string): string {
+    const shouldAttemptReinit = args[0] !== 'init';
     try {
-      return execFileSync('br', args, {
-        cwd: this.projectRoot,
-        encoding: 'utf-8',
-        timeout: 30_000,
-      });
+      const output = this.executeBr(args);
+      if (shouldAttemptReinit && this.isNotInitializedPayload(output)) {
+        this.ensureInitialized();
+        const retryOutput = this.executeBr(args);
+        if (this.isNotInitializedPayload(retryOutput)) {
+          throw new BeadGatewayError(
+            'command_error',
+            `Failed to ${operation} [BR_NOT_INITIALIZED]: beads repository initialization failed`,
+            'BR_NOT_INITIALIZED',
+          );
+        }
+        return retryOutput;
+      }
+      return output;
     } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
-      const stderr = (error as Error & { stderr?: string }).stderr;
-      const stdout = (error as Error & { stdout?: string }).stdout;
-      let fullMessage = `Failed to ${operation}: ${reason}`;
-      if (stderr) {
-        fullMessage += `\nstderr: ${stderr}`;
+      if (error instanceof BeadGatewayError) {
+        throw error;
       }
-      if (stdout) {
-        fullMessage += `\nstdout: ${stdout}`;
+
+      if (shouldAttemptReinit && this.isNotInitializedError(error)) {
+        this.ensureInitialized();
+        try {
+          const retryOutput = this.executeBr(args);
+          if (this.isNotInitializedPayload(retryOutput)) {
+            throw new BeadGatewayError(
+              'command_error',
+              `Failed to ${operation} [BR_NOT_INITIALIZED]: beads repository initialization failed`,
+              'BR_NOT_INITIALIZED',
+            );
+          }
+          return retryOutput;
+        } catch (retryError) {
+          if (retryError instanceof BeadGatewayError) {
+            throw retryError;
+          }
+          if (this.isNotInitializedError(retryError)) {
+            throw new BeadGatewayError(
+              'command_error',
+              `Failed to ${operation} [BR_NOT_INITIALIZED]: beads repository initialization failed`,
+              'BR_NOT_INITIALIZED',
+            );
+          }
+          throw new BeadGatewayError(
+            'command_error',
+            `Failed to ${operation} [BR_COMMAND_FAILED]: ${this.getSafeFailureReason(retryError)}`,
+            'BR_COMMAND_FAILED',
+          );
+        }
       }
-      throw new BeadGatewayError('command_error', fullMessage);
+
+      throw new BeadGatewayError(
+        'command_error',
+        `Failed to ${operation} [BR_COMMAND_FAILED]: ${this.getSafeFailureReason(error)}`,
+        'BR_COMMAND_FAILED',
+      );
     }
   }
 
   private parseJson(output: string, target: string): unknown {
     try {
       return JSON.parse(output) as unknown;
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
-      throw new BeadGatewayError('parse_error', `Failed to parse ${target}: ${reason}`);
+    } catch {
+      throw new BeadGatewayError(
+        'parse_error',
+        `Failed to parse ${target} [BR_PARSE_FAILED]: invalid JSON payload from br`,
+        'BR_PARSE_FAILED',
+      );
     }
   }
 

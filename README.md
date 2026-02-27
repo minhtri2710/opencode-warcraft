@@ -7,7 +7,7 @@ Context-driven development for AI coding assistants with a strict plan-first wor
 3. Execute in isolated task worktrees
 4. Merge with traceable artifacts
 
-This repository is a Bun workspace monorepo containing the shared core library and the OpenCode plugin.
+This repository is a Bun workspace monorepo containing shared core services and OpenCode plugin packages.
 
 > Note: This project is forked from [agent-hive](https://github.com/tctinh/agent-hive).
 
@@ -20,6 +20,7 @@ This repository is a Bun workspace monorepo containing the shared core library a
 | --- | --- |
 | `packages/warcraft-core/` | Shared domain services, task/plan/worktree logic, filesystem utilities |
 | `packages/opencode-warcraft/` | OpenCode plugin (agents, tools, hooks, MCP wiring, built-in skills) |
+| `packages/opencode-copilot-auth/` | Internal auth plugin for GitHub Copilot OAuth/device-flow and request header shaping |
 | `scripts/` | CI and release verification scripts |
 | `.beads/artifacts/` | Beads artifact cache and task execution records |
 
@@ -48,9 +49,9 @@ bun run lint
 From the repository root:
 
 ```bash
-bun run build          # Build both packages
+bun run build          # Build all workspace packages
 bun run test           # Run all package tests
-bun run lint           # Type-check both packages
+bun run lint           # Type-check all workspace packages
 bun run workflow:verify
 bun run release:check
 ```

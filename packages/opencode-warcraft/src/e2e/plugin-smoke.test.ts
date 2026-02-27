@@ -358,11 +358,6 @@ Do it
         prompt?: string;
       };
     }>(execStartOutput as string);
-    // DEBUG: Log the actual output to diagnose the issue
-    console.log('[DEBUG] execStartOutput:', execStartOutput);
-    console.log('[DEBUG] execStart:', JSON.stringify(execStart, null, 2));
-    
-    expect(execStart.taskToolCall).toBeDefined();
     expect(execStart.taskToolCall).toBeDefined();
     expect(execStart.taskToolCall?.subagent_type).toBeDefined();
     expect(execStart.taskToolCall?.description).toBe("Warcraft: 01-first-task");

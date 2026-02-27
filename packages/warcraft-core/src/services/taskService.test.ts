@@ -88,6 +88,9 @@ describe("TaskService", () => {
       if (argList[0] === '--version') {
         return 'beads_rust 1.2.3' as any;
       }
+      if (argList[0] === 'init') {
+        return 'Initialized' as any;
+      }
       if (argList[0] === 'create') {
         childCounter += 1;
         const taskId = `bd-task-${childCounter}`;
