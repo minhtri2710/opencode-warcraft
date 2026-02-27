@@ -1,6 +1,6 @@
 {
   "name": "opencode-warcraft",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "type": "module",
   "description": "OpenCode plugin for Project Warcraft - from vibe coding to warcraft coding",
   "license": "MIT WITH Commons-Clause",
@@ -45,7 +45,6 @@
   },
   "devDependencies": {
     "warcraft-core": "workspace:*",
-    "opencode-copilot-message": "workspace:*",
     "@opencode-ai/plugin": "^1.0.143",
     "@opencode-ai/sdk": "^0.13.0",
     "@types/bun": "^1.2.0",

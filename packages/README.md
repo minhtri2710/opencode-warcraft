@@ -1,10 +1,9 @@
 # Packages Guide for AI Agents
 
-This directory contains three workspace packages:
+This directory contains two workspace packages:
 
 - `warcraft-core`: shared domain services and filesystem logic
 - `opencode-warcraft`: OpenCode plugin, agent prompts, hooks, and MCP wiring
-- `opencode-copilot-message`: internal plugin package for message transform logging
 
 Use this split when making changes:
 
@@ -26,7 +25,6 @@ Common commands:
 
 - `bun run test --filter warcraft-core`
 - `bun run test --filter opencode-warcraft`
-- `bun run test --filter opencode-copilot-message`
 - `bun run lint`
 - `bun run build`
 

@@ -1,6 +1,6 @@
 {
   "name": "@minhtri2710/opencode-warcraft",
-  "version": "0.0.4",
+  "version": "0.0.5",
   "publishConfig": {
     "registry": "https://npm.pkg.github.com/minhtri2710"
   },
@@ -13,9 +13,9 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "bun run --filter warcraft-core build && bun run --filter opencode-warcraft build && bun run --filter opencode-copilot-message build",
+    "build": "bun run --filter warcraft-core build && bun run --filter opencode-warcraft build",
     "test": "bun run --filter '*' test",
-    "lint": "bun run --filter warcraft-core typecheck && bun run --filter opencode-warcraft typecheck && bun run --filter opencode-copilot-message typecheck",
+    "lint": "bun run --filter warcraft-core typecheck && bun run --filter opencode-warcraft typecheck",
     "release:check": "bun install --frozen-lockfile && bun run build && bun run test && bun run lint"
   },
   "license": "MIT"

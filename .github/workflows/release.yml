@@ -31,9 +31,6 @@ jobs:
         working-directory: packages/opencode-warcraft
         run: bun run build
 
-      - name: Build opencode-copilot-message
-        working-directory: packages/opencode-copilot-message
-        run: bun run build
 
       - name: Test warcraft-core
         working-directory: packages/warcraft-core
@@ -43,9 +40,6 @@ jobs:
         working-directory: packages/opencode-warcraft
         run: bun test
 
-      - name: Test opencode-copilot-message
-        working-directory: packages/opencode-copilot-message
-        run: bun test
 
       - name: Upload npm package artifact
         uses: actions/upload-artifact@v4

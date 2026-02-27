@@ -5,28 +5,14 @@
     "": {
       "name": "@minhtri2710/opencode-warcraft",
     },
-    "packages/opencode-copilot-message": {
-      "name": "opencode-copilot-message",
-      "version": "0.0.4",
-      "devDependencies": {
-        "@opencode-ai/plugin": "^1.0.143",
-        "@types/bun": "^1.2.0",
-        "@types/node": "^20.0.0",
-        "typescript": "^5.0.0",
-      },
-      "peerDependencies": {
-        "@opencode-ai/plugin": ">=0.13.7",
-      },
-    },
     "packages/opencode-warcraft": {
       "name": "opencode-warcraft",
-      "version": "0.0.4",
+      "version": "0.0.5",
       "devDependencies": {
         "@opencode-ai/plugin": "^1.0.143",
         "@opencode-ai/sdk": "^0.13.0",
         "@types/bun": "^1.2.0",
         "@types/node": "^20.0.0",
-        "opencode-copilot-message": "workspace:*",
         "typescript": "^5.0.0",
         "warcraft-core": "workspace:*",
       },
@@ -41,7 +27,7 @@
     },
     "packages/warcraft-core": {
       "name": "warcraft-core",
-      "version": "0.0.4",
+      "version": "0.0.5",
       "dependencies": {
         "simple-git": "^3.27.0",
       },
@@ -334,8 +320,6 @@
     "once": ["once@1.4.0", "", { "dependencies": { "wrappy": "1" } }, "sha512-lNaJgI+2Q5URQBkccEKHTQOPaXdUxnZZElQTZY0MFUAuaEqe1E+Nyvgdz/aIyNi6Z9MzO5dv1H8n58/GELp3+w=="],
 
     "open": ["open@10.1.2", "", { "dependencies": { "default-browser": "^5.2.1", "define-lazy-prop": "^3.0.0", "is-inside-container": "^1.0.0", "is-wsl": "^3.1.0" } }, "sha512-cxN6aIDPz6rm8hbebcP7vrQNhvRcveZoJU72Y7vskh4oIm+BZwBECnx5nTmrlres1Qapvx27Qo1Auukpf8PKXw=="],
-
-    "opencode-copilot-message": ["opencode-copilot-message@workspace:packages/opencode-copilot-message"],
 
     "opencode-warcraft": ["opencode-warcraft@workspace:packages/opencode-warcraft"],
 
