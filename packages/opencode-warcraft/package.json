@@ -38,9 +38,6 @@
   "peerDependencies": {
     "@opencode-ai/plugin": ">=0.13.7"
   },
-  "dependencies": {
-    "opencode-copilot-message": "workspace:*"
-  },
   "optionalDependencies": {
     "grep-mcp": "^1.1.0",
     "@upstash/context7-mcp": "^2.1.0",
@@ -48,6 +45,7 @@
   },
   "devDependencies": {
     "warcraft-core": "workspace:*",
+    "opencode-copilot-message": "workspace:*",
     "@opencode-ai/plugin": "^1.0.143",
     "@opencode-ai/sdk": "^0.13.0",
     "@types/bun": "^1.2.0",
