@@ -11,6 +11,7 @@
 .beads/artifacts/.worktrees/
 
 
+node_modules/
 dist/
 *.tsbuildinfo
 .test-tmp/
