@@ -1,9 +1,6 @@
 {
-  "name": "@minhtri2710/opencode-warcraft",
+  "name": "opencode-warcraft",
   "version": "0.0.5",
-  "publishConfig": {
-    "registry": "https://npm.pkg.github.com/minhtri2710"
-  },
   "repository": {
     "type": "git",
     "url": "https://github.com/minhtri2710/opencode-warcraft.git"
@@ -18,7 +15,7 @@
     "lint": "bun run --filter warcraft-core typecheck && bun run --filter opencode-warcraft typecheck && bunx biome check .",
     "format": "bunx biome check --write .",
     "format:check": "bunx biome check .",
-    "release:check": "bun install --frozen-lockfile && bun run build && bun run test && bun run lint"
+    "release:check": "bun install --frozen-lockfile && bun run build && bun run test && bun run lint && bun run format:check"
   },
   "license": "MIT",
   "devDependencies": {
