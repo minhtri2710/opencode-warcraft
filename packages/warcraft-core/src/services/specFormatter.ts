@@ -8,8 +8,8 @@ function inferTaskType(planSection: string | null, taskName: string): string | n
     return taskName.toLowerCase().includes('test') ? 'testing' : null;
   }
 
-  const fileTypeMatches = Array.from(planSection.matchAll(/-\s*(Create|Modify|Test):/gi)).map(
-    match => match[1].toLowerCase()
+  const fileTypeMatches = Array.from(planSection.matchAll(/-\s*(Create|Modify|Test):/gi)).map((match) =>
+    match[1].toLowerCase(),
   );
   const fileTypes = new Set(fileTypeMatches);
 
@@ -42,18 +42,11 @@ export function formatSpecContent(data: SpecData): string {
 
   const taskType = inferTaskType(planSection, task.name);
 
-  const specLines: string[] = [
-    `# Task: ${task.folder}`,
-    '',
-    `## Feature: ${featureName}`,
-    '',
-    '## Dependencies',
-    '',
-  ];
+  const specLines: string[] = [`# Task: ${task.folder}`, '', `## Feature: ${featureName}`, '', '## Dependencies', ''];
 
   if (dependsOn.length > 0) {
     for (const dep of dependsOn) {
-      const depTask = allTasks.find(t => t.folder === dep);
+      const depTask = allTasks.find((t) => t.folder === dep);
       if (depTask) {
         specLines.push(`- **${depTask.order}. ${depTask.name}** (${dep})`);
       } else {
@@ -79,14 +72,12 @@ export function formatSpecContent(data: SpecData): string {
   }
 
   if (contextFiles.length > 0) {
-    const contextCompiled = contextFiles
-      .map(f => `## ${f.name}\n\n${f.content}`)
-      .join('\n\n---\n\n');
+    const contextCompiled = contextFiles.map((f) => `## ${f.name}\n\n${f.content}`).join('\n\n---\n\n');
     specLines.push('## Context', '', contextCompiled, '');
   }
 
   if (completedTasks.length > 0) {
-    const completedLines = completedTasks.map(t => `- ${t.name}: ${t.summary}`);
+    const completedLines = completedTasks.map((t) => `- ${t.name}: ${t.summary}`);
     specLines.push('## Completed Tasks', '', ...completedLines, '');
   }
 

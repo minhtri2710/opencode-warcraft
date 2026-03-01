@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
 import { AgentsMdService } from './agentsMdService.js';
@@ -34,7 +34,7 @@ describe('AgentsMdService', () => {
       expect(result.content).toBeDefined();
       expect(typeof result.content).toBe('string');
       expect(result.content.length).toBeGreaterThan(0);
-      
+
       // Verify file was NOT written
       const agentsMdPath = path.join(testDir, 'AGENTS.md');
       expect(fs.existsSync(agentsMdPath)).toBe(false);
@@ -49,7 +49,7 @@ describe('AgentsMdService', () => {
 
       expect(result.existed).toBe(true);
       expect(result.content).toBe(existingContent);
-      
+
       // Verify file was not modified
       const fileContent = fs.readFileSync(agentsMdPath, 'utf-8');
       expect(fileContent).toBe(existingContent);
@@ -62,10 +62,7 @@ describe('AgentsMdService', () => {
         name: 'test-repo',
         workspaces: ['packages/*'],
       };
-      fs.writeFileSync(
-        path.join(testDir, 'package.json'),
-        JSON.stringify(packageJson, null, 2)
-      );
+      fs.writeFileSync(path.join(testDir, 'package.json'), JSON.stringify(packageJson, null, 2));
 
       const result = await service.init();
 
@@ -83,10 +80,7 @@ describe('AgentsMdService', () => {
           dev: 'bun run dev',
         },
       };
-      fs.writeFileSync(
-        path.join(testDir, 'package.json'),
-        JSON.stringify(packageJson, null, 2)
-      );
+      fs.writeFileSync(path.join(testDir, 'package.json'), JSON.stringify(packageJson, null, 2));
       // Create bun.lockb to detect bun as package manager
       fs.writeFileSync(path.join(testDir, 'bun.lockb'), '');
 
@@ -107,10 +101,16 @@ describe('AgentsMdService', () => {
 
     test('calls contextService.list() with feature name and extracts findings', async () => {
       // Setup context files with actionable findings
-      contextService.write('test-feature', 'conventions', 
-        'We use Zustand, not Redux\nAuth lives in /lib/auth, not /utils/auth');
-      contextService.write('test-feature', 'decisions',
-        'Build command: bun run build\nPrefer async/await over .then()');
+      contextService.write(
+        'test-feature',
+        'conventions',
+        'We use Zustand, not Redux\nAuth lives in /lib/auth, not /utils/auth',
+      );
+      contextService.write(
+        'test-feature',
+        'decisions',
+        'Build command: bun run build\nPrefer async/await over .then()',
+      );
 
       const result = await service.sync('test-feature');
 
@@ -126,8 +126,11 @@ describe('AgentsMdService', () => {
       fs.writeFileSync(path.join(testDir, 'AGENTS.md'), existingContent);
 
       // Add context with duplicate and new findings
-      contextService.write('test-feature', 'conventions',
-        'We use Zustand for state management.\nWe use TypeScript strict mode.');
+      contextService.write(
+        'test-feature',
+        'conventions',
+        'We use Zustand for state management.\nWe use TypeScript strict mode.',
+      );
 
       const result = await service.sync('test-feature');
 
@@ -143,8 +146,7 @@ describe('AgentsMdService', () => {
       fs.writeFileSync(path.join(testDir, 'AGENTS.md'), existingContent);
 
       // Add context with only duplicate finding
-      contextService.write('test-feature', 'conventions',
-        'We use Zustand for state management.');
+      contextService.write('test-feature', 'conventions', 'We use Zustand for state management.');
 
       const result = await service.sync('test-feature');
 
@@ -156,12 +158,12 @@ describe('AgentsMdService', () => {
   describe('apply()', () => {
     test('writes content to AGENTS.md and returns path and char count', () => {
       const content = '# Agent Guidelines\n\nThis is test content.';
-      
+
       const result = service.apply(content);
-      
+
       expect(result.path).toBe(path.join(testDir, 'AGENTS.md'));
       expect(result.chars).toBe(content.length);
-      
+
       // Verify file was written
       const agentsMdPath = path.join(testDir, 'AGENTS.md');
       expect(fs.existsSync(agentsMdPath)).toBe(true);
@@ -173,14 +175,14 @@ describe('AgentsMdService', () => {
       // Create existing AGENTS.md
       const agentsMdPath = path.join(testDir, 'AGENTS.md');
       fs.writeFileSync(agentsMdPath, '# Old content');
-      
+
       const content = '# New content';
       const result = service.apply(content);
-      
+
       expect(result.isNew).toBe(false);
       expect(result.path).toBe(agentsMdPath);
       expect(result.chars).toBe(content.length);
-      
+
       // Verify file was overwritten
       const fileContent = fs.readFileSync(agentsMdPath, 'utf-8');
       expect(fileContent).toBe(content);
@@ -188,9 +190,9 @@ describe('AgentsMdService', () => {
 
     test('with no existing AGENTS.md returns isNew: true', () => {
       const content = '# Brand new content';
-      
+
       const result = service.apply(content);
-      
+
       expect(result.isNew).toBe(true);
       expect(result.path).toBe(path.join(testDir, 'AGENTS.md'));
       expect(result.chars).toBe(content.length);

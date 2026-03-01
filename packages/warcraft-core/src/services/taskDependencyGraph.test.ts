@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'bun:test';
-import { computeRunnableAndBlocked, buildEffectiveDependencies, validateUniquePrefixes, TaskWithDeps } from './taskDependencyGraph.js';
+import {
+  buildEffectiveDependencies,
+  computeRunnableAndBlocked,
+  type TaskWithDeps,
+  validateUniquePrefixes,
+} from './taskDependencyGraph.js';
 
 describe('computeRunnableAndBlocked', () => {
   it('returns all pending tasks with no deps as runnable', () => {
@@ -99,7 +104,7 @@ describe('computeRunnableAndBlocked', () => {
     expect(result.runnable).toContain('02-left');
     expect(result.runnable).toContain('03-right');
     expect(result.runnable).toHaveLength(2);
-    
+
     // Task 4 is blocked on both 2 and 3
     expect(result.blocked).toEqual({
       '04-merge': ['02-left', '03-right'],
@@ -139,7 +144,11 @@ describe('computeRunnableAndBlocked', () => {
       { folder: '02-failed', status: 'failed', dependsOn: [] },
       { folder: '03-blocked', status: 'blocked', dependsOn: [] },
       { folder: '04-partial', status: 'partial', dependsOn: [] },
-      { folder: '05-dependent', status: 'pending', dependsOn: ['01-cancelled', '02-failed', '03-blocked', '04-partial'] },
+      {
+        folder: '05-dependent',
+        status: 'pending',
+        dependsOn: ['01-cancelled', '02-failed', '03-blocked', '04-partial'],
+      },
     ];
 
     const result = computeRunnableAndBlocked(tasks);

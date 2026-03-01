@@ -6,7 +6,7 @@
  */
 
 import { CANONICAL_DELEGATION_THRESHOLD } from './fragments/delegation-threshold.js';
-import { POST_BATCH_REVIEW, AGENTS_MD_MAINTENANCE } from './fragments/post-batch.js';
+import { AGENTS_MD_MAINTENANCE, POST_BATCH_REVIEW } from './fragments/post-batch.js';
 import { USER_INPUT_DIRECTIVE } from './fragments/user-input.js';
 export const KHADGAR_PROMPT = `# Khadgar (Hybrid)
 

@@ -1,16 +1,16 @@
-import * as path from 'path';
 import * as fs from 'fs';
+import * as path from 'path';
 import type { FeatureJson } from '../../types.js';
+import { ensureDir, fileExists, readJson, writeJson } from '../../utils/fs.js';
+import { acquireLockSync, writeJsonLockedSync } from '../../utils/json-lock.js';
 import {
-  getFeaturePath,
-  getFeatureJsonPath,
   getContextPath,
+  getFeatureJsonPath,
+  getFeaturePath,
   getTasksPath,
   listFeatureDirectories,
 } from '../../utils/paths.js';
-import { ensureDir, readJson, writeJson, fileExists } from '../../utils/fs.js';
-import { acquireLockSync, writeJsonLockedSync } from '../../utils/json-lock.js';
-import type { FeatureStore, CreateFeatureInput } from './types.js';
+import type { CreateFeatureInput, FeatureStore } from './types.js';
 
 /**
  * FeatureStore implementation for beadsMode='off'.
@@ -55,9 +55,7 @@ export class FilesystemFeatureStore implements FeatureStore {
           fs.rmSync(featurePath, { recursive: true, force: true });
         }
         const reason = error instanceof Error ? error.message : String(error);
-        throw new Error(
-          `Failed to initialize feature '${input.name}': ${reason}`,
-        );
+        throw new Error(`Failed to initialize feature '${input.name}': ${reason}`);
       }
 
       return feature;

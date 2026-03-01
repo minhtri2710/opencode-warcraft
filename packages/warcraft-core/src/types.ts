@@ -1,15 +1,11 @@
-export type FeatureStatusType =
-  | "planning"
-  | "approved"
-  | "executing"
-  | "completed";
+export type FeatureStatusType = 'planning' | 'approved' | 'executing' | 'completed';
 
 export interface FeatureJson {
   name: string;
   epicBeadId: string;
   status: FeatureStatusType;
-  workflowPath?: "standard" | "lightweight";
-  reviewChecklistVersion?: "v1";
+  workflowPath?: 'standard' | 'lightweight';
+  reviewChecklistVersion?: 'v1';
   reviewChecklistCompletedAt?: string;
   ticket?: string;
   sessionId?: string;
@@ -18,15 +14,8 @@ export interface FeatureJson {
   completedAt?: string;
 }
 
-export type TaskStatusType =
-  | "pending"
-  | "in_progress"
-  | "done"
-  | "cancelled"
-  | "blocked"
-  | "failed"
-  | "partial";
-export type TaskOrigin = "plan" | "manual";
+export type TaskStatusType = 'pending' | 'in_progress' | 'done' | 'cancelled' | 'blocked' | 'failed' | 'partial';
+export type TaskOrigin = 'plan' | 'manual';
 /** Worker session information for background task execution */
 export interface WorkerSession {
   /** Background task ID from OMO-Slim */
@@ -38,7 +27,7 @@ export interface WorkerSession {
   /** Agent type handling this task */
   agent?: string;
   /** Execution mode: inline (same session) or delegate (background) */
-  mode?: "inline" | "delegate";
+  mode?: 'inline' | 'delegate';
   /** ISO timestamp of last heartbeat */
   lastHeartbeatAt?: string;
   /** Current attempt number (1-based) */
@@ -162,7 +151,7 @@ export interface AgentModelConfig {
   variant?: string;
 }
 
-export type BeadsMode = "on" | "off";
+export type BeadsMode = 'on' | 'off';
 
 export interface ParallelExecutionConfig {
   /** Dispatch strategy: unbounded preserves current Promise.all behavior, bounded enforces maxConcurrency. */
@@ -187,7 +176,7 @@ export interface WarcraftConfig {
   /** Enable OMO-Slim delegation (optional integration) */
   omoSlimEnabled?: boolean;
   /** Choose between unified or dedicated agent modes */
-  agentMode?: "unified" | "dedicated";
+  agentMode?: 'unified' | 'dedicated';
   /** Agent configuration */
   agents?: {
     /** Khadgar (hybrid planner + orchestrator) */
@@ -204,7 +193,7 @@ export interface WarcraftConfig {
     algalon?: AgentModelConfig;
   };
   /** Sandbox mode for worker isolation */
-  sandbox?: "none" | "docker";
+  sandbox?: 'none' | 'docker';
   /** Docker image to use when sandbox is 'docker' (optional explicit override) */
   dockerImage?: string;
   /** Reuse Docker containers per worktree (default: true when sandbox is 'docker') */
@@ -214,73 +203,3 @@ export interface WarcraftConfig {
   /** Parallel worker dispatch controls for batch execution. */
   parallelExecution?: ParallelExecutionConfig;
 }
-
-/** Default models for Warcraft agents */
-export const DEFAULT_AGENT_MODELS = {
-  khadgar: "openai/gpt-5.3-codex",
-  mimiron: "openai/gpt-5.3-codex",
-  saurfang: "openai/gpt-5.3-codex",
-  brann: "google/gemini-3-flash-preview",
-  mekkatorque: "kimi-for-coding/k2p5",
-  algalon: "zai-coding-plan/glm-4.7",
-} as const;
-
-export const DEFAULT_WARCRAFT_CONFIG: WarcraftConfig = {
-  $schema:
-    "https://raw.githubusercontent.com/minhtri2710/opencode-warcraft/main/packages/opencode-warcraft/schema/opencode_warcraft.schema.json",
-  enableToolsFor: [],
-  disableSkills: [],
-  disableMcps: [],
-  agentMode: "unified",
-  sandbox: "none",
-  beadsMode: "on",
-  parallelExecution: {
-    strategy: 'unbounded',
-    maxConcurrency: 4,
-  },
-  agents: {
-    khadgar: {
-      model: DEFAULT_AGENT_MODELS["khadgar"],
-      temperature: 0.3,
-      skills: [
-        "brainstorming",
-        "writing-plans",
-        "dispatching-parallel-agents",
-        "executing-plans",
-      ],
-      autoLoadSkills: ["parallel-exploration"],
-    },
-    mimiron: {
-      model: DEFAULT_AGENT_MODELS["mimiron"],
-      temperature: 0.2,
-      skills: ["brainstorming", "writing-plans"],
-      autoLoadSkills: ["parallel-exploration"],
-    },
-    saurfang: {
-      model: DEFAULT_AGENT_MODELS["saurfang"],
-      temperature: 0.2,
-      skills: ["dispatching-parallel-agents", "executing-plans"],
-      autoLoadSkills: [],
-    },
-    brann: {
-      model: DEFAULT_AGENT_MODELS["brann"],
-      temperature: 0.7,
-      skills: [],
-      autoLoadSkills: [],
-    },
-    mekkatorque: {
-      model: DEFAULT_AGENT_MODELS["mekkatorque"],
-      temperature: 0.4,
-      autoLoadSkills: [
-        "test-driven-development",
-        "verification-before-completion",
-      ],
-    },
-    algalon: {
-      model: DEFAULT_AGENT_MODELS["algalon"],
-      temperature: 0.5,
-      skills: ["systematic-debugging", "code-reviewer"],
-      autoLoadSkills: [],
-    },
-  },
-};

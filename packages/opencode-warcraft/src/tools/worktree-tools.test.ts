@@ -1,11 +1,10 @@
-import { describe, expect, it, beforeEach, afterEach, spyOn } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
+import * as child_process from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as child_process from 'child_process';
-import { WorktreeTools } from './worktree-tools';
 import { formatSpecContent } from 'warcraft-core';
 
-const TEST_DIR = '/tmp/opencode-warcraft-worktree-tools-test-' + process.pid;
+const TEST_DIR = `/tmp/opencode-warcraft-worktree-tools-test-${process.pid}`;
 
 function cleanup() {
   if (fs.existsSync(TEST_DIR)) {
@@ -13,7 +12,7 @@ function cleanup() {
   }
 }
 
-function setupFeature(featureName: string): void {
+function _setupFeature(featureName: string): void {
   const featurePath = path.join(TEST_DIR, '.beads/artifacts', featureName);
   fs.mkdirSync(featurePath, { recursive: true });
 
@@ -24,7 +23,7 @@ function setupFeature(featureName: string): void {
       epicBeadId: 'bd-epic-test',
       status: 'executing',
       createdAt: new Date().toISOString(),
-    })
+    }),
   );
 
   fs.writeFileSync(
@@ -34,11 +33,11 @@ function setupFeature(featureName: string): void {
 ### 1. Test Task
 
 Description of the test task.
-`
+`,
   );
 }
 
-function setupTask(featureName: string, taskFolder: string, status: Record<string, unknown> = {}): void {
+function _setupTask(featureName: string, taskFolder: string, status: Record<string, unknown> = {}): void {
   const taskPath = path.join(TEST_DIR, '.beads/artifacts', featureName, 'tasks', taskFolder);
   fs.mkdirSync(taskPath, { recursive: true });
 

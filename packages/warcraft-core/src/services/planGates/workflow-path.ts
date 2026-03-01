@@ -37,9 +37,7 @@ export function validateLightweightPlan(content: string): string[] {
     issues.push(`Lightweight path supports max 2 tasks; found ${taskCount}.`);
   }
   if (!hasLightweightMiniRecord(content)) {
-    issues.push(
-      'Lightweight plan must include mini-record details for Impact, Safety, Verify, and Rollback.',
-    );
+    issues.push('Lightweight plan must include mini-record details for Impact, Safety, Verify, and Rollback.');
   }
 
   return issues;

@@ -1,7 +1,7 @@
-import { tool, type ToolDefinition } from '@opencode-ai/plugin';
+import { type ToolDefinition, tool } from '@opencode-ai/plugin';
 import type { FeatureService } from 'warcraft-core';
-import { resolveFeatureInput } from './tool-input.js';
 import { toolError, toolSuccess } from '../types.js';
+import { resolveFeatureInput } from './tool-input.js';
 
 export interface FeatureToolsDependencies {
   featureService: FeatureService;
@@ -33,7 +33,8 @@ export class FeatureTools {
         }
         const feature = featureService.create(name, ticket, priorityValue);
         const epicBeadId = (feature as { epicBeadId?: string }).epicBeadId;
-        return toolSuccess({ message: `Feature "${name}" created (epic: ${epicBeadId || 'unknown'}}).
+        return toolSuccess({
+          message: `Feature "${name}" created (epic: ${epicBeadId || 'unknown'}}).
 
 ## Discovery Phase Required
 
@@ -66,7 +67,8 @@ When writing your plan, include:
 
 These prevent scope creep and re-proposing rejected solutions.
 
-NEXT: Ask your first clarifying question about this feature.` });
+NEXT: Ask your first clarifying question about this feature.`,
+        });
       },
     });
   }
@@ -80,10 +82,7 @@ NEXT: Ask your first clarifying question about this feature.` });
     return tool({
       description: 'Mark feature as completed (irreversible)',
       args: {
-        name: tool.schema
-          .string()
-          .optional()
-          .describe('Feature name (defaults to active)'),
+        name: tool.schema.string().optional().describe('Feature name (defaults to active)'),
       },
       async execute({ name }) {
         const resolution = resolveFeatureInput(resolveFeature, name);

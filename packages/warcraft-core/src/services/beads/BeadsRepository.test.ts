@@ -2,12 +2,10 @@
  * Tests for BeadsRepository module.
  */
 
-import { describe, it, expect, mock, beforeEach } from 'bun:test';
-import { BeadsRepository, RepositoryError } from './BeadsRepository.js';
-import { BeadGateway } from './BeadGateway.js';
-import { BeadsViewerGateway } from './BeadsViewerGateway.js';
-import type { FeatureJson, TaskStatus, PlanComment } from '../../types.js';
+import { beforeEach, describe, expect, it } from 'bun:test';
+import type { FeatureJson, PlanComment, TaskStatus } from '../../types.js';
 import { BeadGatewayError } from './BeadGateway.types.js';
+import { BeadsRepository } from './BeadsRepository.js';
 
 // Mock BeadGateway
 class MockBeadGateway {
@@ -24,27 +22,27 @@ class MockBeadGateway {
     return '1.0.0';
   }
 
-  createEpic(name: string, priority: number): string {
+  createEpic(name: string, _priority: number): string {
     if (this.throwOn === 'createEpic') {
       throw new Error('Failed to create epic');
     }
     return `epic-${name}`;
   }
 
-  createTask(title: string, epicBeadId: string, priority: number): string {
+  createTask(title: string, _epicBeadId: string, _priority: number): string {
     if (this.throwOn === 'createTask') {
       throw new Error('Failed to create task');
     }
     return `task-${title}`;
   }
 
-  syncTaskStatus(beadId: string, status: string): void {
+  syncTaskStatus(_beadId: string, _status: string): void {
     if (this.throwOn === 'syncTaskStatus') {
       throw new Error('Failed to sync status');
     }
   }
 
-  closeBead(beadId: string): void {
+  closeBead(_beadId: string): void {
     if (this.throwOn === 'closeBead') {
       throw new Error('Failed to close bead');
     }
@@ -71,7 +69,7 @@ class MockBeadGateway {
     this.labels.set(beadId, existing);
   }
 
-  addComment(beadId: string, comment: string): void {
+  addComment(_beadId: string, comment: string): void {
     if (this.throwOn === 'addComment') {
       throw new Error('Failed to add comment');
     }
@@ -92,7 +90,7 @@ class MockBeadGateway {
     return this.descriptions.get(beadId) || null;
   }
 
-  list(options?: {
+  list(_options?: {
     type?: string;
     parent?: string;
     status?: string;
@@ -108,7 +106,7 @@ class MockBeadGateway {
     ];
   }
 
-  updateStatus(beadId: string, status: string): void {
+  updateStatus(_beadId: string, _status: string): void {
     if (this.throwOn === 'updateStatus') {
       throw new Error('Failed to update status');
     }
@@ -224,14 +222,14 @@ describe('BeadsRepository', () => {
     it('should get epic by feature name', () => {
       const result = repository.getEpicByFeatureName('feature-one');
       expect(result.success).toBe(true);
-    // @ts-expect-error - type narrowing in test
+      // @ts-expect-error - type narrowing in test
       expect(result.value).toBe('epic-1');
     });
 
     it('should return null for non-existent feature when not strict', () => {
       const result = repository.getEpicByFeatureName('non-existent', false);
       expect(result.success).toBe(true);
-    // @ts-expect-error - type narrowing in test
+      // @ts-expect-error - type narrowing in test
       expect(result.value).toBeNull();
     });
 
@@ -265,16 +263,16 @@ describe('BeadsRepository', () => {
 
       const result = repository.getFeatureState('epic-123');
       expect(result.success).toBe(true);
-    // @ts-expect-error - type narrowing in test
+      // @ts-expect-error - type narrowing in test
       expect(result.value).not.toBeNull();
-    // @ts-expect-error - type narrowing in test
+      // @ts-expect-error - type narrowing in test
       expect(result.value?.name).toBe('test-feature');
     });
 
     it('should return null when feature state not found', () => {
       const result = repository.getFeatureState('epic-999');
       expect(result.success).toBe(true);
-    // @ts-expect-error - type narrowing in test
+      // @ts-expect-error - type narrowing in test
       expect(result.value).toBeNull();
     });
 
@@ -313,16 +311,16 @@ describe('BeadsRepository', () => {
 
       const result = repository.getTaskState('task-123');
       expect(result.success).toBe(true);
-    // @ts-expect-error - type narrowing in test
+      // @ts-expect-error - type narrowing in test
       expect(result.value).not.toBeNull();
-    // @ts-expect-error - type narrowing in test
+      // @ts-expect-error - type narrowing in test
       expect(result.value?.status).toBe('pending');
     });
 
     it('should return null when task state not found', () => {
       const result = repository.getTaskState('task-999');
       expect(result.success).toBe(true);
-    // @ts-expect-error - type narrowing in test
+      // @ts-expect-error - type narrowing in test
       expect(result.value).toBeNull();
     });
 
@@ -343,7 +341,7 @@ describe('BeadsRepository', () => {
       mockGateway.descriptions.set('epic-123', '# Test Plan');
       const result = repository.getPlanDescription('epic-123');
       expect(result.success).toBe(true);
-    // @ts-expect-error - type narrowing in test
+      // @ts-expect-error - type narrowing in test
       expect(result.value).toBe('# Test Plan');
     });
 
@@ -359,9 +357,9 @@ describe('BeadsRepository', () => {
 
       const result = repository.getPlanApproval('epic-123');
       expect(result.success).toBe(true);
-    // @ts-expect-error - type narrowing in test
+      // @ts-expect-error - type narrowing in test
       expect(result.value).not.toBeNull();
-    // @ts-expect-error - type narrowing in test
+      // @ts-expect-error - type narrowing in test
       expect(result.value?.hash).toBe('abc123');
     });
 
@@ -383,7 +381,7 @@ describe('BeadsRepository', () => {
 
       const result = repository.getApprovedPlan('epic-123');
       expect(result.success).toBe(true);
-    // @ts-expect-error - type narrowing in test
+      // @ts-expect-error - type narrowing in test
       expect(result.value).toBe('# Approved Plan');
     });
 
@@ -414,7 +412,7 @@ describe('BeadsRepository', () => {
 
       const result = repository.getPlanComments('epic-123');
       expect(result.success).toBe(true);
-    // @ts-expect-error - type narrowing in test
+      // @ts-expect-error - type narrowing in test
       expect(result.value).toEqual(comments);
     });
 
@@ -446,14 +444,14 @@ describe('BeadsRepository', () => {
 
       const result = repository.readTaskArtifact('task-123', 'spec');
       expect(result.success).toBe(true);
-    // @ts-expect-error - type narrowing in test
+      // @ts-expect-error - type narrowing in test
       expect(result.value).toBe('# Test Spec');
     });
 
     it('should return null for missing artifact', () => {
       const result = repository.readTaskArtifact('task-123', 'spec');
       expect(result.success).toBe(true);
-    // @ts-expect-error - type narrowing in test
+      // @ts-expect-error - type narrowing in test
       expect(result.value).toBeNull();
     });
 
@@ -469,7 +467,7 @@ describe('BeadsRepository', () => {
 
       const result = repository.readTaskArtifact('task-123', 'worker_prompt');
       expect(result.success).toBe(true);
-    // @ts-expect-error - type narrowing in test
+      // @ts-expect-error - type narrowing in test
       expect(result.value).toBe('Worker prompt content');
     });
 
@@ -485,7 +483,7 @@ describe('BeadsRepository', () => {
 
       const result = repository.readTaskArtifact('task-123', 'report');
       expect(result.success).toBe(true);
-    // @ts-expect-error - type narrowing in test
+      // @ts-expect-error - type narrowing in test
       expect(result.value).toBe('# Report');
     });
   });
@@ -494,9 +492,9 @@ describe('BeadsRepository', () => {
     it('should list task beads for epic', () => {
       const result = repository.listTaskBeadsForEpic('epic-1');
       expect(result.success).toBe(true);
-    // @ts-expect-error - type narrowing in test
+      // @ts-expect-error - type narrowing in test
       expect(result.value).toBeDefined();
-    // @ts-expect-error - type narrowing in test
+      // @ts-expect-error - type narrowing in test
       expect(Array.isArray(result.value)).toBe(true);
     });
   });

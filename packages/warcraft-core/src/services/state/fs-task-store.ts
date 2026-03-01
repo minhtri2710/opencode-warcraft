@@ -1,18 +1,13 @@
 import * as fs from 'fs';
-import type { TaskStatus, TaskInfo } from '../../types.js';
-import type { TaskStore, TaskArtifactKind, TaskSaveOptions } from './types.js';
-import type { RunnableTasksResult, BackgroundPatchFields } from '../taskService.js';
-import { TASK_STATUS_SCHEMA_VERSION } from '../taskService.js';
-import { BeadsRepository } from '../beads/BeadsRepository.js';
-import {
-  getTasksPath,
-  getTaskPath,
-  getTaskStatusPath,
-  getTaskReportPath,
-} from '../../utils/paths.js';
-import { ensureDir, readJson, writeJson, fileExists, writeText } from '../../utils/fs.js';
-import { writeJsonLockedSync, patchJsonLockedSync } from '../../utils/json-lock.js';
+import type { TaskInfo, TaskStatus } from '../../types.js';
+import { ensureDir, fileExists, readJson, writeJson, writeText } from '../../utils/fs.js';
 import type { LockOptions } from '../../utils/json-lock.js';
+import { patchJsonLockedSync, writeJsonLockedSync } from '../../utils/json-lock.js';
+import { getTaskPath, getTaskReportPath, getTaskStatusPath, getTasksPath } from '../../utils/paths.js';
+import type { BeadsRepository } from '../beads/BeadsRepository.js';
+import type { BackgroundPatchFields, RunnableTasksResult } from '../taskService.js';
+import { TASK_STATUS_SCHEMA_VERSION } from '../taskService.js';
+import type { TaskArtifactKind, TaskSaveOptions, TaskStore } from './types.js';
 
 /**
  * TaskStore implementation for beadsMode='off'.
@@ -26,13 +21,7 @@ export class FilesystemTaskStore implements TaskStore {
     private readonly repository: BeadsRepository,
   ) {}
 
-  createTask(
-    featureName: string,
-    folder: string,
-    title: string,
-    status: TaskStatus,
-    priority: number,
-  ): TaskStatus {
+  createTask(featureName: string, folder: string, title: string, status: TaskStatus, priority: number): TaskStatus {
     let beadId = '';
 
     // Attempt bead creation for task identification, but don't fail if unavailable
@@ -85,39 +74,32 @@ export class FilesystemTaskStore implements TaskStore {
     const tasksPath = getTasksPath(this.projectRoot, featureName);
     if (!fileExists(tasksPath)) return [];
 
-    const folders = fs.readdirSync(tasksPath, { withFileTypes: true })
+    const folders = fs
+      .readdirSync(tasksPath, { withFileTypes: true })
       .filter((d: { isDirectory: () => boolean }) => d.isDirectory())
       .map((d: { name: string }) => d.name)
       .sort();
 
-    return folders
-      .map(folder => this.get(featureName, folder))
-      .filter((t): t is TaskInfo => t !== null);
+    return folders.map((folder) => this.get(featureName, folder)).filter((t): t is TaskInfo => t !== null);
   }
 
   getNextOrder(featureName: string): number {
     const tasksPath = getTasksPath(this.projectRoot, featureName);
     if (!fileExists(tasksPath)) return 1;
 
-    const folders = fs.readdirSync(tasksPath, { withFileTypes: true })
+    const folders = fs
+      .readdirSync(tasksPath, { withFileTypes: true })
       .filter((d: { isDirectory: () => boolean }) => d.isDirectory())
       .map((d: { name: string }) => d.name);
 
     if (folders.length === 0) return 1;
 
-    const orders = folders
-      .map(f => parseInt(f.split('-')[0], 10))
-      .filter(n => !isNaN(n));
+    const orders = folders.map((f) => parseInt(f.split('-')[0], 10)).filter((n) => !Number.isNaN(n));
 
     return Math.max(...orders, 0) + 1;
   }
 
-  save(
-    featureName: string,
-    folder: string,
-    status: TaskStatus,
-    _options?: TaskSaveOptions,
-  ): void {
+  save(featureName: string, folder: string, status: TaskStatus, _options?: TaskSaveOptions): void {
     writeJsonLockedSync(getTaskStatusPath(this.projectRoot, featureName, folder), status);
   }
 
@@ -151,12 +133,7 @@ export class FilesystemTaskStore implements TaskStore {
     }
   }
 
-  writeArtifact(
-    featureName: string,
-    folder: string,
-    kind: TaskArtifactKind,
-    content: string,
-  ): string {
+  writeArtifact(featureName: string, folder: string, kind: TaskArtifactKind, content: string): string {
     const status = this.getRawStatus(featureName, folder);
     const beadId = status?.beadId;
 
@@ -172,11 +149,7 @@ export class FilesystemTaskStore implements TaskStore {
     return folder;
   }
 
-  readArtifact(
-    featureName: string,
-    folder: string,
-    kind: TaskArtifactKind,
-  ): string | null {
+  readArtifact(featureName: string, folder: string, kind: TaskArtifactKind): string | null {
     const status = this.getRawStatus(featureName, folder);
     const beadId = status?.beadId;
 

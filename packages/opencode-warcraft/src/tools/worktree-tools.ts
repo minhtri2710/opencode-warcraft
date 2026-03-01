@@ -1,21 +1,10 @@
-import { tool, type ToolDefinition } from '@opencode-ai/plugin';
+import { type ToolDefinition, tool } from '@opencode-ai/plugin';
+import type { FeatureService, PlanService, TaskService, TaskStatusType, WorktreeService } from 'warcraft-core';
 import type { BlockedResult } from '../types.js';
 import { toolError, toolSuccess } from '../types.js';
-
-import type {
-  FeatureService,
-  PlanService,
-  TaskService,
-  WorktreeService,
-  TaskStatusType,
-} from 'warcraft-core';
+import { calculatePayloadMeta, calculatePromptMeta, checkWarnings } from '../utils/prompt-observability.js';
+import { DEFAULT_BUDGET, prepareTaskDispatch } from './task-dispatch.js';
 import { resolveFeatureInput, validateTaskInput } from './tool-input.js';
-import { prepareTaskDispatch, DEFAULT_BUDGET } from './task-dispatch.js';
-import {
-  calculatePromptMeta,
-  calculatePayloadMeta,
-  checkWarnings,
-} from '../utils/prompt-observability.js';
 
 type CompletionGate = 'build' | 'test' | 'lint';
 
@@ -29,10 +18,7 @@ export interface WorktreeToolsDependencies {
   };
   validateTaskStatus: (status: string) => TaskStatusType;
   checkBlocked: (feature: string) => BlockedResult;
-  checkDependencies: (
-    feature: string,
-    taskFolder: string,
-  ) => { allowed: boolean; error?: string };
+  checkDependencies: (feature: string, taskFolder: string) => { allowed: boolean; error?: string };
   hasCompletionGateEvidence: (summary: string, gate: CompletionGate) => boolean;
   completionGates: readonly CompletionGate[];
 }
@@ -50,27 +36,14 @@ export class WorktreeTools {
     // Capture deps in closure to avoid 'this' binding issues
     const { checkBlocked, checkDependencies, taskService, planService, contextService, worktreeService } = this.deps;
     return tool({
-      description:
-        'Create worktree and begin work on task. Spawns Mekkatorque worker automatically.',
+      description: 'Create worktree and begin work on task. Spawns Mekkatorque worker automatically.',
       args: {
         task: tool.schema.string().describe('Task folder name'),
-        feature: tool.schema
-          .string()
-          .optional()
-          .describe('Feature name (defaults to detection or single feature)'),
-        continueFrom: tool.schema
-          .enum(['blocked'])
-          .optional()
-          .describe('Resume a blocked task'),
-        decision: tool.schema
-          .string()
-          .optional()
-          .describe('Answer to blocker question when continuing'),
+        feature: tool.schema.string().optional().describe('Feature name (defaults to detection or single feature)'),
+        continueFrom: tool.schema.enum(['blocked']).optional().describe('Resume a blocked task'),
+        decision: tool.schema.string().optional().describe('Answer to blocker question when continuing'),
       },
-      async execute(
-        { task, feature: explicitFeature, continueFrom, decision },
-        _toolContext,
-      ) {
+      async execute({ task, feature: explicitFeature, continueFrom, decision }, _toolContext) {
         validateTaskInput(task);
         const resolution = resolveFeatureInput(resolveFeature, explicitFeature);
         if (!resolution.ok) return toolError(resolution.error);
@@ -85,8 +58,7 @@ export class WorktreeTools {
         if (!taskInfo) return toolError(`Task "${task}" not found`);
 
         // Allow continuing blocked tasks, but not completed ones
-        if (taskInfo.status === 'done')
-          return toolError('Task already completed');
+        if (taskInfo.status === 'done') return toolError('Task already completed');
         if (continueFrom === 'blocked' && taskInfo.status !== 'blocked') {
           return toolError('Task is not in blocked state. Use without continueFrom.');
         }
@@ -128,8 +100,7 @@ export class WorktreeTools {
               continueFrom === 'blocked'
                 ? {
                     status: 'blocked',
-                    previousSummary:
-                      taskInfo.summary || 'No previous summary',
+                    previousSummary: taskInfo.summary || 'No previous summary',
                     decision: decision || 'No decision provided',
                   }
                 : undefined,
@@ -137,7 +108,17 @@ export class WorktreeTools {
           { planService, taskService, contextService },
         );
 
-        const { specContent, workerPrompt, persistedWorkerPrompt, contextFiles, previousTasks, truncationEvents, droppedTasksHint, taskBeadId, planContent } = prep;
+        const {
+          specContent,
+          workerPrompt,
+          persistedWorkerPrompt,
+          contextFiles,
+          previousTasks,
+          truncationEvents,
+          droppedTasksHint,
+          taskBeadId,
+          planContent,
+        } = prep;
 
         if (!persistedWorkerPrompt || persistedWorkerPrompt.trim().length === 0) {
           return toolError(`Failed to load worker prompt from task bead '${taskBeadId}' for task '${task}'`);
@@ -151,12 +132,8 @@ export class WorktreeTools {
 
         taskService.patchBackgroundFields(feature, task, { idempotencyKey });
 
-        const contextContent = contextFiles
-          .map((f) => f.content)
-          .join('\n\n');
-        const previousTasksContent = previousTasks
-          .map((t) => `- **${t.name}**: ${t.summary}`)
-          .join('\n');
+        const contextContent = contextFiles.map((f) => f.content).join('\n\n');
+        const previousTasksContent = previousTasks.map((t) => `- **${t.name}**: ${t.summary}`).join('\n');
         const promptMeta = calculatePromptMeta({
           plan: planContent || '',
           context: contextContent,
@@ -167,9 +144,7 @@ export class WorktreeTools {
 
         const PREVIEW_MAX_LENGTH = 200;
         const workerPromptPreview =
-          workerPrompt.length > PREVIEW_MAX_LENGTH
-            ? workerPrompt.slice(0, PREVIEW_MAX_LENGTH) + '...'
-            : workerPrompt;
+          workerPrompt.length > PREVIEW_MAX_LENGTH ? `${workerPrompt.slice(0, PREVIEW_MAX_LENGTH)}...` : workerPrompt;
 
         const taskToolPrompt = persistedWorkerPrompt;
 
@@ -226,21 +201,21 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
         const allWarnings = [...sizeWarnings, ...budgetWarnings];
 
         return toolSuccess({
-            ...responseBase,
-            promptMeta,
-            payloadMeta,
-            budgetApplied: {
-              maxTasks: DEFAULT_BUDGET.maxTasks,
-              maxSummaryChars: DEFAULT_BUDGET.maxSummaryChars,
-              maxContextChars: DEFAULT_BUDGET.maxContextChars,
-              maxTotalContextChars: DEFAULT_BUDGET.maxTotalContextChars,
-              tasksIncluded: previousTasks.length,
-              tasksDropped: truncationEvents
-                .filter((e) => e.type === 'tasks_dropped')
-                .reduce((sum, e) => sum + (e.count ?? 0), 0),
-              droppedTasksHint,
-            },
-            warnings: allWarnings.length > 0 ? allWarnings : undefined,
+          ...responseBase,
+          promptMeta,
+          payloadMeta,
+          budgetApplied: {
+            maxTasks: DEFAULT_BUDGET.maxTasks,
+            maxSummaryChars: DEFAULT_BUDGET.maxSummaryChars,
+            maxContextChars: DEFAULT_BUDGET.maxContextChars,
+            maxTotalContextChars: DEFAULT_BUDGET.maxTotalContextChars,
+            tasksIncluded: previousTasks.length,
+            tasksDropped: truncationEvents
+              .filter((e) => e.type === 'tasks_dropped')
+              .reduce((sum, e) => sum + (e.count ?? 0), 0),
+            droppedTasksHint,
+          },
+          warnings: allWarnings.length > 0 ? allWarnings : undefined,
         });
       },
     });
@@ -251,7 +226,14 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
    */
   commitWorktreeTool(resolveFeature: (name?: string) => string | null): ToolDefinition {
     // Capture deps in closure to avoid 'this' binding issues
-    const { taskService, worktreeService, featureService, validateTaskStatus, hasCompletionGateEvidence, completionGates } = this.deps;
+    const {
+      taskService,
+      worktreeService,
+      featureService,
+      validateTaskStatus,
+      hasCompletionGateEvidence,
+      completionGates,
+    } = this.deps;
     return tool({
       description:
         'Complete task: commit changes to branch, write report. Supports blocked/failed/partial status for worker communication.',
@@ -266,33 +248,15 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
         blocker: tool.schema
           .object({
             reason: tool.schema.string().describe('Why the task is blocked'),
-            options: tool.schema
-              .array(tool.schema.string())
-              .optional()
-              .describe('Available options for the user'),
-            recommendation: tool.schema
-              .string()
-              .optional()
-              .describe('Your recommended choice'),
-            context: tool.schema
-              .string()
-              .optional()
-              .describe('Additional context for the decision'),
+            options: tool.schema.array(tool.schema.string()).optional().describe('Available options for the user'),
+            recommendation: tool.schema.string().optional().describe('Your recommended choice'),
+            context: tool.schema.string().optional().describe('Additional context for the decision'),
           })
           .optional()
           .describe('Blocker info when status is blocked'),
-        feature: tool.schema
-          .string()
-          .optional()
-          .describe('Feature name (defaults to detection or single feature)'),
+        feature: tool.schema.string().optional().describe('Feature name (defaults to detection or single feature)'),
       },
-      async execute({
-        task,
-        summary,
-        status = 'completed',
-        blocker,
-        feature: explicitFeature,
-      }) {
+      async execute({ task, summary, status = 'completed', blocker, feature: explicitFeature }) {
         validateTaskInput(task);
         const resolution = resolveFeatureInput(resolveFeature, explicitFeature);
         if (!resolution.ok) return toolError(resolution.error);
@@ -300,21 +264,18 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
 
         const taskInfo = taskService.get(feature, task);
         if (!taskInfo) return toolError(`Task "${task}" not found`);
-        if (
-          taskInfo.status !== 'in_progress' &&
-          taskInfo.status !== 'blocked'
-        )
+        if (taskInfo.status !== 'in_progress' && taskInfo.status !== 'blocked')
           return toolError('Task not in progress');
 
         // GATE: Check for explicit build/test/lint pass evidence when completing
         if (status === 'completed') {
-          const missingGates = completionGates.filter(
-            (gate) => !hasCompletionGateEvidence(summary, gate),
-          );
+          const missingGates = completionGates.filter((gate) => !hasCompletionGateEvidence(summary, gate));
 
           if (missingGates.length > 0) {
-            return toolError(`Missing explicit verification evidence for ${missingGates.join(', ')}. Before claiming completion, run build, test, and lint gates. Include one pass signal per gate in summary (e.g. "build: exit 0"). Re-run with updated summary showing verification results.`);
-        }
+            return toolError(
+              `Missing explicit verification evidence for ${missingGates.join(', ')}. Before claiming completion, run build, test, and lint gates. Include one pass signal per gate in summary (e.g. "build: exit 0"). Re-run with updated summary showing verification results.`,
+            );
+          }
         }
 
         if (status === 'blocked') {
@@ -326,12 +287,13 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
 
           const worktree = await worktreeService.get(feature, task);
           return toolSuccess({
-              status: 'blocked',
-              task,
-              summary,
-              blocker,
-              worktreePath: worktree?.path,
-              message: 'Task blocked. Warcraft Master will ask user and resume with warcraft_worktree_create(continueFrom: "blocked", decision: answer)',
+            status: 'blocked',
+            task,
+            summary,
+            blocker,
+            worktreePath: worktree?.path,
+            message:
+              'Task blocked. Warcraft Master will ask user and resume with warcraft_worktree_create(continueFrom: "blocked", decision: answer)',
           });
         }
 
@@ -343,9 +305,7 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
 
         const diff = await worktreeService.getDiff(feature, task);
         const featureMeta = featureService.get(feature);
-        const workflowPath =
-          (featureMeta as { workflowPath?: string } | null)?.workflowPath ||
-          'standard';
+        const workflowPath = (featureMeta as { workflowPath?: string } | null)?.workflowPath || 'standard';
 
         const statusLabel = status === 'completed' ? 'success' : status;
         const reportLines: string[] = [
@@ -385,20 +345,15 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
             reportLines.push('');
           }
         } else {
-          reportLines.push(
-            '---',
-            '',
-            '## Changes',
-            '',
-            '_No file changes detected_',
-            '',
-          );
+          reportLines.push('---', '', '## Changes', '', '_No file changes detected_', '');
         }
 
         taskService.writeReport(feature, task, reportLines.join('\n'));
 
         if (status === 'completed' && !commitResult.committed) {
-          return toolError(`Cannot mark task "${task}" completed because no commit was created (${commitResult.message}). Task status unchanged.`);
+          return toolError(
+            `Cannot mark task "${task}" completed because no commit was created (${commitResult.message}). Task status unchanged.`,
+          );
         }
 
         const finalStatus = status === 'completed' ? 'done' : status;
@@ -408,7 +363,9 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
         });
 
         const worktree = await worktreeService.get(feature, task);
-        return toolSuccess({ message: `Task "${task}" ${status}. Changes committed to branch ${worktree?.branch || 'unknown'}.\nUse warcraft_merge to integrate changes. Worktree preserved at ${worktree?.path || 'unknown'}.` });
+        return toolSuccess({
+          message: `Task "${task}" ${status}. Changes committed to branch ${worktree?.branch || 'unknown'}.\nUse warcraft_merge to integrate changes. Worktree preserved at ${worktree?.path || 'unknown'}.`,
+        });
       },
     });
   }
@@ -423,10 +380,7 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
       description: 'Abort task: discard changes, reset status',
       args: {
         task: tool.schema.string().describe('Task folder name'),
-        feature: tool.schema
-          .string()
-          .optional()
-          .describe('Feature name (defaults to detection or single feature)'),
+        feature: tool.schema.string().optional().describe('Feature name (defaults to detection or single feature)'),
       },
       async execute({ task, feature: explicitFeature }) {
         validateTaskInput(task);
@@ -449,18 +403,14 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
     // Capture deps in closure to avoid 'this' binding issues
     const { taskService, worktreeService } = this.deps;
     return tool({
-      description:
-        'Merge completed task branch into current branch (explicit integration)',
+      description: 'Merge completed task branch into current branch (explicit integration)',
       args: {
         task: tool.schema.string().describe('Task folder name to merge'),
         strategy: tool.schema
           .enum(['merge', 'squash', 'rebase'])
           .optional()
           .describe('Merge strategy (default: merge)'),
-        feature: tool.schema
-          .string()
-          .optional()
-          .describe('Feature name (defaults to active)'),
+        feature: tool.schema.string().optional().describe('Feature name (defaults to active)'),
       },
       async execute({ task, strategy = 'merge', feature: explicitFeature }) {
         validateTaskInput(task);
@@ -477,12 +427,16 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
 
         if (!result.success) {
           if (result.conflicts && result.conflicts.length > 0) {
-            return toolError(`Merge failed with conflicts in:\n${result.conflicts.map((f: string) => `- ${f}`).join('\n')}\n\nResolve conflicts manually or try a different strategy.`);
+            return toolError(
+              `Merge failed with conflicts in:\n${result.conflicts.map((f: string) => `- ${f}`).join('\n')}\n\nResolve conflicts manually or try a different strategy.`,
+            );
           }
           return toolError(`Merge failed: ${result.error}`);
         }
 
-        return toolSuccess({ message: `Task "${task}" merged successfully using ${strategy} strategy.\nCommit: ${result.sha}\nFiles changed: ${result.filesChanged?.length || 0}` });
+        return toolSuccess({
+          message: `Task "${task}" merged successfully using ${strategy} strategy.\nCommit: ${result.sha}\nFiles changed: ${result.filesChanged?.length || 0}`,
+        });
       },
     });
   }

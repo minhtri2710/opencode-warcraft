@@ -10,7 +10,7 @@
  * All bead metadata writes MUST use these schemas to ensure consistency.
  */
 
-import type { FeatureJson, TaskStatus, PlanComment } from '../../types.js';
+import type { FeatureJson, PlanComment, TaskStatus } from '../../types.js';
 
 // ============================================================================
 // Schema Versioning

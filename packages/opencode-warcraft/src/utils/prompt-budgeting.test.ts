@@ -8,16 +8,8 @@
  * - Emit warnings when budgets cause truncation
  */
 
-import { describe, it, expect } from 'bun:test';
-import {
-  applyTaskBudget,
-  applyContextBudget,
-  DEFAULT_BUDGET,
-  type BudgetConfig,
-  type BudgetedTask,
-  type BudgetedContext,
-  type TruncationEvent,
-} from './prompt-budgeting.js';
+import { describe, expect, it } from 'bun:test';
+import { applyContextBudget, applyTaskBudget, DEFAULT_BUDGET } from './prompt-budgeting.js';
 
 // ============================================================================
 // Task Budgeting Tests
@@ -37,7 +29,7 @@ describe('applyTaskBudget', () => {
 
     expect(result.tasks.length).toBe(3);
     // Should keep the LAST 3 tasks (most recent)
-    expect(result.tasks.map(t => t.name)).toEqual(['03-task', '04-task', '05-task']);
+    expect(result.tasks.map((t) => t.name)).toEqual(['03-task', '04-task', '05-task']);
   });
 
   it('truncates task summaries exceeding max chars', () => {
@@ -70,8 +62,8 @@ describe('applyTaskBudget', () => {
     const result = applyTaskBudget(tasks, { maxTasks: 2 });
 
     expect(result.truncationEvents.length).toBeGreaterThan(0);
-    expect(result.truncationEvents.some(e => e.type === 'tasks_dropped')).toBe(true);
-    const dropEvent = result.truncationEvents.find(e => e.type === 'tasks_dropped');
+    expect(result.truncationEvents.some((e) => e.type === 'tasks_dropped')).toBe(true);
+    const dropEvent = result.truncationEvents.find((e) => e.type === 'tasks_dropped');
     expect(dropEvent?.count).toBe(1); // 1 task dropped
   });
 
@@ -81,7 +73,7 @@ describe('applyTaskBudget', () => {
 
     const result = applyTaskBudget(tasks, { maxSummaryChars: 100 });
 
-    expect(result.truncationEvents.some(e => e.type === 'summary_truncated')).toBe(true);
+    expect(result.truncationEvents.some((e) => e.type === 'summary_truncated')).toBe(true);
   });
 
   it('returns all tasks when under limit', () => {
@@ -143,7 +135,7 @@ describe('applyContextBudget', () => {
     const result = applyContextBudget(files, { maxTotalContextChars: 5000 });
 
     // Should include some files in full/truncated form, then switch to name-only
-    expect(result.truncationEvents.some(e => e.type === 'context_names_only')).toBe(true);
+    expect(result.truncationEvents.some((e) => e.type === 'context_names_only')).toBe(true);
   });
 
   it('preserves small context files unchanged', () => {
@@ -161,7 +153,7 @@ describe('applyContextBudget', () => {
 
     const result = applyContextBudget(files, { maxContextChars: 500 });
 
-    expect(result.truncationEvents.some(e => e.type === 'context_truncated')).toBe(true);
+    expect(result.truncationEvents.some((e) => e.type === 'context_truncated')).toBe(true);
   });
 
   it('handles empty context list', () => {

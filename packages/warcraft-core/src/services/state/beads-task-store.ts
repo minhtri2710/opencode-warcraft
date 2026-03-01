@@ -1,21 +1,17 @@
 import * as fs from 'fs';
-import type { TaskStatus, TaskInfo, TaskOrigin, WorkerSession } from '../../types.js';
-import type { TaskStore, TaskArtifactKind, TaskSaveOptions } from './types.js';
-import type { RunnableTasksResult, BackgroundPatchFields, RunnableTask } from '../taskService.js';
-import { TASK_STATUS_SCHEMA_VERSION } from '../taskService.js';
+import type { TaskInfo, TaskOrigin, TaskStatus, WorkerSession } from '../../types.js';
+import { fileExists, readJson } from '../../utils/fs.js';
+import type { LockOptions } from '../../utils/json-lock.js';
+import { getTaskPath, getTaskReportPath, getTaskStatusPath } from '../../utils/paths.js';
+import { deriveTaskFolder, slugifyTaskName } from '../../utils/slug.js';
+import { encodeTaskState, taskStateFromTaskStatus } from '../beads/artifactSchemas.js';
+import { type BeadsRepository, isRepositoryInitFailure } from '../beads/BeadsRepository.js';
+import { mapBeadStatusToTaskStatus } from '../beads/beadStatus.js';
 import type { TaskWithDeps } from '../taskDependencyGraph.js';
 import { computeRunnableAndBlocked } from '../taskDependencyGraph.js';
-import { BeadsRepository, isRepositoryInitFailure } from '../beads/BeadsRepository.js';
-import { mapBeadStatusToTaskStatus } from '../beads/beadStatus.js';
-import { taskStateFromTaskStatus, encodeTaskState } from '../beads/artifactSchemas.js';
-import {
-  getTaskPath,
-  getTaskStatusPath,
-  getTaskReportPath,
-} from '../../utils/paths.js';
-import { readJson, fileExists } from '../../utils/fs.js';
-import { deriveTaskFolder, slugifyTaskName } from '../../utils/slug.js';
-import type { LockOptions } from '../../utils/json-lock.js';
+import type { BackgroundPatchFields, RunnableTask, RunnableTasksResult } from '../taskService.js';
+import { TASK_STATUS_SCHEMA_VERSION } from '../taskService.js';
+import type { TaskArtifactKind, TaskSaveOptions, TaskStore } from './types.js';
 
 /**
  * TaskStore implementation for beadsMode='on'.
@@ -29,13 +25,7 @@ export class BeadsTaskStore implements TaskStore {
     private readonly repository: BeadsRepository,
   ) {}
 
-  createTask(
-    featureName: string,
-    folder: string,
-    title: string,
-    status: TaskStatus,
-    priority: number,
-  ): TaskStatus {
+  createTask(featureName: string, folder: string, title: string, status: TaskStatus, priority: number): TaskStatus {
     const epicResult = this.repository.getEpicByFeatureName(featureName, true);
     if (epicResult.success === false) {
       throw new Error(`Failed to resolve epic for feature '${featureName}': ${epicResult.error.message}`);
@@ -56,7 +46,7 @@ export class BeadsTaskStore implements TaskStore {
 
   get(featureName: string, folder: string): TaskInfo | null {
     const tasks = this.list(featureName);
-    return tasks.find(t => t.folder === folder) ?? null;
+    return tasks.find((t) => t.folder === folder) ?? null;
   }
 
   getRawStatus(featureName: string, folder: string): TaskStatus | null {
@@ -100,8 +90,12 @@ export class BeadsTaskStore implements TaskStore {
         const taskState = this.readTaskState(bead.id);
         if (taskState) {
           return {
-            folder: (taskState as TaskStatus & { folder?: string }).folder ?? deriveTaskFolder(index + 1, slugifyTaskName(bead.title)),
-            name: ((taskState as TaskStatus & { folder?: string }).folder ?? '').replace(/^\d+-/, '') || slugifyTaskName(bead.title),
+            folder:
+              (taskState as TaskStatus & { folder?: string }).folder ??
+              deriveTaskFolder(index + 1, slugifyTaskName(bead.title)),
+            name:
+              ((taskState as TaskStatus & { folder?: string }).folder ?? '').replace(/^\d+-/, '') ||
+              slugifyTaskName(bead.title),
             beadId: bead.id,
             status: taskState.status,
             origin: taskState.origin,
@@ -139,19 +133,12 @@ export class BeadsTaskStore implements TaskStore {
     const tasks = this.list(featureName);
     if (tasks.length === 0) return 1;
 
-    const orders = tasks
-      .map(t => parseInt(t.folder.split('-')[0], 10))
-      .filter(n => !isNaN(n));
+    const orders = tasks.map((t) => parseInt(t.folder.split('-')[0], 10)).filter((n) => !Number.isNaN(n));
 
     return Math.max(...orders, 0) + 1;
   }
 
-  save(
-    _featureName: string,
-    folder: string,
-    status: TaskStatus,
-    options?: TaskSaveOptions,
-  ): void {
+  save(_featureName: string, folder: string, status: TaskStatus, options?: TaskSaveOptions): void {
     if (!status.beadId) {
       throw new Error(`Cannot save task '${folder}' without beadId in beads mode`);
     }
@@ -168,7 +155,10 @@ export class BeadsTaskStore implements TaskStore {
       }
       const flushResult = this.repository.flushArtifacts();
       if (flushResult.success === false) {
-        this.throwIfInitFailure(flushResult.error, `[warcraft] Failed to flush artifacts after syncing bead status for '${status.beadId}'`);
+        this.throwIfInitFailure(
+          flushResult.error,
+          `[warcraft] Failed to flush artifacts after syncing bead status for '${status.beadId}'`,
+        );
       }
     }
   }
@@ -217,12 +207,7 @@ export class BeadsTaskStore implements TaskStore {
     }
   }
 
-  writeArtifact(
-    featureName: string,
-    folder: string,
-    kind: TaskArtifactKind,
-    content: string,
-  ): string {
+  writeArtifact(featureName: string, folder: string, kind: TaskArtifactKind, content: string): string {
     const status = this.getRawStatus(featureName, folder);
     if (!status?.beadId) {
       throw new Error(`Task '${folder}' does not have beadId`);
@@ -231,16 +216,15 @@ export class BeadsTaskStore implements TaskStore {
     this.repository.upsertTaskArtifact(status.beadId, kind, content);
     const flushResult = this.repository.flushArtifacts();
     if (flushResult.success === false) {
-      this.throwIfInitFailure(flushResult.error, `[warcraft] Failed to flush artifacts after writing '${kind}' for '${status.beadId}'`);
+      this.throwIfInitFailure(
+        flushResult.error,
+        `[warcraft] Failed to flush artifacts after writing '${kind}' for '${status.beadId}'`,
+      );
     }
     return status.beadId;
   }
 
-  readArtifact(
-    featureName: string,
-    folder: string,
-    kind: TaskArtifactKind,
-  ): string | null {
+  readArtifact(featureName: string, folder: string, kind: TaskArtifactKind): string | null {
     const importResult = this.repository.importArtifacts();
     if (importResult.success === false) {
       this.throwIfInitFailure(importResult.error, `[warcraft] Failed to import artifacts before reading '${kind}'`);
@@ -274,9 +258,7 @@ export class BeadsTaskStore implements TaskStore {
       const allTasks = this.list(featureName);
 
       const taskByBeadId = new Map<string, TaskInfo>(
-        allTasks
-          .filter((t): t is TaskInfo & { beadId: string } => t.beadId !== undefined)
-          .map(t => [t.beadId!, t]),
+        allTasks.filter((t): t is TaskInfo & { beadId: string } => t.beadId !== undefined).map((t) => [t.beadId!, t]),
       );
 
       const runnable: RunnableTask[] = [];
@@ -318,11 +300,11 @@ export class BeadsTaskStore implements TaskStore {
       }
 
       // Include tasks not in the robot plan (fallback via dependency graph)
-      const plannedBeadIds = new Set(planResult.tracks.flatMap(t => t.tasks));
-      const nonPlannedTasks = allTasks.filter(t => t.beadId && !plannedBeadIds.has(t.beadId));
+      const plannedBeadIds = new Set(planResult.tracks.flatMap((t) => t.tasks));
+      const nonPlannedTasks = allTasks.filter((t) => t.beadId && !plannedBeadIds.has(t.beadId));
 
       if (nonPlannedTasks.length > 0) {
-        const allTasksWithDeps: TaskWithDeps[] = allTasks.map(task => {
+        const allTasksWithDeps: TaskWithDeps[] = allTasks.map((task) => {
           const rawStatus = this.getRawStatus(featureName, task.folder);
           return {
             folder: task.folder,
@@ -343,28 +325,28 @@ export class BeadsTaskStore implements TaskStore {
 
           switch (task.status) {
             case 'done':
-              if (!completed.find(t => t.folder === task.folder)) {
+              if (!completed.find((t) => t.folder === task.folder)) {
                 completed.push(runnableTask);
               }
               break;
             case 'in_progress':
-              if (!inProgress.find(t => t.folder === task.folder)) {
+              if (!inProgress.find((t) => t.folder === task.folder)) {
                 inProgress.push(runnableTask);
               }
               break;
             case 'pending':
               if (runnableSet.has(task.folder)) {
-                if (!runnable.find(t => t.folder === task.folder)) {
+                if (!runnable.find((t) => t.folder === task.folder)) {
                   runnable.push(runnableTask);
                 }
               } else {
-                if (!blocked.find(t => t.folder === task.folder)) {
+                if (!blocked.find((t) => t.folder === task.folder)) {
                   blocked.push(runnableTask);
                 }
               }
               break;
             default:
-              if (!blocked.find(t => t.folder === task.folder)) {
+              if (!blocked.find((t) => t.folder === task.folder)) {
                 blocked.push(runnableTask);
               }
           }
@@ -400,7 +382,7 @@ export class BeadsTaskStore implements TaskStore {
 
   private findTaskByFolder(featureName: string, folder: string): TaskInfo | null {
     try {
-      return this.list(featureName).find(t => t.folder === folder) ?? null;
+      return this.list(featureName).find((t) => t.folder === folder) ?? null;
     } catch {
       return null;
     }

@@ -4,7 +4,7 @@
  * Verifies elapsed time and relative time formatting rules.
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 import { formatElapsed, formatRelativeTime } from './format.js';
 
 // ============================================================================

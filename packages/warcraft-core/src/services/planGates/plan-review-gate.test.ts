@@ -1,8 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import {
-  formatPlanReviewChecklistIssues,
-  validatePlanReviewChecklist,
-} from './plan-review-gate.js';
+import { formatPlanReviewChecklistIssues, validatePlanReviewChecklist } from './plan-review-gate.js';
 
 const COMPLETE_CHECKLIST = `## Plan Review Checklist
 - [x] Discovery is complete and current
@@ -35,9 +32,7 @@ describe('plan review gate', () => {
   });
 
   test('formats checklist issues for tool output', () => {
-    const text = formatPlanReviewChecklistIssues([
-      'Checklist item must be checked: Scope and non-goals are explicit',
-    ]);
+    const text = formatPlanReviewChecklistIssues(['Checklist item must be checked: Scope and non-goals are explicit']);
     expect(text).toContain('Plan review checklist is incomplete');
     expect(text).toContain('Scope and non-goals');
   });

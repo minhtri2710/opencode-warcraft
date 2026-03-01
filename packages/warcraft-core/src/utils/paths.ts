@@ -1,5 +1,5 @@
-import * as path from 'path';
 import * as fs from 'fs';
+import * as path from 'path';
 import type { BeadsMode } from '../types.js';
 
 const WARCRAFT_DIR_BEADS_ON = '.beads/artifacts';
@@ -84,8 +84,9 @@ export function listFeatureDirectories(projectRoot: string, beadsMode: BeadsMode
 
   // Scan canonical flat location only
   if (fs.existsSync(warcraftPath)) {
-    const entries = fs.readdirSync(warcraftPath, { withFileTypes: true })
-      .filter(entry => {
+    const entries = fs
+      .readdirSync(warcraftPath, { withFileTypes: true })
+      .filter((entry) => {
         // Must be a directory
         if (!entry.isDirectory()) return false;
         // Exclude special directories
@@ -93,7 +94,7 @@ export function listFeatureDirectories(projectRoot: string, beadsMode: BeadsMode
         if (entry.name.startsWith('.')) return false;
         return true;
       })
-      .map(entry => entry.name);
+      .map((entry) => entry.name);
 
     for (const entry of entries) {
       features.add(entry);
@@ -139,10 +140,7 @@ export function getContextPath(projectRoot: string, featureName: string, beadsMo
  * @param projectRoot - The project root directory
  * @param featureName - The feature name
  */
-export function getTasksPath(
-  projectRoot: string,
-  featureName: string,
-): string {
+export function getTasksPath(projectRoot: string, featureName: string): string {
   return path.join(getFeaturePath(projectRoot, featureName, 'off'), TASKS_DIR);
 }
 
@@ -153,11 +151,7 @@ export function getTasksPath(
  * @param featureName - The feature name
  * @param taskFolder - The task folder name
  */
-export function getTaskPath(
-  projectRoot: string,
-  featureName: string,
-  taskFolder: string,
-): string {
+export function getTaskPath(projectRoot: string, featureName: string, taskFolder: string): string {
   return path.join(getTasksPath(projectRoot, featureName), taskFolder);
 }
 
@@ -168,11 +162,7 @@ export function getTaskPath(
  * @param featureName - The feature name
  * @param taskFolder - The task folder name
  */
-export function getTaskStatusPath(
-  projectRoot: string,
-  featureName: string,
-  taskFolder: string,
-): string {
+export function getTaskStatusPath(projectRoot: string, featureName: string, taskFolder: string): string {
   return path.join(getTaskPath(projectRoot, featureName, taskFolder), STATUS_FILE);
 }
 
@@ -183,11 +173,7 @@ export function getTaskStatusPath(
  * @param featureName - The feature name
  * @param taskFolder - The task folder name
  */
-export function getTaskReportPath(
-  projectRoot: string,
-  featureName: string,
-  taskFolder: string,
-): string {
+export function getTaskReportPath(projectRoot: string, featureName: string, taskFolder: string): string {
   return path.join(getTaskPath(projectRoot, featureName, taskFolder), REPORT_FILE);
 }
 
@@ -198,10 +184,6 @@ export function getTaskReportPath(
  * @param featureName - The feature name
  * @param taskFolder - The task folder name
  */
-export function getTaskSpecPath(
-  projectRoot: string,
-  featureName: string,
-  taskFolder: string,
-): string {
+export function getTaskSpecPath(projectRoot: string, featureName: string, taskFolder: string): string {
   return path.join(getTaskPath(projectRoot, featureName, taskFolder), 'spec.md');
 }

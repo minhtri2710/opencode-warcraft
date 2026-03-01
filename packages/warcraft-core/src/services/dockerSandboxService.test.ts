@@ -1,9 +1,9 @@
-import { describe, test, expect, beforeEach, afterEach, mock, spyOn } from 'bun:test';
-import { DockerSandboxService } from './dockerSandboxService.js';
-import * as fs from 'fs/promises';
-import * as path from 'path';
-import * as os from 'os';
+import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import * as child_process from 'child_process';
+import * as fs from 'fs/promises';
+import * as os from 'os';
+import * as path from 'path';
+import { DockerSandboxService } from './dockerSandboxService.js';
 
 describe('DockerSandboxService', () => {
   let tempDir: string;
@@ -87,20 +87,37 @@ describe('DockerSandboxService', () => {
       const result = DockerSandboxService.buildRunCommand('/path/to/worktree', 'bun test && echo done', 'node:22-slim');
       expect(result).toEqual({
         command: 'docker',
-        args: ['run', '--rm', '-v', '/path/to/worktree:/app', '-w', '/app', 'node:22-slim', 'sh', '-c', 'bun test && echo done'],
+        args: [
+          'run',
+          '--rm',
+          '-v',
+          '/path/to/worktree:/app',
+          '-w',
+          '/app',
+          'node:22-slim',
+          'sh',
+          '-c',
+          'bun test && echo done',
+        ],
       });
     });
 
     test('rejects image with shell injection via semicolon', () => {
-      expect(() => DockerSandboxService.buildRunCommand('/path', 'ls', 'node:22; rm -rf /')).toThrow(/Invalid Docker image name/);
+      expect(() => DockerSandboxService.buildRunCommand('/path', 'ls', 'node:22; rm -rf /')).toThrow(
+        /Invalid Docker image name/,
+      );
     });
 
     test('rejects image with backtick injection', () => {
-      expect(() => DockerSandboxService.buildRunCommand('/path', 'ls', '`malicious`')).toThrow(/Invalid Docker image name/);
+      expect(() => DockerSandboxService.buildRunCommand('/path', 'ls', '`malicious`')).toThrow(
+        /Invalid Docker image name/,
+      );
     });
 
     test('rejects image with dollar sign injection', () => {
-      expect(() => DockerSandboxService.buildRunCommand('/path', 'ls', '$(whoami)')).toThrow(/Invalid Docker image name/);
+      expect(() => DockerSandboxService.buildRunCommand('/path', 'ls', '$(whoami)')).toThrow(
+        /Invalid Docker image name/,
+      );
     });
 
     test('accepts valid image names with registry and tag', () => {
@@ -147,15 +164,15 @@ describe('DockerSandboxService', () => {
     test('uses docker exec when persistent mode enabled', async () => {
       await fs.writeFile(path.join(tempDir, 'package.json'), '{}');
       const execFileSyncSpy = spyOn(child_process, 'execFileSync').mockImplementation(() => '' as any);
-      
+
       const worktreePath = '/repo/.beads/artifacts/.worktrees/my-feature/my-task';
       const result = DockerSandboxService.wrapCommand(worktreePath, 'npm test', { mode: 'docker', persistent: true });
-      
+
       // Should return structured command with docker exec
       expect(typeof result).toBe('object');
       expect((result as any).command).toBe('docker');
       expect((result as any).args).toContain('exec');
-      
+
       execFileSyncSpy.mockRestore();
     });
 
@@ -187,21 +204,22 @@ describe('DockerSandboxService', () => {
     });
 
     test('truncates names longer than 63 characters', () => {
-      const worktreePath = '/repo/.beads/artifacts/.worktrees/very-long-feature-name-that-goes-on-and-on/another-very-long-task-name';
+      const worktreePath =
+        '/repo/.beads/artifacts/.worktrees/very-long-feature-name-that-goes-on-and-on/another-very-long-task-name';
       const result = DockerSandboxService.containerName(worktreePath);
       expect(result.length).toBeLessThanOrEqual(63);
     });
   });
 
-    test('produces different names for long similar paths', () => {
-      const path1 = '/repo/.beads/artifacts/.worktrees/' + 'a'.repeat(60) + '-feature-alpha/task-1';
-      const path2 = '/repo/.beads/artifacts/.worktrees/' + 'a'.repeat(60) + '-feature-beta/task-1';
-      const name1 = DockerSandboxService.containerName(path1);
-      const name2 = DockerSandboxService.containerName(path2);
-      expect(name1).not.toBe(name2);
-      expect(name1.length).toBeLessThanOrEqual(63);
-      expect(name2.length).toBeLessThanOrEqual(63);
-    });
+  test('produces different names for long similar paths', () => {
+    const path1 = `/repo/.beads/artifacts/.worktrees/${'a'.repeat(60)}-feature-alpha/task-1`;
+    const path2 = `/repo/.beads/artifacts/.worktrees/${'a'.repeat(60)}-feature-beta/task-1`;
+    const name1 = DockerSandboxService.containerName(path1);
+    const name2 = DockerSandboxService.containerName(path2);
+    expect(name1).not.toBe(name2);
+    expect(name1.length).toBeLessThanOrEqual(63);
+    expect(name2.length).toBeLessThanOrEqual(63);
+  });
 
   describe('ensureContainer', () => {
     test('returns existing container name when already running', () => {
@@ -215,14 +233,10 @@ describe('DockerSandboxService', () => {
 
       const worktreePath = '/repo/.beads/artifacts/.worktrees/my-feature/my-task';
       const result = DockerSandboxService.ensureContainer(worktreePath, 'node:22-slim');
-      
+
       expect(result).toMatch(/^warcraft-my-feature-my-task-[a-f0-9]{7}$/);
-      expect(execFileSyncSpy).toHaveBeenCalledWith(
-        'docker',
-        expect.arrayContaining(['inspect']),
-        expect.any(Object)
-      );
-      
+      expect(execFileSyncSpy).toHaveBeenCalledWith('docker', expect.arrayContaining(['inspect']), expect.any(Object));
+
       execFileSyncSpy.mockRestore();
     });
 
@@ -241,41 +255,41 @@ describe('DockerSandboxService', () => {
 
       const worktreePath = '/repo/.beads/artifacts/.worktrees/my-feature/my-task';
       const result = DockerSandboxService.ensureContainer(worktreePath, 'node:22-slim');
-      
+
       expect(result).toMatch(/^warcraft-my-feature-my-task-[a-f0-9]{7}$/);
       // Should have called docker run -d ...
-      expect(calls.some(c => c.includes('run') && c.includes('-d'))).toBe(true);
-      expect(calls.some(c => c.includes('tail'))).toBe(true);
-      
+      expect(calls.some((c) => c.includes('run') && c.includes('-d'))).toBe(true);
+      expect(calls.some((c) => c.includes('tail'))).toBe(true);
+
       execFileSyncSpy.mockRestore();
     });
   });
 
-    test('recovers from concurrent container creation in ensureContainer', () => {
-      let inspectCallCount = 0;
-      const execFileSyncSpy = spyOn(child_process, 'execFileSync').mockImplementation((...mockArgs: any[]) => {
-        const [cmd, args] = mockArgs;
-        if (cmd === 'docker' && Array.isArray(args) && args.includes('inspect')) {
-          inspectCallCount++;
-          if (inspectCallCount === 1) {
-            throw new Error('container not found');
-          }
-          return 'true' as any;
+  test('recovers from concurrent container creation in ensureContainer', () => {
+    let inspectCallCount = 0;
+    const execFileSyncSpy = spyOn(child_process, 'execFileSync').mockImplementation((...mockArgs: any[]) => {
+      const [cmd, args] = mockArgs;
+      if (cmd === 'docker' && Array.isArray(args) && args.includes('inspect')) {
+        inspectCallCount++;
+        if (inspectCallCount === 1) {
+          throw new Error('container not found');
         }
-        if (cmd === 'docker' && Array.isArray(args) && args.includes('run')) {
-          throw Object.assign(new Error('name already in use'), { stderr: 'name already in use' });
-        }
-        return '' as any;
-      });
-
-      const worktreePath = '/repo/.beads/artifacts/.worktrees/my-feature/my-task';
-      const result = DockerSandboxService.ensureContainer(worktreePath, 'node:22-slim');
-
-      expect(result).toMatch(/^warcraft-my-feature-my-task/);
-      expect(inspectCallCount).toBe(2);
-
-      execFileSyncSpy.mockRestore();
+        return 'true' as any;
+      }
+      if (cmd === 'docker' && Array.isArray(args) && args.includes('run')) {
+        throw Object.assign(new Error('name already in use'), { stderr: 'name already in use' });
+      }
+      return '' as any;
     });
+
+    const worktreePath = '/repo/.beads/artifacts/.worktrees/my-feature/my-task';
+    const result = DockerSandboxService.ensureContainer(worktreePath, 'node:22-slim');
+
+    expect(result).toMatch(/^warcraft-my-feature-my-task/);
+    expect(inspectCallCount).toBe(2);
+
+    execFileSyncSpy.mockRestore();
+  });
 
   describe('buildExecCommand', () => {
     test('returns structured command with args array', () => {
@@ -349,13 +363,12 @@ describe('DockerSandboxService', () => {
 
       const worktreePath = '/repo/.beads/artifacts/.worktrees/my-feature/my-task';
       DockerSandboxService.stopContainer(worktreePath);
-      
-      expect(execFileSyncSpy).toHaveBeenCalledWith(
-        'docker',
-        ['rm', '-f', 'warcraft-my-feature-my-task-4437eda'],
-        { stdio: 'ignore', timeout: 15000 }
-      );
-      
+
+      expect(execFileSyncSpy).toHaveBeenCalledWith('docker', ['rm', '-f', 'warcraft-my-feature-my-task-4437eda'], {
+        stdio: 'ignore',
+        timeout: 15000,
+      });
+
       execFileSyncSpy.mockRestore();
     });
 
@@ -366,7 +379,7 @@ describe('DockerSandboxService', () => {
 
       const worktreePath = '/repo/.beads/artifacts/.worktrees/my-feature/my-task';
       expect(() => DockerSandboxService.stopContainer(worktreePath)).not.toThrow();
-      
+
       execFileSyncSpy.mockRestore();
     });
   });

@@ -2,11 +2,10 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import type { FeatureJson, PlanComment } from '../types.js';
+import type { PlanApprovalPayload } from './beads/BeadGateway.types.js';
 import { PlanService } from './planService';
 import { createStores } from './state/index.js';
-import type { PlanComment, FeatureJson } from '../types.js';
-import type { PlanApprovalPayload } from './beads/BeadGateway.types.js';
-
 
 /**
  * Mock BeadsRepository that tracks calls and stores data for round-trip tests.

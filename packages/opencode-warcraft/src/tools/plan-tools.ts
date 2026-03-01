@@ -1,10 +1,14 @@
-import { tool, type ToolDefinition } from '@opencode-ai/plugin';
+import { type ToolDefinition, tool } from '@opencode-ai/plugin';
 import type { FeatureService, PlanService } from 'warcraft-core';
-import { validateDiscoverySection, formatPlanReviewChecklistIssues, validatePlanReviewChecklist, detectWorkflowPath } from 'warcraft-core';
+import {
+  detectWorkflowPath,
+  formatPlanReviewChecklistIssues,
+  validateDiscoverySection,
+  validatePlanReviewChecklist,
+} from 'warcraft-core';
 import type { ToolContext } from '../types.js';
-import { resolveFeatureInput } from './tool-input.js';
-
 import { toolError, toolSuccess } from '../types.js';
+import { resolveFeatureInput } from './tool-input.js';
 export interface PlanToolsDependencies {
   featureService: FeatureService;
   planService: PlanService;
@@ -36,15 +40,9 @@ export class PlanTools {
       description: 'Write plan.md (clears existing comments)',
       args: {
         content: tool.schema.string().describe('Plan markdown content'),
-        feature: tool.schema
-          .string()
-          .optional()
-          .describe('Feature name (defaults to detection or single feature)'),
+        feature: tool.schema.string().optional().describe('Feature name (defaults to detection or single feature)'),
       },
-      async execute(
-        { content, feature: explicitFeature },
-        toolContext: ToolContext,
-      ) {
+      async execute({ content, feature: explicitFeature }, toolContext: ToolContext) {
         const resolution = resolveFeatureInput(resolveFeature, explicitFeature);
         if (!resolution.ok) return toolError(resolution.error);
         const feature = resolution.feature;
@@ -73,15 +71,9 @@ export class PlanTools {
     return tool({
       description: 'Read plan.md and user comments',
       args: {
-        feature: tool.schema
-          .string()
-          .optional()
-          .describe('Feature name (defaults to detection or single feature)'),
+        feature: tool.schema.string().optional().describe('Feature name (defaults to detection or single feature)'),
       },
-      async execute(
-        { feature: explicitFeature },
-        toolContext: ToolContext,
-      ) {
+      async execute({ feature: explicitFeature }, toolContext: ToolContext) {
         const resolution = resolveFeatureInput(resolveFeature, explicitFeature);
         if (!resolution.ok) return toolError(resolution.error);
         const feature = resolution.feature;
@@ -102,15 +94,9 @@ export class PlanTools {
     return tool({
       description: 'Approve plan for execution',
       args: {
-        feature: tool.schema
-          .string()
-          .optional()
-          .describe('Feature name (defaults to detection or single feature)'),
+        feature: tool.schema.string().optional().describe('Feature name (defaults to detection or single feature)'),
       },
-      async execute(
-        { feature: explicitFeature },
-        toolContext: ToolContext,
-      ) {
+      async execute({ feature: explicitFeature }, toolContext: ToolContext) {
         const resolution = resolveFeatureInput(resolveFeature, explicitFeature);
         if (!resolution.ok) return toolError(resolution.error);
         const feature = resolution.feature;
@@ -134,13 +120,13 @@ export class PlanTools {
         updateFeatureMetadata(feature, {
           workflowPath: detectWorkflowPath(planResult.content),
           reviewChecklistVersion: checklistResult.ok ? 'v1' : undefined,
-          reviewChecklistCompletedAt: checklistResult.ok
-            ? new Date().toISOString()
-            : undefined,
+          reviewChecklistCompletedAt: checklistResult.ok ? new Date().toISOString() : undefined,
         });
 
         if (!checklistResult.ok && workflowGatesMode === 'warn') {
-          return toolSuccess({ message: `Plan approved with warning (mode=${workflowGatesMode}).\n${formatPlanReviewChecklistIssues(checklistResult.issues)}\n\nRun warcraft_tasks_sync to generate tasks.` });
+          return toolSuccess({
+            message: `Plan approved with warning (mode=${workflowGatesMode}).\n${formatPlanReviewChecklistIssues(checklistResult.issues)}\n\nRun warcraft_tasks_sync to generate tasks.`,
+          });
         }
 
         return toolSuccess({ message: 'Plan approved. Run warcraft_tasks_sync to generate tasks.' });

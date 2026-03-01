@@ -1,19 +1,10 @@
-import { tool, type ToolDefinition } from '@opencode-ai/plugin';
-import type {
-  FeatureService,
-  PlanService,
-  TaskService,
-  WorktreeService,
-} from 'warcraft-core';
-import {
-  buildEffectiveDependencies,
-  computeRunnableAndBlocked,
-  type TaskWithDeps,
-} from 'warcraft-core';
-import { resolveFeatureInput, validateTaskInput } from './tool-input.js';
-import { prepareTaskDispatch, fetchSharedDispatchData } from './task-dispatch.js';
+import { type ToolDefinition, tool } from '@opencode-ai/plugin';
+import type { FeatureService, PlanService, TaskService, WorktreeService } from 'warcraft-core';
+import { buildEffectiveDependencies, computeRunnableAndBlocked, type TaskWithDeps } from 'warcraft-core';
 import type { BlockedResult } from '../types.js';
 import { toolError, toolSuccess } from '../types.js';
+import { fetchSharedDispatchData, prepareTaskDispatch } from './task-dispatch.js';
+import { resolveFeatureInput, validateTaskInput } from './tool-input.js';
 
 export interface BatchToolsDependencies {
   featureService: FeatureService;
@@ -24,10 +15,7 @@ export interface BatchToolsDependencies {
     list: (feature: string) => Array<{ name: string; content: string }>;
   };
   checkBlocked: (feature: string) => BlockedResult;
-  checkDependencies: (
-    feature: string,
-    taskFolder: string,
-  ) => { allowed: boolean; error?: string };
+  checkDependencies: (feature: string, taskFolder: string) => { allowed: boolean; error?: string };
   parallelExecution?: {
     strategy?: 'unbounded' | 'bounded';
     maxConcurrency?: number;
@@ -46,9 +34,7 @@ interface ParallelExecutionInput {
 
 export function resolveParallelPolicy(config?: ParallelExecutionInput): EffectiveParallelPolicy {
   const strategy = config?.strategy === 'bounded' ? 'bounded' : 'unbounded';
-  const configuredMax = Number.isInteger(config?.maxConcurrency)
-    ? (config?.maxConcurrency as number)
-    : 4;
+  const configuredMax = Number.isInteger(config?.maxConcurrency) ? (config?.maxConcurrency as number) : 4;
   const maxConcurrency = Math.min(32, Math.max(1, configuredMax));
 
   return {
@@ -107,7 +93,15 @@ export class BatchTools {
    * - execute: create worktrees and generate worker prompts for all specified tasks
    */
   batchExecuteTool(resolveFeature: (name?: string) => string | null): ToolDefinition {
-    const { featureService, planService, taskService, worktreeService, contextService, checkBlocked, checkDependencies } = this.deps;
+    const {
+      featureService,
+      planService,
+      taskService,
+      worktreeService,
+      contextService,
+      checkBlocked,
+      checkDependencies,
+    } = this.deps;
     const parallelPolicy = resolveParallelPolicy(this.deps.parallelExecution);
     return tool({
       description:
@@ -120,10 +114,7 @@ export class BatchTools {
           .array(tool.schema.string())
           .optional()
           .describe('Task folders to execute in parallel (required for execute mode)'),
-        feature: tool.schema
-          .string()
-          .optional()
-          .describe('Feature name (defaults to active)'),
+        feature: tool.schema.string().optional().describe('Feature name (defaults to active)'),
       },
       async execute({ mode, tasks: selectedTasks, feature: explicitFeature }) {
         const resolution = resolveFeatureInput(resolveFeature, explicitFeature);
@@ -136,12 +127,10 @@ export class BatchTools {
         }
 
         const featureData = featureService.get(feature);
-        if (!featureData)
-          return toolError(`Feature '${feature}' not found`);
+        if (!featureData) return toolError(`Feature '${feature}' not found`);
 
         const allTasks = taskService.list(feature);
-        if (allTasks.length === 0)
-          return toolError('No tasks found. Run warcraft_tasks_sync first.');
+        if (allTasks.length === 0) return toolError('No tasks found. Run warcraft_tasks_sync first.');
 
         const tasksWithDeps: TaskWithDeps[] = allTasks.map((t) => {
           const rawStatus = taskService.getRawStatus(feature, t.folder);
@@ -185,14 +174,16 @@ export class BatchTools {
               };
             }),
             blocked: blockedTasks.length > 0 ? blockedTasks : undefined,
-            inProgress: inProgress.length > 0
-              ? inProgress.map((t) => ({ folder: t.folder, name: t.planTitle ?? t.name }))
-              : undefined,
-            nextAction: runnable.length > 0
-              ? `Call warcraft_batch_execute with mode "execute" and tasks: [${runnable.map((f) => `"${f}"`).join(', ')}]`
-              : inProgress.length > 0
-                ? 'Wait for in-progress tasks to complete, then check again.'
-                : 'All tasks complete or blocked by dependencies.',
+            inProgress:
+              inProgress.length > 0
+                ? inProgress.map((t) => ({ folder: t.folder, name: t.planTitle ?? t.name }))
+                : undefined,
+            nextAction:
+              runnable.length > 0
+                ? `Call warcraft_batch_execute with mode "execute" and tasks: [${runnable.map((f) => `"${f}"`).join(', ')}]`
+                : inProgress.length > 0
+                  ? 'Wait for in-progress tasks to complete, then check again.'
+                  : 'All tasks complete or blocked by dependencies.',
           });
         }
 
@@ -227,10 +218,9 @@ export class BatchTools {
         }
 
         if (notRunnable.length > 0) {
-          return toolError(
-            'Some tasks cannot be dispatched: ' + notRunnable.join(', '),
-            ['Use preview mode to see which tasks are actually runnable.'],
-          );
+          return toolError(`Some tasks cannot be dispatched: ${notRunnable.join(', ')}`, [
+            'Use preview mode to see which tasks are actually runnable.',
+          ]);
         }
 
         // Dispatch all tasks in parallel
@@ -290,13 +280,12 @@ export class BatchTools {
           }
         };
 
-        const dispatched = parallelPolicy.strategy === 'bounded'
-          ? await mapWithConcurrencyLimit(
-            selectedTasks,
-            parallelPolicy.maxConcurrency,
-            async (task) => dispatchTask(task),
-          )
-          : await Promise.all(selectedTasks.map((task) => dispatchTask(task)));
+        const dispatched =
+          parallelPolicy.strategy === 'bounded'
+            ? await mapWithConcurrencyLimit(selectedTasks, parallelPolicy.maxConcurrency, async (task) =>
+                dispatchTask(task),
+              )
+            : await Promise.all(selectedTasks.map((task) => dispatchTask(task)));
 
         const succeeded = dispatched.filter((r) => r.success);
         const failed = dispatched.filter((r) => !r.success);
@@ -312,12 +301,11 @@ export class BatchTools {
             failed: failed.length,
           },
           taskToolCalls: taskCalls,
-          instructions: taskCalls.length > 0
-            ? `## Parallel Dispatch Required\n\nIssue ALL ${taskCalls.length} task() calls in the SAME assistant message to run them in parallel:\n\n${taskCalls.map((tc, i) => `\`\`\`\ntask({\n  subagent_type: "${tc.subagent_type}",\n  description: "${tc.description}",\n  prompt: <prompt from taskToolCalls[${i}].prompt>\n})\n\`\`\``).join('\n\n')}`
-            : undefined,
-          failed: failed.length > 0
-            ? failed.map((r) => ({ task: r.task, error: r.error }))
-            : undefined,
+          instructions:
+            taskCalls.length > 0
+              ? `## Parallel Dispatch Required\n\nIssue ALL ${taskCalls.length} task() calls in the SAME assistant message to run them in parallel:\n\n${taskCalls.map((tc, i) => `\`\`\`\ntask({\n  subagent_type: "${tc.subagent_type}",\n  description: "${tc.description}",\n  prompt: <prompt from taskToolCalls[${i}].prompt>\n})\n\`\`\``).join('\n\n')}`
+              : undefined,
+          failed: failed.length > 0 ? failed.map((r) => ({ task: r.task, error: r.error })) : undefined,
         });
       },
     });

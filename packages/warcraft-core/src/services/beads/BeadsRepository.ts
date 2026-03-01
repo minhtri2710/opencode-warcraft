@@ -13,30 +13,30 @@
  * to ensure consistency across the codebase.
  */
 
-import { BeadGateway, BeadGatewayError } from './BeadGateway.js';
-import { BeadsViewerGateway } from './BeadsViewerGateway.js';
-import type { RobotPlanResult } from './BeadsViewerGateway.js';
-import type { BvHealth } from './bv-runner.js';
-import type { BeadArtifactKind } from './BeadGateway.types.js';
+import type { FeatureJson, PlanComment, TaskStatus } from '../../types.js';
 import {
-  encodeFeatureState,
-  decodeFeatureState,
-  encodeTaskState,
-  decodeTaskState,
-  encodePlanApproval,
-  decodePlanApproval,
-  encodeApprovedPlan,
   decodeApprovedPlan,
-  encodePlanComments,
+  decodeFeatureState,
+  decodePlanApproval,
   decodePlanComments,
-  decodeWorkerPrompt,
   decodeTaskReport,
+  decodeTaskState,
+  decodeWorkerPrompt,
+  encodeApprovedPlan,
+  encodeFeatureState,
+  encodePlanApproval,
+  encodePlanComments,
+  encodeTaskState,
   featureStateFromFeatureJson,
   featureStateToFeatureJson,
   taskStateFromTaskStatus,
   taskStateToTaskStatus,
 } from './artifactSchemas.js';
-import type { FeatureJson, TaskStatus, PlanComment } from '../../types.js';
+import { BeadGateway, BeadGatewayError } from './BeadGateway.js';
+import type { BeadArtifactKind } from './BeadGateway.types.js';
+import type { RobotPlanResult } from './BeadsViewerGateway.js';
+import { BeadsViewerGateway } from './BeadsViewerGateway.js';
+import type { BvHealth } from './bv-runner.js';
 
 // ============================================================================
 // Repository Errors
@@ -70,9 +70,7 @@ export class RepositoryError extends Error {
 /**
  * Result type for operations that may fail.
  */
-export type Result<T> =
-  | { success: true; value: T }
-  | { success: false; error: RepositoryError };
+export type Result<T> = { success: true; value: T } | { success: false; error: RepositoryError };
 
 const INTERNAL_GATEWAY_CODE_PATTERN = /\[(BR_[A-Z_]+)\]/;
 const INIT_FAILURE_INTERNAL_CODES = new Set(['BR_INIT_FAILED', 'BR_NOT_INITIALIZED']);
@@ -149,11 +147,7 @@ export class BeadsRepository {
   // Short-lived memoization cache (cleared on each operation)
   private cache = new Map<string, unknown>();
 
-  constructor(
-    projectRoot: string,
-    syncPolicy: Partial<SyncPolicy> = {},
-    beadsMode: 'on' | 'off' = 'on',
-  ) {
+  constructor(projectRoot: string, syncPolicy: Partial<SyncPolicy> = {}, beadsMode: 'on' | 'off' = 'on') {
     this.syncPolicy = { ...DEFAULT_SYNC_POLICY, ...syncPolicy };
     this.gateway = new BeadGateway(projectRoot);
     this.viewerGateway = new BeadsViewerGateway(projectRoot, beadsMode === 'on');
@@ -266,7 +260,6 @@ export class BeadsRepository {
     }
   }
 
-
   // ==========================================================================
   // Epic Resolution
   // ==========================================================================
@@ -295,10 +288,7 @@ export class BeadsRepository {
         if (strict) {
           return {
             success: false,
-            error: new RepositoryError(
-              'epic_not_found',
-              `Epic bead for feature '${featureName}' not found`,
-            ),
+            error: new RepositoryError('epic_not_found', `Epic bead for feature '${featureName}' not found`),
           };
         }
         return { success: true, value: null };
@@ -339,7 +329,10 @@ export class BeadsRepository {
       if (!partialFeatureJson.name || !partialFeatureJson.status || !partialFeatureJson.createdAt) {
         return {
           success: false,
-          error: new RepositoryError('invalid_artifact', `Invalid feature_state artifact for epic '${epicBeadId}': missing required fields`),
+          error: new RepositoryError(
+            'invalid_artifact',
+            `Invalid feature_state artifact for epic '${epicBeadId}': missing required fields`,
+          ),
         };
       }
 
@@ -537,12 +530,7 @@ export class BeadsRepository {
    * @param approvedAt - ISO timestamp of approval
    * @param approvedBySession - Optional session ID that approved
    */
-  setPlanApproval(
-    epicBeadId: string,
-    hash: string,
-    approvedAt: string,
-    approvedBySession?: string,
-  ): Result<void> {
+  setPlanApproval(epicBeadId: string, hash: string, approvedAt: string, approvedBySession?: string): Result<void> {
     try {
       const artifact = { schemaVersion: 1, hash, approvedAt, approvedBySession } as const;
       const encoded = encodePlanApproval(artifact);
@@ -572,9 +560,7 @@ export class BeadsRepository {
       const raw = this.gateway.readArtifact(epicBeadId, 'approved_plan');
       const artifact = decodeApprovedPlan(raw);
 
-      return artifact
-        ? { success: true, value: artifact.content }
-        : { success: true, value: null };
+      return artifact ? { success: true, value: artifact.content } : { success: true, value: null };
     } catch (error) {
       return {
         success: false,
@@ -647,9 +633,7 @@ export class BeadsRepository {
       const raw = this.gateway.readArtifact(epicBeadId, 'plan_comments');
       const artifact = decodePlanComments(raw);
 
-      return artifact
-        ? { success: true, value: artifact.comments }
-        : { success: true, value: null };
+      return artifact ? { success: true, value: artifact.comments } : { success: true, value: null };
     } catch (error) {
       return {
         success: false,
@@ -722,16 +706,12 @@ export class BeadsRepository {
       // Decode specific artifacts that have schemas
       if (kind === 'worker_prompt') {
         const artifact = decodeWorkerPrompt(raw);
-        return artifact
-          ? { success: true, value: artifact.content }
-          : { success: true, value: null };
+        return artifact ? { success: true, value: artifact.content } : { success: true, value: null };
       }
 
       if (kind === 'report') {
         const artifact = decodeTaskReport(raw);
-        return artifact
-          ? { success: true, value: artifact.content }
-          : { success: true, value: null };
+        return artifact ? { success: true, value: artifact.content } : { success: true, value: null };
       }
 
       // Other artifacts returned as-is
@@ -754,9 +734,7 @@ export class BeadsRepository {
    * @param epicBeadId - Epic bead ID
    * @returns Array of task bead info
    */
-  listTaskBeadsForEpic(epicBeadId: string): Result<
-    Array<{ id: string; title: string; status: string }>
-  > {
+  listTaskBeadsForEpic(epicBeadId: string): Result<Array<{ id: string; title: string; status: string }>> {
     try {
       this.beforeRead();
 
@@ -858,29 +836,17 @@ export class BeadsRepository {
     if (error instanceof BeadGatewayError) {
       const internalCode = getRepositoryInternalCode(error);
       const codePrefix = internalCode ? `[${internalCode}] ` : '';
-      const details = internalCode && error.message.includes(`[${internalCode}]`)
-        ? error.message
-        : `${codePrefix}${error.message}`;
-      return new RepositoryError(
-        'gateway_error',
-        `Bead gateway error: ${details}`,
-        error,
-      );
+      const details =
+        internalCode && error.message.includes(`[${internalCode}]`) ? error.message : `${codePrefix}${error.message}`;
+      return new RepositoryError('gateway_error', `Bead gateway error: ${details}`, error);
     }
 
     if (error instanceof Error) {
       const internalCode = getRepositoryInternalCode(error);
       const codePrefix = internalCode ? `[${internalCode}] ` : '';
-      return new RepositoryError(
-        'gateway_error',
-        `Bead gateway error: ${codePrefix}${error.message}`,
-        error,
-      );
+      return new RepositoryError('gateway_error', `Bead gateway error: ${codePrefix}${error.message}`, error);
     }
 
-    return new RepositoryError(
-      'gateway_error',
-      String(error),
-    );
-}
+    return new RepositoryError('gateway_error', String(error));
+  }
 }

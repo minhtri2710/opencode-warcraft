@@ -1,10 +1,8 @@
 import type { FeatureJson, PlanComment } from '../../types.js';
-import type { PlanStore } from './types.js';
-import {
-  getFeatureJsonPath,
-} from '../../utils/paths.js';
 import { readJson } from '../../utils/fs.js';
 import { updateJsonLockedSync } from '../../utils/json-lock.js';
+import { getFeatureJsonPath } from '../../utils/paths.js';
+import type { PlanStore } from './types.js';
 
 type FeatureJsonWithPlanState = FeatureJson & {
   planApprovalHash?: string;
@@ -20,13 +18,7 @@ type FeatureJsonWithPlanState = FeatureJson & {
 export class FilesystemPlanStore implements PlanStore {
   constructor(private readonly projectRoot: string) {}
 
-  approve(
-    featureName: string,
-    _planContent: string,
-    planHash: string,
-    timestamp: string,
-    _sessionId?: string,
-  ): void {
+  approve(featureName: string, _planContent: string, planHash: string, timestamp: string, _sessionId?: string): void {
     const filePath = getFeatureJsonPath(this.projectRoot, featureName, 'off');
     updateJsonLockedSync<FeatureJsonWithPlanState>(
       filePath,
@@ -41,9 +33,7 @@ export class FilesystemPlanStore implements PlanStore {
   }
 
   isApproved(featureName: string, currentPlanHash: string): boolean {
-    const feature = readJson<FeatureJsonWithPlanState>(
-      getFeatureJsonPath(this.projectRoot, featureName, 'off'),
-    );
+    const feature = readJson<FeatureJsonWithPlanState>(getFeatureJsonPath(this.projectRoot, featureName, 'off'));
     if (!feature || feature.status !== 'approved') {
       return false;
     }
@@ -69,9 +59,7 @@ export class FilesystemPlanStore implements PlanStore {
   }
 
   getComments(featureName: string): PlanComment[] {
-    const feature = readJson<FeatureJsonWithPlanState>(
-      getFeatureJsonPath(this.projectRoot, featureName, 'off'),
-    );
+    const feature = readJson<FeatureJsonWithPlanState>(getFeatureJsonPath(this.projectRoot, featureName, 'off'));
     return feature?.planComments ?? [];
   }
 
@@ -94,5 +82,4 @@ export class FilesystemPlanStore implements PlanStore {
   syncPlanComment(_featureName: string, _comment: PlanComment): void {
     // No-op: filesystem mode has no external store to sync to.
   }
-
 }

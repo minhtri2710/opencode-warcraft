@@ -5,13 +5,13 @@
 
 import type { BeadsMode } from '../../types.js';
 import type { BeadsRepository } from '../beads/BeadsRepository.js';
-import type { StoreSet } from './types.js';
 import { BeadsFeatureStore } from './beads-feature-store.js';
-import { FilesystemFeatureStore } from './fs-feature-store.js';
-import { BeadsTaskStore } from './beads-task-store.js';
-import { FilesystemTaskStore } from './fs-task-store.js';
 import { BeadsPlanStore } from './beads-plan-store.js';
+import { BeadsTaskStore } from './beads-task-store.js';
+import { FilesystemFeatureStore } from './fs-feature-store.js';
 import { FilesystemPlanStore } from './fs-plan-store.js';
+import { FilesystemTaskStore } from './fs-task-store.js';
+import type { StoreSet } from './types.js';
 
 /**
  * Create the full set of stores based on beadsMode.
@@ -20,11 +20,7 @@ import { FilesystemPlanStore } from './fs-plan-store.js';
  * @param beadsMode - Current beads mode ('on' or 'off')
  * @param repository - BeadsRepository instance (used by beads stores and filesystem task store for bead ID generation)
  */
-export function createStores(
-  projectRoot: string,
-  beadsMode: BeadsMode,
-  repository: BeadsRepository,
-): StoreSet {
+export function createStores(projectRoot: string, beadsMode: BeadsMode, repository: BeadsRepository): StoreSet {
   if (beadsMode === 'on') {
     return {
       featureStore: new BeadsFeatureStore(projectRoot, repository),

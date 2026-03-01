@@ -1,5 +1,5 @@
-import * as path from 'path';
 import * as fs from 'fs';
+import * as path from 'path';
 
 export function ensureDir(dirPath: string): void {
   if (!fs.existsSync(dirPath)) {

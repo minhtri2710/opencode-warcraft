@@ -5,10 +5,10 @@
  * Implements strict skill ID validation and deterministic search order.
  */
 
-import * as fs from 'node:fs/promises';
 import type { Dirent } from 'node:fs';
+import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import type { SkillLoadResult, SkillDefinition } from './types.js';
+import type { SkillDefinition, SkillLoadResult } from './types.js';
 
 /**
  * Validate skill ID for safety.
@@ -47,8 +47,7 @@ function validateSkillId(skillId: string): string | undefined {
  */
 function stripQuotes(value: string): string {
   const trimmed = value.trim();
-  if ((trimmed.startsWith('"') && trimmed.endsWith('"')) ||
-      (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
+  if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
     return trimmed.slice(1, -1);
   }
   return trimmed;
@@ -172,11 +171,7 @@ async function loadReferencesContent(skillPath: string): Promise<string> {
  * @param homeDir - The user's home directory
  * @returns The skill load result
  */
-export async function loadFileSkill(
-  skillId: string,
-  projectRoot: string,
-  homeDir: string
-): Promise<SkillLoadResult> {
+export async function loadFileSkill(skillId: string, projectRoot: string, homeDir: string): Promise<SkillLoadResult> {
   // Validate skill ID
   const validationError = validateSkillId(skillId);
   if (validationError) {

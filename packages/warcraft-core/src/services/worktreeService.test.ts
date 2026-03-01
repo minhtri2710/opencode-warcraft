@@ -15,9 +15,10 @@ afterEach(() => {
 });
 
 function createService(mode: 'on' | 'off'): WorktreeService {
-  return new WorktreeService(
-    { baseDir: testRoot, warcraftDir: mode === 'off' ? path.join(testRoot, 'docs') : path.join(testRoot, '.beads', 'artifacts') },
-  );
+  return new WorktreeService({
+    baseDir: testRoot,
+    warcraftDir: mode === 'off' ? path.join(testRoot, 'docs') : path.join(testRoot, '.beads', 'artifacts'),
+  });
 }
 
 describe('WorktreeService helpers', () => {
@@ -38,8 +39,8 @@ describe('WorktreeService helpers', () => {
       '--- a/src/a.ts',
       '+++ b/src/a.ts',
       '@@ -1 +1 @@',
-      "-old",
-      "+new",
+      '-old',
+      '+new',
       '',
     ].join('\n');
     fs.writeFileSync(diffPath, diffContent, 'utf-8');
@@ -103,7 +104,9 @@ describe('WorktreeService commitChanges staging', () => {
     const service = createService('off');
     const addCalls: any[][] = [];
     const mockGit = {
-      add: async (...args: any[]) => { addCalls.push(args); },
+      add: async (...args: any[]) => {
+        addCalls.push(args);
+      },
       status: async () => ({ staged: ['file.ts'], modified: [], not_added: [] }),
       revparse: async () => 'abc123',
       commit: async (_msg: string) => ({ commit: 'def456' }),
@@ -117,7 +120,7 @@ describe('WorktreeService commitChanges staging', () => {
     fs.mkdirSync(wtDir, { recursive: true });
 
     // Call commitChanges
-    const result = await service.commitChanges('feat', '01-step', 'test commit');
+    const _result = await service.commitChanges('feat', '01-step', 'test commit');
 
     // Verify add was called with pathspec exclusion
     expect(addCalls.length).toBeGreaterThanOrEqual(1);

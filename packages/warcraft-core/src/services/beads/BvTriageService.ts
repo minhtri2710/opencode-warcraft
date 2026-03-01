@@ -90,9 +90,7 @@ export class BvTriageService {
     const causalityPayload = this.runBvRobot(['--robot-causality', beadId]);
     const causalitySummary = this.summarizeBvPayload(causalityPayload);
 
-    const parts = [blockerSummary, causalitySummary].filter(
-      (v): v is string => !!v,
-    );
+    const parts = [blockerSummary, causalitySummary].filter((v): v is string => !!v);
 
     if (parts.length === 0) {
       this.bvBlockerTriageCache.set(beadId, null);
@@ -100,9 +98,7 @@ export class BvTriageService {
     }
 
     const uniqueSummary = Array.from(new Set(parts)).slice(0, 2).join(' | ');
-    const summary = uniqueSummary.length > 0
-      ? uniqueSummary
-      : 'bv triage available but no summary text was produced.';
+    const summary = uniqueSummary.length > 0 ? uniqueSummary : 'bv triage available but no summary text was produced.';
 
     const topBlockers = this.extractTopBlockers(blockerPayload);
     const result = {
@@ -206,13 +202,18 @@ export class BvTriageService {
     return null;
   }
 
-  private extractRobotMetadata(payload: unknown): Pick<BvGlobalTriageDetails, 'dataHash' | 'analysisConfig' | 'metricStatus' | 'asOf' | 'asOfCommit'> {
+  private extractRobotMetadata(
+    payload: unknown,
+  ): Pick<BvGlobalTriageDetails, 'dataHash' | 'analysisConfig' | 'metricStatus' | 'asOf' | 'asOfCommit'> {
     if (!payload || typeof payload !== 'object') {
       return {};
     }
 
     const root = payload as Record<string, unknown>;
-    const metadata: Pick<BvGlobalTriageDetails, 'dataHash' | 'analysisConfig' | 'metricStatus' | 'asOf' | 'asOfCommit'> = {};
+    const metadata: Pick<
+      BvGlobalTriageDetails,
+      'dataHash' | 'analysisConfig' | 'metricStatus' | 'asOf' | 'asOfCommit'
+    > = {};
 
     if (typeof root.data_hash === 'string') {
       metadata.dataHash = root.data_hash;

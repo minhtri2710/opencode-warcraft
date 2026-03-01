@@ -1,18 +1,18 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import * as fs from "fs";
-import * as path from "path";
-import type { PluginInput } from "@opencode-ai/plugin";
-import { createOpencodeClient } from "@opencode-ai/sdk";
-import plugin from "../index";
-import { BUILTIN_SKILLS } from "../skills/registry.generated.js";
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import type { PluginInput } from '@opencode-ai/plugin';
+import { createOpencodeClient } from '@opencode-ai/sdk';
+import * as fs from 'fs';
+import * as path from 'path';
+import plugin from '../index';
+import { BUILTIN_SKILLS } from '../skills/registry.generated.js';
 import {
   cleanupTempProjectRoot,
   createTempProjectRoot,
   getHostPreflightSkipReason,
   setupGitProject,
-} from "./helpers/test-env.js";
+} from './helpers/test-env.js';
 
-const OPENCODE_CLIENT = createOpencodeClient({ baseUrl: "http://localhost:1" }) as unknown as PluginInput["client"];
+const OPENCODE_CLIENT = createOpencodeClient({ baseUrl: 'http://localhost:1' }) as unknown as PluginInput['client'];
 
 type ToolContext = {
   sessionID: string;
@@ -22,23 +22,23 @@ type ToolContext = {
 };
 
 const EXPECTED_TOOLS = [
-  "warcraft_feature_create",
-  "warcraft_feature_complete",
-  "warcraft_plan_write",
-  "warcraft_plan_read",
-  "warcraft_plan_approve",
-  "warcraft_tasks_sync",
-  "warcraft_task_create",
-  "warcraft_task_update",
-  "warcraft_worktree_create",
-  "warcraft_worktree_commit",
-  "warcraft_worktree_discard",
-  "warcraft_merge",
-  "warcraft_batch_execute",
-  "warcraft_context_write",
-  "warcraft_agents_md",
-  "warcraft_status",
-  "warcraft_skill",
+  'warcraft_feature_create',
+  'warcraft_feature_complete',
+  'warcraft_plan_write',
+  'warcraft_plan_read',
+  'warcraft_plan_approve',
+  'warcraft_tasks_sync',
+  'warcraft_task_create',
+  'warcraft_task_update',
+  'warcraft_worktree_create',
+  'warcraft_worktree_commit',
+  'warcraft_worktree_discard',
+  'warcraft_merge',
+  'warcraft_batch_execute',
+  'warcraft_context_write',
+  'warcraft_agents_md',
+  'warcraft_status',
+  'warcraft_skill',
 ] as const;
 
 const PRECONDITION_SKIP_REASON = getHostPreflightSkipReason({
@@ -48,12 +48,12 @@ const PRECONDITION_SKIP_REASON = getHostPreflightSkipReason({
 const describeIfHostReady = PRECONDITION_SKIP_REASON ? describe.skip : describe;
 const runIfHostReady = PRECONDITION_SKIP_REASON ? it.skip : it;
 
-function createStubShell(): PluginInput["$"] {
-  let shell: PluginInput["$"];
+function createStubShell(): PluginInput['$'] {
+  let shell: PluginInput['$'];
 
   const fn = ((..._args: unknown[]) => {
-    throw new Error("shell not available in this test");
-  }) as unknown as PluginInput["$"];
+    throw new Error('shell not available in this test');
+  }) as unknown as PluginInput['$'];
 
   shell = Object.assign(fn, {
     braces(pattern: string) {
@@ -82,15 +82,15 @@ function createStubShell(): PluginInput["$"] {
 function createToolContext(sessionID: string): ToolContext {
   return {
     sessionID,
-    messageID: "msg_test",
-    agent: "test",
+    messageID: 'msg_test',
+    agent: 'test',
     abort: new AbortController().signal,
   };
 }
 
-function createProject(worktree: string): PluginInput["project"] {
+function createProject(worktree: string): PluginInput['project'] {
   return {
-    id: "test",
+    id: 'test',
     worktree,
     time: { created: Date.now() },
   };
@@ -105,14 +105,14 @@ function parseToolResponse<T>(output: string): T {
   return (parsed.data ?? parsed) as T;
 }
 
-describeIfHostReady("e2e: opencode-warcraft plugin (in-process)", () => {
+describeIfHostReady('e2e: opencode-warcraft plugin (in-process)', () => {
   let testRoot: string;
   let originalHome: string | undefined;
 
   beforeEach(() => {
-    testRoot = "";
+    testRoot = '';
     originalHome = process.env.HOME;
-    testRoot = createTempProjectRoot("warcraft-e2e-plugin-project");
+    testRoot = createTempProjectRoot('warcraft-e2e-plugin-project');
     process.env.HOME = testRoot;
 
     setupGitProject(testRoot);
@@ -127,11 +127,11 @@ describeIfHostReady("e2e: opencode-warcraft plugin (in-process)", () => {
     }
   });
 
-  runIfHostReady("registers expected tools and basic workflow works", async () => {
+  runIfHostReady('registers expected tools and basic workflow works', async () => {
     const ctx: PluginInput = {
       directory: testRoot,
       worktree: testRoot,
-      serverUrl: new URL("http://localhost:1"),
+      serverUrl: new URL('http://localhost:1'),
       project: createProject(testRoot),
       client: OPENCODE_CLIENT,
       $: createStubShell(),
@@ -143,16 +143,13 @@ describeIfHostReady("e2e: opencode-warcraft plugin (in-process)", () => {
 
     for (const toolName of EXPECTED_TOOLS) {
       expect(hooks.tool?.[toolName]).toBeDefined();
-      expect(typeof hooks.tool?.[toolName].execute).toBe("function");
+      expect(typeof hooks.tool?.[toolName].execute).toBe('function');
     }
 
-    const sessionID = "sess_plugin_smoke";
+    const sessionID = 'sess_plugin_smoke';
     const toolContext = createToolContext(sessionID);
 
-    const createOutput = await hooks.tool!.warcraft_feature_create.execute(
-      { name: "smoke-feature" },
-      toolContext
-    );
+    const createOutput = await hooks.tool!.warcraft_feature_create.execute({ name: 'smoke-feature' }, toolContext);
     const createParsed = JSON.parse(createOutput as string);
     expect(createParsed.success).toBe(true);
     expect(createParsed.data?.message).toContain('Feature "smoke-feature" created');
@@ -180,57 +177,48 @@ Test
 Do it
 `;
     try {
-      await hooks.tool!.warcraft_feature_create.execute({ name: "smoke-feature" }, toolContext);
-    } catch (e) {
+      await hooks.tool!.warcraft_feature_create.execute({ name: 'smoke-feature' }, toolContext);
+    } catch (_e) {
       // Ignore if exists
     }
     // Re-create it if it doesn't exist, we don't care
     try {
-      await hooks.tool!.warcraft_feature_create.execute({ name: "smoke-feature" }, toolContext);
-    } catch (e) {
+      await hooks.tool!.warcraft_feature_create.execute({ name: 'smoke-feature' }, toolContext);
+    } catch (_e) {
       // Ignore if exists
     }
-    process.env.WARCRAFT_FEATURE = "smoke-feature";
+    process.env.WARCRAFT_FEATURE = 'smoke-feature';
     const planOutput = await hooks.tool!.warcraft_plan_write.execute(
-      { content: plan, feature: "smoke-feature" },
-      toolContext
+      { content: plan, feature: 'smoke-feature' },
+      toolContext,
     );
     const planParsed = JSON.parse(planOutput as string);
     expect(planParsed.success).toBe(true);
-    expect(planParsed.data?.message).toContain("Plan written");
+    expect(planParsed.data?.message).toContain('Plan written');
 
-    const approveOutput = await hooks.tool!.warcraft_plan_approve.execute({ feature: "smoke-feature" }, toolContext);
+    const approveOutput = await hooks.tool!.warcraft_plan_approve.execute({ feature: 'smoke-feature' }, toolContext);
     const approveParsed = JSON.parse(approveOutput as string);
     expect(approveParsed.success).toBe(true);
-    expect(approveParsed.data?.message).toContain("Plan approved");
+    expect(approveParsed.data?.message).toContain('Plan approved');
 
-    const syncOutput = await hooks.tool!.warcraft_tasks_sync.execute({ feature: "smoke-feature" }, toolContext);
+    const syncOutput = await hooks.tool!.warcraft_tasks_sync.execute({ feature: 'smoke-feature' }, toolContext);
     const syncParsed = JSON.parse(syncOutput as string);
     expect(syncParsed.success).toBe(true);
-    expect(syncParsed.data?.message).toContain("Tasks synced");
+    expect(syncParsed.data?.message).toContain('Tasks synced');
 
     // In beads-on mode, task state lives in bead artifacts (no local docs/ cache).
     // Verify task was created by checking the status tool output below.
 
     // Session is tracked on the feature metadata
-    const featureJsonPath = path.join(
-      testRoot,
-      ".beads",
-      "artifacts",
-      "smoke-feature",
-      "feature.json"
-    );
+    const featureJsonPath = path.join(testRoot, '.beads', 'artifacts', 'smoke-feature', 'feature.json');
 
-    const featureJson = JSON.parse(fs.readFileSync(featureJsonPath, "utf-8")) as {
+    const featureJson = JSON.parse(fs.readFileSync(featureJsonPath, 'utf-8')) as {
       sessionId?: string;
     };
 
     expect(featureJson.sessionId).toBe(sessionID);
 
-    const statusRaw = await hooks.tool!.warcraft_status.execute(
-      { feature: "smoke-feature" },
-      toolContext
-    );
+    const statusRaw = await hooks.tool!.warcraft_status.execute({ feature: 'smoke-feature' }, toolContext);
     const warcraftStatus = parseToolResponse<{
       tasks?: {
         list?: Array<{
@@ -248,19 +236,17 @@ Do it
       };
     }>(statusRaw as string);
 
-    expect(warcraftStatus.tasks?.list?.[0]?.folder).toBe("01-first-task");
+    expect(warcraftStatus.tasks?.list?.[0]?.folder).toBe('01-first-task');
     expect(warcraftStatus.tasks?.list?.[0]?.dependsOn).toEqual([]);
     expect(warcraftStatus.tasks?.list?.[0]?.worktree).toBeNull();
-    expect(warcraftStatus.tasks?.runnable).toContain("01-first-task");
+    expect(warcraftStatus.tasks?.runnable).toContain('01-first-task');
     expect(warcraftStatus.tasks?.blockedBy).toEqual({});
-    expect(['bv', 'unavailable', 'disabled']).toContain(
-      warcraftStatus.tasks?.analytics?.provider,
-    );
+    expect(['bv', 'unavailable', 'disabled']).toContain(warcraftStatus.tasks?.analytics?.provider);
     expect(typeof warcraftStatus.tasks?.analytics?.generatedAt).toBe('string');
 
     const execStartOutput = await hooks.tool!.warcraft_worktree_create.execute(
-      { feature: "smoke-feature", task: "01-first-task" },
-      toolContext
+      { feature: 'smoke-feature', task: '01-first-task' },
+      toolContext,
     );
     const execStart = parseToolResponse<{
       instructions?: string;
@@ -268,36 +254,29 @@ Do it
     }>(execStartOutput as string);
     expect(execStart.backgroundTaskCall).toBeUndefined();
 
-    const statusOutput = await hooks.tool!.warcraft_status.execute(
-      { feature: "smoke-feature" },
-      toolContext
-    );
+    const statusOutput = await hooks.tool!.warcraft_status.execute({ feature: 'smoke-feature' }, toolContext);
     const status = parseToolResponse<{
       tasks?: {
         list?: Array<{ folder: string }>;
       };
     }>(statusOutput as string);
-    expect(status.tasks?.list?.[0]?.folder).toBe("01-first-task");
+    expect(status.tasks?.list?.[0]?.folder).toBe('01-first-task');
   });
 
-  runIfHostReady("returns task tool call using inline prompt", async () => {
-
+  runIfHostReady('returns task tool call using inline prompt', async () => {
     const ctx: PluginInput = {
       directory: testRoot,
       worktree: testRoot,
-      serverUrl: new URL("http://localhost:1"),
+      serverUrl: new URL('http://localhost:1'),
       project: createProject(testRoot),
       client: OPENCODE_CLIENT,
       $: createStubShell(),
     };
 
     const hooks = await plugin(ctx);
-    const toolContext = createToolContext("sess_task_mode");
+    const toolContext = createToolContext('sess_task_mode');
 
-    await hooks.tool!.warcraft_feature_create.execute(
-      { name: "task-mode-feature" },
-      toolContext
-    );
+    await hooks.tool!.warcraft_feature_create.execute({ name: 'task-mode-feature' }, toolContext);
 
     const plan = `# Task Mode Feature
 
@@ -322,32 +301,23 @@ Test
 Do it
 `;
     try {
-      await hooks.tool!.warcraft_feature_create.execute({ name: "task-mode-feature" }, toolContext);
-    } catch (e) {
+      await hooks.tool!.warcraft_feature_create.execute({ name: 'task-mode-feature' }, toolContext);
+    } catch (_e) {
       // Ignore if exists
     }
-    await hooks.tool!.warcraft_plan_write.execute(
-      { content: plan, feature: "task-mode-feature" },
-      toolContext
-    );
-    await hooks.tool!.warcraft_plan_approve.execute(
-      { feature: "task-mode-feature" },
-      toolContext
-    );
-    await hooks.tool!.warcraft_tasks_sync.execute(
-      { feature: "task-mode-feature" },
-      toolContext
-    );
+    await hooks.tool!.warcraft_plan_write.execute({ content: plan, feature: 'task-mode-feature' }, toolContext);
+    await hooks.tool!.warcraft_plan_approve.execute({ feature: 'task-mode-feature' }, toolContext);
+    await hooks.tool!.warcraft_tasks_sync.execute({ feature: 'task-mode-feature' }, toolContext);
 
     try {
-      await hooks.tool!.warcraft_feature_create.execute({ name: "task-mode-feature" }, toolContext);
-    } catch (e) {
+      await hooks.tool!.warcraft_feature_create.execute({ name: 'task-mode-feature' }, toolContext);
+    } catch (_e) {
       // Ignore if exists
     }
-    process.env.WARCRAFT_FEATURE = "task-mode-feature";
+    process.env.WARCRAFT_FEATURE = 'task-mode-feature';
     const execStartOutput = await hooks.tool!.warcraft_worktree_create.execute(
-      { feature: "task-mode-feature", task: "01-first-task" },
-      toolContext
+      { feature: 'task-mode-feature', task: '01-first-task' },
+      toolContext,
     );
     const execStart = parseToolResponse<{
       instructions?: string;
@@ -360,23 +330,23 @@ Do it
     }>(execStartOutput as string);
     expect(execStart.taskToolCall).toBeDefined();
     expect(execStart.taskToolCall?.subagent_type).toBeDefined();
-    expect(execStart.taskToolCall?.description).toBe("Warcraft: 01-first-task");
+    expect(execStart.taskToolCall?.description).toBe('Warcraft: 01-first-task');
     expect(execStart.taskToolCall?.prompt).toBeDefined();
-    expect(execStart.taskToolCall?.prompt).not.toContain("@.beads/artifacts/");
-    expect(execStart.taskPromptMode).toBe("opencode-inline");
-    expect(execStart.instructions).toContain("task({");
-    expect(execStart.instructions).toContain("The worker prompt is passed inline");
+    expect(execStart.taskToolCall?.prompt).not.toContain('@.beads/artifacts/');
+    expect(execStart.taskPromptMode).toBe('opencode-inline');
+    expect(execStart.instructions).toContain('task({');
+    expect(execStart.instructions).toContain('The worker prompt is passed inline');
   });
 
-  runIfHostReady("system prompt hook injects Warcraft instructions", async () => {
-    const configPath = path.join(process.env.HOME || "", ".config", "opencode", "opencode_warcraft.json");
+  runIfHostReady('system prompt hook injects Warcraft instructions', async () => {
+    const configPath = path.join(process.env.HOME || '', '.config', 'opencode', 'opencode_warcraft.json');
     fs.mkdirSync(path.dirname(configPath), { recursive: true });
     fs.writeFileSync(
       configPath,
       JSON.stringify({
         agents: {
-          "khadgar": {
-            autoLoadSkills: ["brainstorming"],
+          khadgar: {
+            autoLoadSkills: ['brainstorming'],
           },
         },
       }),
@@ -384,7 +354,7 @@ Do it
     const ctx: PluginInput = {
       directory: testRoot,
       worktree: testRoot,
-      serverUrl: new URL("http://localhost:1"),
+      serverUrl: new URL('http://localhost:1'),
       project: createProject(testRoot),
       client: OPENCODE_CLIENT,
       $: createStubShell(),
@@ -392,51 +362,48 @@ Do it
 
     const hooks = await plugin(ctx);
 
-    await hooks.tool!.warcraft_feature_create.execute({ name: "active" }, createToolContext("sess"));
+    await hooks.tool!.warcraft_feature_create.execute({ name: 'active' }, createToolContext('sess'));
 
     // system.transform should still inject WARCRAFT_SYSTEM_PROMPT and status hint
     const output = { system: [] as string[] };
-    await hooks["experimental.chat.system.transform"]?.({ agent: "khadgar" }, output);
-    output.system.push("## Base Agent Prompt");
+    await hooks['experimental.chat.system.transform']?.({ agent: 'khadgar' }, output);
+    output.system.push('## Base Agent Prompt');
 
-    const joined = output.system.join("\n");
-    expect(joined).toContain("## Warcraft - Feature Development System");
-    expect(joined).toContain("warcraft_feature_create");
-    
+    const joined = output.system.join('\n');
+    expect(joined).toContain('## Warcraft - Feature Development System');
+    expect(joined).toContain('warcraft_feature_create');
+
     // Auto-loaded skills are now injected via config hook (prompt field), NOT system.transform
     // Verify by checking the agent's prompt field in config
     const opencodeConfig: Record<string, unknown> = { agent: {} };
     await hooks.config!(opencodeConfig);
-    
-    const agentConfig = (opencodeConfig.agent as Record<string, { prompt?: string }>)["khadgar"];
+
+    const agentConfig = (opencodeConfig.agent as Record<string, { prompt?: string }>).khadgar;
     expect(agentConfig).toBeDefined();
     expect(agentConfig.prompt).toBeDefined();
-    
-    const brainstormingSkill = BUILTIN_SKILLS.find((skill) => skill.name === "brainstorming");
+
+    const brainstormingSkill = BUILTIN_SKILLS.find((skill) => skill.name === 'brainstorming');
     expect(brainstormingSkill).toBeDefined();
     expect(agentConfig.prompt).toContain(brainstormingSkill!.template);
-    
+
     // Status hint injection is conditional on active feature resolution; avoid
     // asserting it in this smoke test.
   });
 
-  runIfHostReady("blocks warcraft_worktree_create when dependencies are not done", async () => {
+  runIfHostReady('blocks warcraft_worktree_create when dependencies are not done', async () => {
     const ctx: PluginInput = {
       directory: testRoot,
       worktree: testRoot,
-      serverUrl: new URL("http://localhost:1"),
+      serverUrl: new URL('http://localhost:1'),
       project: createProject(testRoot),
       client: OPENCODE_CLIENT,
       $: createStubShell(),
     };
 
     const hooks = await plugin(ctx);
-    const toolContext = createToolContext("sess_dependency_block");
+    const toolContext = createToolContext('sess_dependency_block');
 
-    await hooks.tool!.warcraft_feature_create.execute(
-      { name: "dep-block-feature" },
-      toolContext
-    );
+    await hooks.tool!.warcraft_feature_create.execute({ name: 'dep-block-feature' }, toolContext);
 
     const plan = `# Dep Block Feature
 
@@ -467,28 +434,19 @@ Do it
 Do it later
 `;
 
-    await hooks.tool!.warcraft_plan_write.execute(
-      { content: plan, feature: "dep-block-feature" },
-      toolContext
-    );
-    await hooks.tool!.warcraft_plan_approve.execute(
-      { feature: "dep-block-feature" },
-      toolContext
-    );
-    await hooks.tool!.warcraft_tasks_sync.execute(
-      { feature: "dep-block-feature" },
-      toolContext
-    );
+    await hooks.tool!.warcraft_plan_write.execute({ content: plan, feature: 'dep-block-feature' }, toolContext);
+    await hooks.tool!.warcraft_plan_approve.execute({ feature: 'dep-block-feature' }, toolContext);
+    await hooks.tool!.warcraft_tasks_sync.execute({ feature: 'dep-block-feature' }, toolContext);
 
     try {
-      await hooks.tool!.warcraft_feature_create.execute({ name: "dep-block-feature" }, toolContext);
-    } catch (e) {
+      await hooks.tool!.warcraft_feature_create.execute({ name: 'dep-block-feature' }, toolContext);
+    } catch (_e) {
       // Ignore if exists
     }
-    process.env.WARCRAFT_FEATURE = "dep-block-feature";
+    process.env.WARCRAFT_FEATURE = 'dep-block-feature';
     const execStartOutput = await hooks.tool!.warcraft_worktree_create.execute(
-      { feature: "dep-block-feature", task: "02-second-task" },
-      toolContext
+      { feature: 'dep-block-feature', task: '02-second-task' },
+      toolContext,
     );
 
     const execStart = JSON.parse(execStartOutput as string) as {
@@ -497,15 +455,15 @@ Do it later
     };
 
     expect(execStart.success).toBe(false);
-    expect(execStart.error).toContain("dependencies not done");
+    expect(execStart.error).toContain('dependencies not done');
   });
 
-  runIfHostReady("auto-loads parallel exploration for planner agents by default", async () => {
+  runIfHostReady('auto-loads parallel exploration for planner agents by default', async () => {
     // Test unified mode agents
     const ctx: PluginInput = {
       directory: testRoot,
       worktree: testRoot,
-      serverUrl: new URL("http://localhost:1"),
+      serverUrl: new URL('http://localhost:1'),
       project: createProject(testRoot),
       client: OPENCODE_CLIENT,
       $: createStubShell(),
@@ -513,10 +471,8 @@ Do it later
 
     const hooks = await plugin(ctx);
 
-    const onboardingSnippet = "# Onboarding Preferences";
-    const parallelExplorationSkill = BUILTIN_SKILLS.find(
-      (skill) => skill.name === "parallel-exploration",
-    );
+    const onboardingSnippet = '# Onboarding Preferences';
+    const parallelExplorationSkill = BUILTIN_SKILLS.find((skill) => skill.name === 'parallel-exploration');
     expect(parallelExplorationSkill).toBeDefined();
 
     // Skills are now injected via config hook's prompt field, NOT system.transform
@@ -526,46 +482,36 @@ Do it later
     const agents = opencodeConfig.agent as Record<string, { prompt?: string }>;
 
     // khadgar should have parallel-exploration in prompt (unified mode)
-    expect(agents["khadgar"]?.prompt).toBeDefined();
-    expect(agents["khadgar"]?.prompt).toContain(
-      parallelExplorationSkill!.template,
-    );
-    expect(agents["khadgar"]?.prompt).not.toContain(onboardingSnippet);
+    expect(agents.khadgar?.prompt).toBeDefined();
+    expect(agents.khadgar?.prompt).toContain(parallelExplorationSkill!.template);
+    expect(agents.khadgar?.prompt).not.toContain(onboardingSnippet);
 
     // brann should NOT have parallel-exploration in prompt (unified mode)
     // (removed to prevent recursive delegation - brann cannot spawn brann)
-    expect(agents["brann"]?.prompt).toBeDefined();
-    expect(agents["brann"]?.prompt).not.toContain(
-      parallelExplorationSkill!.template,
-    );
-    expect(agents["brann"]?.prompt).not.toContain(onboardingSnippet);
+    expect(agents.brann?.prompt).toBeDefined();
+    expect(agents.brann?.prompt).not.toContain(parallelExplorationSkill!.template);
+    expect(agents.brann?.prompt).not.toContain(onboardingSnippet);
 
     // mekkatorque should NOT have parallel-exploration in prompt
-    expect(agents["mekkatorque"]?.prompt).toBeDefined();
-    expect(agents["mekkatorque"]?.prompt).not.toContain(
-      parallelExplorationSkill!.template,
-    );
-    expect(agents["mekkatorque"]?.prompt).not.toContain(onboardingSnippet);
+    expect(agents.mekkatorque?.prompt).toBeDefined();
+    expect(agents.mekkatorque?.prompt).not.toContain(parallelExplorationSkill!.template);
+    expect(agents.mekkatorque?.prompt).not.toContain(onboardingSnippet);
   });
 
-  runIfHostReady("includes task prompt mode", async () => {
-
+  runIfHostReady('includes task prompt mode', async () => {
     const ctx: PluginInput = {
       directory: testRoot,
       worktree: testRoot,
-      serverUrl: new URL("http://localhost:1"),
+      serverUrl: new URL('http://localhost:1'),
       project: createProject(testRoot),
       client: OPENCODE_CLIENT,
       $: createStubShell(),
     };
 
     const hooks = await plugin(ctx);
-    const toolContext = createToolContext("sess_task_prompt_mode");
+    const toolContext = createToolContext('sess_task_prompt_mode');
 
-    await hooks.tool!.warcraft_feature_create.execute(
-      { name: "prompt-mode-feature" },
-      toolContext
-    );
+    await hooks.tool!.warcraft_feature_create.execute({ name: 'prompt-mode-feature' }, toolContext);
 
     const plan = `# Prompt Mode Feature
 
@@ -586,55 +532,43 @@ A: Yes, this integration test validates task prompt mode functionality. Ensures 
 Do it
 `;
     try {
-      await hooks.tool!.warcraft_feature_create.execute({ name: "prompt-mode-feature" }, toolContext);
-    } catch (e) {
+      await hooks.tool!.warcraft_feature_create.execute({ name: 'prompt-mode-feature' }, toolContext);
+    } catch (_e) {
       // Ignore if exists
     }
-    process.env.WARCRAFT_FEATURE = "prompt-mode-feature";
-    await hooks.tool!.warcraft_plan_write.execute(
-      { content: plan, feature: "prompt-mode-feature" },
-      toolContext
-    );
-    await hooks.tool!.warcraft_plan_approve.execute(
-      { feature: "prompt-mode-feature" },
-      toolContext
-    );
-    await hooks.tool!.warcraft_tasks_sync.execute(
-      { feature: "prompt-mode-feature" },
-      toolContext
-    );
+    process.env.WARCRAFT_FEATURE = 'prompt-mode-feature';
+    await hooks.tool!.warcraft_plan_write.execute({ content: plan, feature: 'prompt-mode-feature' }, toolContext);
+    await hooks.tool!.warcraft_plan_approve.execute({ feature: 'prompt-mode-feature' }, toolContext);
+    await hooks.tool!.warcraft_tasks_sync.execute({ feature: 'prompt-mode-feature' }, toolContext);
 
     // removed redundant creation
-    process.env.WARCRAFT_FEATURE = "prompt-mode-feature";
+    process.env.WARCRAFT_FEATURE = 'prompt-mode-feature';
     const execStartOutput = await hooks.tool!.warcraft_worktree_create.execute(
-      { feature: "prompt-mode-feature", task: "01-first-task" },
-      toolContext
+      { feature: 'prompt-mode-feature', task: '01-first-task' },
+      toolContext,
     );
 
     const execStart = parseToolResponse<{
       taskPromptMode?: string;
     }>(execStartOutput as string);
 
-    expect(execStart.taskPromptMode).toBe("opencode-inline");
+    expect(execStart.taskPromptMode).toBe('opencode-inline');
   });
 
-  runIfHostReady("warcraft_batch_execute preview and execute parallel tasks", async () => {
+  runIfHostReady('warcraft_batch_execute preview and execute parallel tasks', async () => {
     const ctx: PluginInput = {
       directory: testRoot,
       worktree: testRoot,
-      serverUrl: new URL("http://localhost:1"),
+      serverUrl: new URL('http://localhost:1'),
       project: createProject(testRoot),
       client: OPENCODE_CLIENT,
       $: createStubShell(),
     };
 
     const hooks = await plugin(ctx);
-    const toolContext = createToolContext("sess_batch_execute");
+    const toolContext = createToolContext('sess_batch_execute');
 
-    await hooks.tool!.warcraft_feature_create.execute(
-      { name: "batch-feature" },
-      toolContext
-    );
+    await hooks.tool!.warcraft_feature_create.execute({ name: 'batch-feature' }, toolContext);
 
     const plan = `# Batch Feature
 
@@ -664,29 +598,20 @@ Do beta work
 Do gamma work (depends on alpha and beta)
 `;
 
-    await hooks.tool!.warcraft_plan_write.execute(
-      { content: plan, feature: "batch-feature" },
-      toolContext
-    );
-    await hooks.tool!.warcraft_plan_approve.execute(
-      { feature: "batch-feature" },
-      toolContext
-    );
-    await hooks.tool!.warcraft_tasks_sync.execute(
-      { feature: "batch-feature" },
-      toolContext
-    );
+    await hooks.tool!.warcraft_plan_write.execute({ content: plan, feature: 'batch-feature' }, toolContext);
+    await hooks.tool!.warcraft_plan_approve.execute({ feature: 'batch-feature' }, toolContext);
+    await hooks.tool!.warcraft_tasks_sync.execute({ feature: 'batch-feature' }, toolContext);
 
     // Preview mode should show tasks 1 and 2 as runnable, 3 as blocked
     try {
-      await hooks.tool!.warcraft_feature_create.execute({ name: "batch-feature" }, toolContext);
-    } catch (e) {
+      await hooks.tool!.warcraft_feature_create.execute({ name: 'batch-feature' }, toolContext);
+    } catch (_e) {
       // Ignore if exists
     }
-    process.env.WARCRAFT_FEATURE = "batch-feature";
+    process.env.WARCRAFT_FEATURE = 'batch-feature';
     const previewOutput = await hooks.tool!.warcraft_batch_execute.execute(
-      { mode: "preview", feature: "batch-feature" },
-      toolContext
+      { mode: 'preview', feature: 'batch-feature' },
+      toolContext,
     );
     const preview = parseToolResponse<{
       feature: string;
@@ -696,25 +621,25 @@ Do gamma work (depends on alpha and beta)
       blocked?: Array<{ folder: string; waitingOn: string[] }>;
     }>(previewOutput as string);
 
-    expect(preview.feature).toBe("batch-feature");
+    expect(preview.feature).toBe('batch-feature');
     expect(preview.summary.runnable).toBe(2);
     expect(preview.summary.blocked).toBe(1);
     expect(preview.parallelPolicy).toEqual({
       strategy: 'unbounded',
       maxConcurrency: 4,
     });
-    expect(preview.runnable.map((r) => r.folder)).toContain("01-task-alpha");
-    expect(preview.runnable.map((r) => r.folder)).toContain("02-task-beta");
-    expect(preview.blocked?.[0]?.folder).toBe("03-task-gamma");
+    expect(preview.runnable.map((r) => r.folder)).toContain('01-task-alpha');
+    expect(preview.runnable.map((r) => r.folder)).toContain('02-task-beta');
+    expect(preview.blocked?.[0]?.folder).toBe('03-task-gamma');
 
     // Execute mode should dispatch tasks 1 and 2 in parallel
     const executeOutput = await hooks.tool!.warcraft_batch_execute.execute(
       {
-        mode: "execute",
-        tasks: ["01-task-alpha", "02-task-beta"],
-        feature: "batch-feature",
+        mode: 'execute',
+        tasks: ['01-task-alpha', '02-task-beta'],
+        feature: 'batch-feature',
       },
-      toolContext
+      toolContext,
     );
     const result = parseToolResponse<{
       parallelPolicy?: { strategy: string; maxConcurrency: number };
@@ -731,18 +656,18 @@ Do gamma work (depends on alpha and beta)
       maxConcurrency: 4,
     });
     expect(result.taskToolCalls).toHaveLength(2);
-    expect(result.taskToolCalls[0].subagent_type).toBe("mekkatorque");
-    expect(result.taskToolCalls[1].subagent_type).toBe("mekkatorque");
-    expect(result.instructions).toContain("Parallel Dispatch Required");
+    expect(result.taskToolCalls[0].subagent_type).toBe('mekkatorque');
+    expect(result.taskToolCalls[1].subagent_type).toBe('mekkatorque');
+    expect(result.instructions).toContain('Parallel Dispatch Required');
 
     // Blocked task should fail validation
     const blockedOutput = await hooks.tool!.warcraft_batch_execute.execute(
       {
-        mode: "execute",
-        tasks: ["03-task-gamma"],
-        feature: "batch-feature",
+        mode: 'execute',
+        tasks: ['03-task-gamma'],
+        feature: 'batch-feature',
       },
-      toolContext
+      toolContext,
     );
     const blockedResult = JSON.parse(blockedOutput as string) as {
       success: boolean;
@@ -752,5 +677,4 @@ Do gamma work (depends on alpha and beta)
     expect(blockedResult.success).toBe(false);
     expect(blockedResult.error).toContain('03-task-gamma (dependencies not met)');
   });
-
 });

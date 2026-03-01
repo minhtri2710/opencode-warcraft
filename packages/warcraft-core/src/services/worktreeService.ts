@@ -1,8 +1,8 @@
-import * as fs from "fs/promises";
-import * as path from "path";
-import simpleGit, { SimpleGit } from "simple-git";
-import { getWarcraftPath, sanitizeName } from '../utils/paths.js';
+import * as fs from 'fs/promises';
+import * as path from 'path';
+import simpleGit, { type SimpleGit } from 'simple-git';
 import { acquireLock } from '../utils/json-lock.js';
+import { getWarcraftPath, sanitizeName } from '../utils/paths.js';
 export interface WorktreeInfo {
   path: string;
   branch: string;
@@ -49,9 +49,7 @@ export interface WorktreeConfig {
 export class WorktreeService {
   private config: WorktreeConfig;
 
-  constructor(
-    config: WorktreeConfig,
-  ) {
+  constructor(config: WorktreeConfig) {
     this.config = config;
   }
 
@@ -60,7 +58,7 @@ export class WorktreeService {
   }
 
   private getWorktreesDir(): string {
-    return path.join(this.config.warcraftDir, ".worktrees");
+    return path.join(this.config.warcraftDir, '.worktrees');
   }
 
   private getWorktreePath(feature: string, step: string): string {
@@ -75,7 +73,6 @@ export class WorktreeService {
     return `warcraft/${sanitizeName(feature)}/${sanitizeName(step)}`;
   }
 
-
   async create(feature: string, step: string, baseBranch?: string): Promise<WorktreeInfo> {
     const worktreePath = this.getWorktreePath(feature, step);
     const branchName = this.getBranchName(feature, step);
@@ -87,7 +84,7 @@ export class WorktreeService {
     const lockPath = path.join(this.getWorktreesDir(), `${feature}-${step}.create`);
     const release = await acquireLock(lockPath, { timeout: 10000 });
     try {
-      const base = baseBranch || (await git.revparse(["HEAD"])).trim();
+      const base = baseBranch || (await git.revparse(['HEAD'])).trim();
 
       const existing = await this.get(feature, step);
       if (existing) {
@@ -95,17 +92,17 @@ export class WorktreeService {
       }
 
       try {
-        await git.raw(["worktree", "add", "-b", branchName, worktreePath, base]);
+        await git.raw(['worktree', 'add', '-b', branchName, worktreePath, base]);
       } catch {
         try {
-          await git.raw(["worktree", "add", worktreePath, branchName]);
+          await git.raw(['worktree', 'add', worktreePath, branchName]);
         } catch (retryError) {
           throw new Error(`Failed to create worktree: ${retryError}`);
         }
       }
 
       const worktreeGit = this.getGit(worktreePath);
-      const commit = (await worktreeGit.revparse(["HEAD"])).trim();
+      const commit = (await worktreeGit.revparse(['HEAD'])).trim();
 
       return {
         path: worktreePath,
@@ -126,7 +123,7 @@ export class WorktreeService {
     try {
       await fs.access(worktreePath);
       const worktreeGit = this.getGit(worktreePath);
-      const commit = (await worktreeGit.revparse(["HEAD"])).trim();
+      const commit = (await worktreeGit.revparse(['HEAD'])).trim();
       return {
         path: worktreePath,
         branch: branchName,
@@ -142,15 +139,15 @@ export class WorktreeService {
   async getDiff(feature: string, step: string, baseCommit?: string): Promise<DiffResult> {
     const worktreePath = this.getWorktreePath(feature, step);
     const statusPath = this.getStepStatusPath(feature, step);
-    
+
     let base = baseCommit;
     if (!base) {
       try {
-        const status = JSON.parse(await fs.readFile(statusPath, "utf-8"));
-        base = status.baseCommit;  // Read baseCommit directly from task status
+        const status = JSON.parse(await fs.readFile(statusPath, 'utf-8'));
+        base = status.baseCommit; // Read baseCommit directly from task status
       } catch {}
     }
-    
+
     const worktreeGit = this.getGit(worktreePath);
     if (!base) {
       base = 'HEAD';
@@ -159,26 +156,26 @@ export class WorktreeService {
     try {
       const status = await worktreeGit.status();
       const hasStaged = status.staged.length > 0;
-      
-      let diffContent = "";
-      let stat = "";
-      
+
+      let diffContent = '';
+      let stat = '';
+
       if (hasStaged) {
-        diffContent = await worktreeGit.diff(["--cached"]);
-        stat = diffContent ? await worktreeGit.diff(["--cached", "--stat"]) : "";
+        diffContent = await worktreeGit.diff(['--cached']);
+        stat = diffContent ? await worktreeGit.diff(['--cached', '--stat']) : '';
       } else {
-        diffContent = await worktreeGit.diff([`${base}..HEAD`]).catch(() => "");
-        stat = diffContent ? await worktreeGit.diff([`${base}..HEAD`, "--stat"]) : "";
+        diffContent = await worktreeGit.diff([`${base}..HEAD`]).catch(() => '');
+        stat = diffContent ? await worktreeGit.diff([`${base}..HEAD`, '--stat']) : '';
       }
-      
-      const statLines = stat.split("\n").filter((l) => l.trim());
+
+      const statLines = stat.split('\n').filter((l) => l.trim());
 
       const filesChanged = statLines
         .slice(0, -1)
-        .map((line) => line.split("|")[0].trim())
+        .map((line) => line.split('|')[0].trim())
         .filter(Boolean);
 
-      const summaryLine = statLines[statLines.length - 1] || "";
+      const summaryLine = statLines[statLines.length - 1] || '';
       const insertMatch = summaryLine.match(/(\d+) insertion/);
       const deleteMatch = summaryLine.match(/(\d+) deletion/);
 
@@ -193,7 +190,7 @@ export class WorktreeService {
       const message = err instanceof Error ? err.message : String(err);
       return {
         hasDiff: false,
-        diffContent: "",
+        diffContent: '',
         filesChanged: [],
         insertions: 0,
         deletions: 0,
@@ -204,7 +201,7 @@ export class WorktreeService {
 
   async exportPatch(feature: string, step: string, baseBranch?: string): Promise<string> {
     const worktreePath = this.getWorktreePath(feature, step);
-    const patchPath = path.join(worktreePath, "..", `${step}.patch`);
+    const patchPath = path.join(worktreePath, '..', `${step}.patch`);
     const worktreeGit = this.getGit(worktreePath);
     const base = baseBranch || 'HEAD';
 
@@ -221,8 +218,8 @@ export class WorktreeService {
       return { success: true, filesAffected: [] };
     }
 
-    const patchPath = path.join(this.config.warcraftDir, ".worktrees", feature, `${step}.patch`);
-    
+    const patchPath = path.join(this.config.warcraftDir, '.worktrees', feature, `${step}.patch`);
+
     try {
       await fs.writeFile(patchPath, diffContent);
       const git = this.getGit();
@@ -234,7 +231,7 @@ export class WorktreeService {
       const err = error as { message?: string };
       return {
         success: false,
-        error: err.message || "Failed to apply patch",
+        error: err.message || 'Failed to apply patch',
         filesAffected: [],
       };
     }
@@ -247,12 +244,12 @@ export class WorktreeService {
       return { success: true, filesAffected: [] };
     }
 
-    const patchPath = path.join(this.config.warcraftDir, ".worktrees", feature, `${step}.patch`);
+    const patchPath = path.join(this.config.warcraftDir, '.worktrees', feature, `${step}.patch`);
 
     try {
       await fs.writeFile(patchPath, diffContent);
       const git = this.getGit();
-      await git.applyPatch(patchPath, ["-R"]);
+      await git.applyPatch(patchPath, ['-R']);
       await fs.unlink(patchPath).catch(() => {});
       return { success: true, filesAffected: filesChanged };
     } catch (error: unknown) {
@@ -260,7 +257,7 @@ export class WorktreeService {
       const err = error as { message?: string };
       return {
         success: false,
-        error: err.message || "Failed to revert patch",
+        error: err.message || 'Failed to revert patch',
         filesAffected: [],
       };
     }
@@ -277,7 +274,7 @@ export class WorktreeService {
   }
 
   async revertFromSavedDiff(diffPath: string): Promise<ApplyResult> {
-    const diffContent = await fs.readFile(diffPath, "utf-8");
+    const diffContent = await fs.readFile(diffPath, 'utf-8');
     if (!diffContent.trim()) {
       return { success: true, filesAffected: [] };
     }
@@ -286,13 +283,13 @@ export class WorktreeService {
 
     try {
       const git = this.getGit();
-      await git.applyPatch(diffPath, ["-R"]);
+      await git.applyPatch(diffPath, ['-R']);
       return { success: true, filesAffected: filesChanged };
     } catch (error: unknown) {
       const err = error as { message?: string };
       return {
         success: false,
-        error: err.message || "Failed to revert patch",
+        error: err.message || 'Failed to revert patch',
         filesAffected: [],
       };
     }
@@ -307,13 +304,13 @@ export class WorktreeService {
     const release = await acquireLock(lockPath, { timeout: 10000 });
     try {
       try {
-        await git.raw(["worktree", "remove", worktreePath, "--force"]);
+        await git.raw(['worktree', 'remove', worktreePath, '--force']);
       } catch {
         await fs.rm(worktreePath, { recursive: true, force: true });
       }
 
       try {
-        await git.raw(["worktree", "prune"]);
+        await git.raw(['worktree', 'prune']);
       } catch {
         /* intentional */
       }
@@ -364,7 +361,7 @@ export class WorktreeService {
     const git = this.getGit();
 
     try {
-      await git.raw(["worktree", "prune"]);
+      await git.raw(['worktree', 'prune']);
     } catch {
       /* intentional */
     }
@@ -388,7 +385,7 @@ export class WorktreeService {
 
         try {
           const worktreeGit = this.getGit(worktreePath);
-          await worktreeGit.revparse(["HEAD"]);
+          await worktreeGit.revparse(['HEAD']);
         } catch {
           await this.remove(feat, step, false);
           removed.push(worktreePath);
@@ -406,22 +403,22 @@ export class WorktreeService {
       return [];
     }
 
-    const patchPath = path.join(this.config.warcraftDir, ".worktrees", feature, `${step}-check.patch`);
+    const patchPath = path.join(this.config.warcraftDir, '.worktrees', feature, `${step}-check.patch`);
 
     try {
       await fs.writeFile(patchPath, diffContent);
       const git = this.getGit();
-      await git.applyPatch(patchPath, ["--check"]);
+      await git.applyPatch(patchPath, ['--check']);
       await fs.unlink(patchPath).catch(() => {});
       return [];
     } catch (error: unknown) {
       await fs.unlink(patchPath).catch(() => {});
       const err = error as { message?: string };
-      const stderr = err.message || "";
+      const stderr = err.message || '';
 
       const conflicts = stderr
-        .split("\n")
-        .filter((line) => line.includes("error: patch failed:"))
+        .split('\n')
+        .filter((line) => line.includes('error: patch failed:'))
         .map((line) => {
           const match = line.match(/error: patch failed: (.+):/);
           return match ? match[1] : null;
@@ -441,16 +438,16 @@ export class WorktreeService {
 
     try {
       const git = this.getGit();
-      const options = reverse ? ["--check", "-R"] : ["--check"];
+      const options = reverse ? ['--check', '-R'] : ['--check'];
       await git.applyPatch(diffPath, options);
       return [];
     } catch (error: unknown) {
       const err = error as { message?: string };
-      const stderr = err.message || "";
+      const stderr = err.message || '';
 
       const conflicts = stderr
-        .split("\n")
-        .filter((line) => line.includes("error: patch failed:"))
+        .split('\n')
+        .filter((line) => line.includes('error: patch failed:'))
         .map((line) => {
           const match = line.match(/error: patch failed: (.+):/);
           return match ? match[1] : null;
@@ -463,41 +460,41 @@ export class WorktreeService {
 
   async commitChanges(feature: string, step: string, message?: string): Promise<CommitResult> {
     const worktreePath = this.getWorktreePath(feature, step);
-    
+
     try {
       await fs.access(worktreePath);
     } catch {
-      return { committed: false, sha: "", message: "Worktree not found" };
+      return { committed: false, sha: '', message: 'Worktree not found' };
     }
 
     const worktreeGit = this.getGit(worktreePath);
 
     try {
       await worktreeGit.add(['.', '--', ':!*.patch']);
-      
+
       const status = await worktreeGit.status();
       const hasChanges = status.staged.length > 0 || status.modified.length > 0 || status.not_added.length > 0;
-      
+
       if (!hasChanges) {
-        const currentSha = (await worktreeGit.revparse(["HEAD"])).trim();
-        return { committed: false, sha: currentSha, message: "No changes to commit" };
+        const currentSha = (await worktreeGit.revparse(['HEAD'])).trim();
+        return { committed: false, sha: currentSha, message: 'No changes to commit' };
       }
 
       const commitMessage = message || `warcraft(${step}): task changes`;
-      const result = await worktreeGit.commit(commitMessage, ["--allow-empty-message"]);
+      const result = await worktreeGit.commit(commitMessage, ['--allow-empty-message']);
 
-      return { 
-        committed: true, 
+      return {
+        committed: true,
         sha: result.commit,
         message: commitMessage,
       };
     } catch (error: unknown) {
       const err = error as { message?: string };
-      const currentSha = (await worktreeGit.revparse(["HEAD"]).catch(() => "")).trim();
-      return { 
-        committed: false, 
+      const currentSha = (await worktreeGit.revparse(['HEAD']).catch(() => '')).trim();
+      return {
+        committed: false,
         sha: currentSha,
-        message: err.message || "Commit failed",
+        message: err.message || 'Commit failed',
       };
     }
   }
@@ -514,14 +511,14 @@ export class WorktreeService {
 
       const currentBranch = branches.current;
 
-      const diffStat = await git.diff([`${currentBranch}...${branchName}`, "--stat"]);
+      const diffStat = await git.diff([`${currentBranch}...${branchName}`, '--stat']);
       const filesChanged = diffStat
-        .split("\n")
-        .filter(l => l.trim() && l.includes("|"))
-        .map(l => l.split("|")[0].trim());
+        .split('\n')
+        .filter((l) => l.trim() && l.includes('|'))
+        .map((l) => l.split('|')[0].trim());
 
       if (strategy === 'squash') {
-        await git.raw(["merge", "--squash", branchName]);
+        await git.raw(['merge', '--squash', branchName]);
         const result = await git.commit(`warcraft: merge ${step} (squashed)`);
         return {
           success: true,
@@ -533,9 +530,9 @@ export class WorktreeService {
         const commits = await git.log([`${currentBranch}..${branchName}`]);
         const commitsToApply = [...commits.all].reverse();
         for (const commit of commitsToApply) {
-          await git.raw(["cherry-pick", commit.hash]);
+          await git.raw(['cherry-pick', commit.hash]);
         }
-        const head = (await git.revparse(["HEAD"])).trim();
+        const head = (await git.revparse(['HEAD'])).trim();
         return {
           success: true,
           merged: true,
@@ -543,51 +540,53 @@ export class WorktreeService {
           filesChanged,
         };
       } else {
-        const result = await git.merge([branchName, "--no-ff", "-m", `warcraft: merge ${step}`]);
-        const head = (await git.revparse(["HEAD"])).trim();
+        const result = await git.merge([branchName, '--no-ff', '-m', `warcraft: merge ${step}`]);
+        const head = (await git.revparse(['HEAD'])).trim();
         return {
           success: true,
           merged: !result.failed,
           sha: head,
           filesChanged,
-          conflicts: result.conflicts?.map(c => c.file || String(c)) || [],
+          conflicts: result.conflicts?.map((c) => c.file || String(c)) || [],
         };
       }
     } catch (error: unknown) {
       const err = error as { message?: string };
-      
-      if (err.message?.includes("CONFLICT") || err.message?.includes("conflict")) {
-        await git.raw(["merge", "--abort"]).catch(() => {});
-        await git.raw(["rebase", "--abort"]).catch(() => {});
-        await git.raw(["cherry-pick", "--abort"]).catch(() => {});
+
+      if (err.message?.includes('CONFLICT') || err.message?.includes('conflict')) {
+        await git.raw(['merge', '--abort']).catch(() => {});
+        await git.raw(['rebase', '--abort']).catch(() => {});
+        await git.raw(['cherry-pick', '--abort']).catch(() => {});
 
         return {
           success: false,
           merged: false,
-          error: "Merge conflicts detected",
-          conflicts: this.parseConflictsFromError(err.message || ""),
+          error: 'Merge conflicts detected',
+          conflicts: this.parseConflictsFromError(err.message || ''),
         };
       }
 
       return {
         success: false,
         merged: false,
-        error: err.message || "Merge failed",
+        error: err.message || 'Merge failed',
       };
     }
   }
 
   async hasUncommittedChanges(feature: string, step: string): Promise<boolean> {
     const worktreePath = this.getWorktreePath(feature, step);
-    
+
     try {
       const worktreeGit = this.getGit(worktreePath);
       const status = await worktreeGit.status();
-      return status.modified.length > 0 || 
-             status.not_added.length > 0 || 
-             status.staged.length > 0 ||
-             status.deleted.length > 0 ||
-             status.created.length > 0;
+      return (
+        status.modified.length > 0 ||
+        status.not_added.length > 0 ||
+        status.staged.length > 0 ||
+        status.deleted.length > 0 ||
+        status.created.length > 0
+      );
     } catch {
       return false;
     }
@@ -595,16 +594,15 @@ export class WorktreeService {
 
   private parseConflictsFromError(errorMessage: string): string[] {
     const conflicts: string[] = [];
-    const lines = errorMessage.split("\n");
+    const lines = errorMessage.split('\n');
     for (const line of lines) {
-      if (line.includes("CONFLICT") && line.includes("Merge conflict in")) {
+      if (line.includes('CONFLICT') && line.includes('Merge conflict in')) {
         const match = line.match(/Merge conflict in (.+)/);
         if (match) conflicts.push(match[1]);
       }
     }
     return conflicts;
   }
-
 }
 
 export function createWorktreeService(projectDir: string): WorktreeService {

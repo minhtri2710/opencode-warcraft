@@ -2,9 +2,9 @@ import { execFileSync } from 'child_process';
 import { existsSync } from 'fs';
 import { join } from 'path';
 import type { TaskStatusType } from '../../types.js';
-import { getTaskBeadActions } from './beadMapping.js';
 import type { BeadArtifactKind, TaskBeadArtifacts } from './BeadGateway.types.js';
 import { BeadGatewayError } from './BeadGateway.types.js';
+import { getTaskBeadActions } from './beadMapping.js';
 
 const ARTIFACTS_BEGIN = '<!-- WARCRAFT:ARTIFACTS:BEGIN -->';
 const ARTIFACTS_END = '<!-- WARCRAFT:ARTIFACTS:END -->';
@@ -105,12 +105,13 @@ export class BeadGateway {
     const details = this.extractErrorDetails(error);
 
     return this.hasAlreadyInitializedDetails(details);
-
   }
   private isNotInitializedError(error: unknown): boolean {
     const details = this.extractErrorDetails(error);
 
-    return details.includes('not initialized') || details.includes('not initialised') || details.includes('not_initialized');
+    return (
+      details.includes('not initialized') || details.includes('not initialised') || details.includes('not_initialized')
+    );
   }
 
   private isErrorPayload(output: string): boolean {
@@ -159,7 +160,9 @@ export class BeadGateway {
     if (!details) {
       return false;
     }
-    return details.includes('not_initialized') || details.includes('not initialized') || details.includes('not initialised');
+    return (
+      details.includes('not_initialized') || details.includes('not initialized') || details.includes('not initialised')
+    );
   }
 
   private executeBr(args: string[]): string {
@@ -167,6 +170,8 @@ export class BeadGateway {
       cwd: this.projectRoot,
       encoding: 'utf-8',
       timeout: 30_000,
+      // Keep CLI output off the parent process console; capture for parsing/sanitization only.
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
   }
 
@@ -257,11 +262,13 @@ export class BeadGateway {
     return this.extractBeadContent(parsed);
   }
 
-  list(options?: { type?: 'epic' | 'task' | string; parent?: string; status?: 'open' | 'closed' | 'all' }): Array<{ id: string; title: string; status: string; type?: string }> {
+  list(options?: {
+    type?: 'epic' | 'task' | string;
+    parent?: string;
+    status?: 'open' | 'closed' | 'all';
+  }): Array<{ id: string; title: string; status: string; type?: string }> {
     this.ensurePreflight();
-    const args = options?.parent
-      ? ['dep', 'list', options.parent, '--direction', 'up', '--json']
-      : ['list', '--json'];
+    const args = options?.parent ? ['dep', 'list', options.parent, '--direction', 'up', '--json'] : ['list', '--json'];
 
     if (!options?.parent) {
       if (options?.type) {
@@ -294,11 +301,11 @@ export class BeadGateway {
   private parseListItems(payload: unknown): Array<{ id: string; title: string; status: string; type?: string }> {
     const items = Array.isArray(payload)
       ? payload
-      : (payload && typeof payload === 'object'
-          ? (['issues', 'results', 'items', 'data']
-              .map((key) => (payload as Record<string, unknown>)[key])
-              .find((value) => Array.isArray(value)) as unknown[] | undefined) ?? []
-          : []);
+      : payload && typeof payload === 'object'
+        ? ((['issues', 'results', 'items', 'data']
+            .map((key) => (payload as Record<string, unknown>)[key])
+            .find((value) => Array.isArray(value)) as unknown[] | undefined) ?? [])
+        : [];
 
     return items
       .map((item: unknown) => {
@@ -307,20 +314,23 @@ export class BeadGateway {
           id: String(obj.id || ''),
           title: String(obj.title || ''),
           status: String(obj.status || ''),
-          type: obj.issue_type ? String(obj.issue_type) : (obj.type ? String(obj.type) : undefined),
+          type: obj.issue_type ? String(obj.issue_type) : obj.type ? String(obj.type) : undefined,
         };
       })
       .filter((item) => item.id);
   }
 
-  private parseDependentIssues(payload: unknown, issueTypeHint?: string): Array<{ id: string; title: string; status: string; type?: string }> {
+  private parseDependentIssues(
+    payload: unknown,
+    issueTypeHint?: string,
+  ): Array<{ id: string; title: string; status: string; type?: string }> {
     const dependencies = Array.isArray(payload)
       ? payload
-      : (payload && typeof payload === 'object'
-          ? (['dependencies', 'results', 'items', 'data']
-              .map((key) => (payload as Record<string, unknown>)[key])
-              .find((value) => Array.isArray(value)) as unknown[] | undefined) ?? []
-          : []);
+      : payload && typeof payload === 'object'
+        ? ((['dependencies', 'results', 'items', 'data']
+            .map((key) => (payload as Record<string, unknown>)[key])
+            .find((value) => Array.isArray(value)) as unknown[] | undefined) ?? [])
+        : [];
 
     const children = new Map<string, { id: string; title: string; status: string; type?: string }>();
     for (const dependency of dependencies) {
@@ -342,7 +352,8 @@ export class BeadGateway {
         id,
         title: String(issue.title || dep.title || ''),
         status: String(issue.status || dep.status || ''),
-        type: hasEmbeddedIssue && (issue.issue_type || issue.type) ? String(issue.issue_type || issue.type) : issueTypeHint,
+        type:
+          hasEmbeddedIssue && (issue.issue_type || issue.type) ? String(issue.issue_type || issue.type) : issueTypeHint,
       });
     }
 

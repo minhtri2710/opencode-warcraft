@@ -21,18 +21,18 @@ export interface RunnableBlockedResult {
 
 /**
  * Compute which pending tasks are runnable (all deps done) and which are blocked.
- * 
+ *
  * A task is runnable if:
  * - Its status is 'pending'
  * - All its dependencies have status 'done'
- * 
+ *
  * A task is blocked if:
  * - Its status is 'pending'
  * - At least one dependency does NOT have status 'done'
- * 
+ *
  * Only 'done' satisfies a dependency. Other statuses (in_progress, cancelled,
  * failed, blocked, partial) do NOT satisfy dependencies.
- * 
+ *
  * @param tasks - Array of tasks with their status and dependencies
  * @returns Object with runnable task folders and blocked tasks with their missing deps
  */
@@ -54,7 +54,7 @@ export function computeRunnableAndBlocked(tasks: TaskWithDeps[]): RunnableBlocke
 
     const deps = effectiveDepsByFolder.get(task.folder) ?? [];
 
-    const unmetDeps = deps.filter(dep => {
+    const unmetDeps = deps.filter((dep) => {
       const depStatus = statusByFolder.get(dep);
       return depStatus !== 'done';
     });
@@ -72,7 +72,7 @@ export function computeRunnableAndBlocked(tasks: TaskWithDeps[]): RunnableBlocke
 /**
  * Compute effective dependencies for each task, applying current numeric
  * sequential fallback when dependsOn is undefined.
- * 
+ *
  * If two tasks share the same numeric prefix (e.g., two `02-*` folders),
  * only the first is used for ordering; a warning is logged for duplicates.
  */
@@ -101,8 +101,8 @@ export function buildEffectiveDependencies(tasks: TaskWithDeps[]): Map<string, s
     for (const dup of duplicatePrefixes) {
       console.warn(
         `[taskDependencyGraph] Duplicate numeric prefix ${String(dup.order).padStart(2, '0')}: ` +
-        `folder '${dup.folder}' collides with '${dup.existingFolder}'. ` +
-        `Using '${dup.existingFolder}' for dependency ordering; '${dup.folder}' is skipped.`,
+          `folder '${dup.folder}' collides with '${dup.existingFolder}'. ` +
+          `Using '${dup.existingFolder}' for dependency ordering; '${dup.folder}' is skipped.`,
       );
     }
   }
@@ -132,7 +132,7 @@ export function buildEffectiveDependencies(tasks: TaskWithDeps[]): Map<string, s
  * Validates that all task folders have unique numeric prefixes.
  * Returns an array of error messages for any collisions found.
  * Callers can invoke this at task creation time to catch issues early.
- * 
+ *
  * @param folders - Array of task folder names (e.g., '01-setup', '02-api')
  * @returns Array of error messages, empty if no collisions
  */

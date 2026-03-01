@@ -1,11 +1,15 @@
-import { describe, expect, it, beforeEach } from 'bun:test';
+import { beforeEach, describe, expect, it } from 'bun:test';
 import { BeadsViewerGateway } from './BeadsViewerGateway.js';
 import type { BvCommandExecutor } from './bv-runner.js';
 
 describe('BeadsViewerGateway', () => {
   const TEST_DIRECTORY = '/tmp/test-project';
   let mockExecutor: BvCommandExecutor;
-  let callLog: Array<{ command: string; args: string[]; options: { cwd: string; encoding: 'utf-8'; timeout?: number } }>;
+  let callLog: Array<{
+    command: string;
+    args: string[];
+    options: { cwd: string; encoding: 'utf-8'; timeout?: number };
+  }>;
 
   beforeEach(() => {
     callLog = [];

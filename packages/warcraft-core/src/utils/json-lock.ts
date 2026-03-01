@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
+import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import * as fs from 'fs';
 import { ensureDir, readJson } from './fs.js';
 
 // ============================================================================
@@ -164,16 +164,13 @@ function isLockStale(lockPath: string, staleTTL: number): boolean {
 /**
  * Acquire an exclusive lock on a file.
  * Uses exclusive file creation (O_EXCL) for atomic lock acquisition.
- * 
+ *
  * @param filePath - Path to the file to lock
  * @param options - Lock acquisition options
  * @returns A release function to call when done
  * @throws Error if lock cannot be acquired within timeout
  */
-export async function acquireLock(
-  filePath: string,
-  options: LockOptions = {}
-): Promise<() => void> {
+export async function acquireLock(filePath: string, options: LockOptions = {}): Promise<() => void> {
   const opts = { ...DEFAULT_LOCK_OPTIONS, ...options };
   const lockPath = getLockPath(filePath);
   const startTime = Date.now();
@@ -209,14 +206,11 @@ export async function acquireLock(
 
       // Check timeout
       if (Date.now() - startTime >= opts.timeout) {
-        throw new Error(
-          `Failed to acquire lock on ${filePath} after ${opts.timeout}ms. ` +
-          `Lock file: ${lockPath}`
-        );
+        throw new Error(`Failed to acquire lock on ${filePath} after ${opts.timeout}ms. ` + `Lock file: ${lockPath}`);
       }
 
       // Wait and retry with fixed interval
-      await new Promise(resolve => setTimeout(resolve, opts.retryInterval));
+      await new Promise((resolve) => setTimeout(resolve, opts.retryInterval));
     }
   }
 }
@@ -224,10 +218,7 @@ export async function acquireLock(
 /**
  * Synchronous version of acquireLock for simpler use cases
  */
-export function acquireLockSync(
-  filePath: string,
-  options: LockOptions = {}
-): () => void {
+export function acquireLockSync(filePath: string, options: LockOptions = {}): () => void {
   const opts = { ...DEFAULT_LOCK_OPTIONS, ...options };
   const lockPath = getLockPath(filePath);
   const startTime = Date.now();
@@ -259,10 +250,7 @@ export function acquireLockSync(
       }
 
       if (Date.now() - startTime >= opts.timeout) {
-        throw new Error(
-          `Failed to acquire lock on ${filePath} after ${opts.timeout}ms. ` +
-          `Lock file: ${lockPath}`
-        );
+        throw new Error(`Failed to acquire lock on ${filePath} after ${opts.timeout}ms. ` + `Lock file: ${lockPath}`);
       }
 
       // Non-spinning sleep using SharedArrayBuffer + Atomics.wait
@@ -280,16 +268,16 @@ export function acquireLockSync(
 /**
  * Write a file atomically using write-to-temp-then-rename pattern.
  * This ensures no partial writes are visible to readers.
- * 
+ *
  * @param filePath - Destination file path
  * @param content - Content to write
  */
 export function writeAtomic(filePath: string, content: string): void {
   ensureDir(path.dirname(filePath));
-  
+
   // Generate unique temp file in same directory (for same-filesystem rename)
   const tempPath = `${filePath}.tmp.${process.pid}.${Date.now()}`;
-  
+
   try {
     fs.writeFileSync(tempPath, content);
     fs.renameSync(tempPath, filePath);
@@ -318,16 +306,12 @@ export function writeJsonAtomic<T>(filePath: string, data: T): void {
 /**
  * Write JSON with exclusive lock (async version).
  * Ensures only one process writes at a time and writes are atomic.
- * 
+ *
  * @param filePath - Path to JSON file
  * @param data - Data to write
  * @param options - Lock options
  */
-export async function writeJsonLocked<T>(
-  filePath: string,
-  data: T,
-  options: LockOptions = {}
-): Promise<void> {
+export async function writeJsonLocked<T>(filePath: string, data: T, options: LockOptions = {}): Promise<void> {
   const release = await acquireLock(filePath, options);
   try {
     writeJsonAtomic(filePath, data);
@@ -339,11 +323,7 @@ export async function writeJsonLocked<T>(
 /**
  * Synchronous version of writeJsonLocked
  */
-export function writeJsonLockedSync<T>(
-  filePath: string,
-  data: T,
-  options: LockOptions = {}
-): void {
+export function writeJsonLockedSync<T>(filePath: string, data: T, options: LockOptions = {}): void {
   const release = acquireLockSync(filePath, options);
   try {
     writeJsonAtomic(filePath, data);
@@ -362,20 +342,17 @@ export function writeJsonLockedSync<T>(
  * - Undefined values in patch are ignored (don't delete existing keys)
  * - Null values explicitly set to null
  */
-export function deepMerge<T extends Record<string, unknown>>(
-  target: T,
-  patch: Partial<T>
-): T {
+export function deepMerge<T extends Record<string, unknown>>(target: T, patch: Partial<T>): T {
   const result = { ...target };
-  
+
   for (const key of Object.keys(patch) as Array<keyof T>) {
     const patchValue = patch[key];
-    
+
     // Skip undefined values (don't overwrite)
     if (patchValue === undefined) {
       continue;
     }
-    
+
     // If both are plain objects (not arrays, not null), deep merge
     if (
       patchValue !== null &&
@@ -387,14 +364,14 @@ export function deepMerge<T extends Record<string, unknown>>(
     ) {
       result[key] = deepMerge(
         result[key] as Record<string, unknown>,
-        patchValue as Record<string, unknown>
+        patchValue as Record<string, unknown>,
       ) as T[keyof T];
     } else {
       // Direct assignment for primitives, arrays, null
       result[key] = patchValue as T[keyof T];
     }
   }
-  
+
   return result;
 }
 
@@ -405,7 +382,7 @@ export function deepMerge<T extends Record<string, unknown>>(
 /**
  * Read-modify-write JSON with lock protection.
  * Reads current content, applies patch via deep merge, writes atomically.
- * 
+ *
  * @param filePath - Path to JSON file
  * @param patch - Partial update to merge
  * @param options - Lock options
@@ -414,7 +391,7 @@ export function deepMerge<T extends Record<string, unknown>>(
 export async function patchJsonLocked<T extends object>(
   filePath: string,
   patch: Partial<T>,
-  options: LockOptions = {}
+  options: LockOptions = {},
 ): Promise<T> {
   const release = await acquireLock(filePath, options);
   try {
@@ -433,7 +410,7 @@ export async function patchJsonLocked<T extends object>(
 export function patchJsonLockedSync<T extends object>(
   filePath: string,
   patch: Partial<T>,
-  options: LockOptions = {}
+  options: LockOptions = {},
 ): T {
   const release = acquireLockSync(filePath, options);
   try {
@@ -452,10 +429,10 @@ export function patchJsonLockedSync<T extends object>(
 
 /**
  * Read-modify-write JSON with lock protection using a callback updater.
- * 
+ *
  * Reads current content, applies transformation via callback, writes atomically.
  * This is the core single-lock RMW primitive.
- * 
+ *
  * @param filePath - Path to JSON file
  * @param updater - Function that receives current data and returns updated data
  * @param fallback - Default data to use if file doesn't exist
@@ -466,7 +443,7 @@ export function updateJsonLockedSync<T>(
   filePath: string,
   updater: (current: T) => T,
   fallback: T,
-  options: LockOptions = {}
+  options: LockOptions = {},
 ): T {
   const release = acquireLockSync(filePath, options);
   try {

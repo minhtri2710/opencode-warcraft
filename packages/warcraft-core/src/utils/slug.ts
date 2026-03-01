@@ -3,7 +3,10 @@
  * Lowercases, replaces whitespace runs with hyphens, strips non-alphanumeric/hyphen chars.
  */
 export function slugifyTaskName(name: string): string {
-  return name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+  return name
+    .toLowerCase()
+    .replace(/\s+/g, '-')
+    .replace(/[^a-z0-9-]/g, '');
 }
 
 /**

@@ -9,12 +9,12 @@ import { sanitizeName } from 'warcraft-core';
  * @throws Error if the value is not a safe path segment
  */
 export function validatePathSegment(value: string, label: string): string {
-	try {
-		return sanitizeName(value);
-	} catch (error) {
-		const msg = error instanceof Error ? error.message : String(error);
-		throw new Error(`${label}: ${msg}`);
-	}
+  try {
+    return sanitizeName(value);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    throw new Error(`${label}: ${msg}`);
+  }
 }
 
 /**
@@ -22,8 +22,8 @@ export function validatePathSegment(value: string, label: string): string {
  * Either a resolved feature name or an error message.
  */
 export type FeatureResolution =
-	| { ok: true; feature: string; error?: undefined }
-	| { ok: false; feature?: undefined; error: string };
+  | { ok: true; feature: string; error?: undefined }
+  | { ok: false; feature?: undefined; error: string };
 
 /**
  * Resolve and validate a feature name from tool input.
@@ -34,20 +34,20 @@ export type FeatureResolution =
  * @returns Resolved feature or error
  */
 export function resolveFeatureInput(
-	resolveFeature: (name?: string) => string | null,
-	explicitFeature?: string,
+  resolveFeature: (name?: string) => string | null,
+  explicitFeature?: string,
 ): FeatureResolution {
-	if (explicitFeature) {
-		validatePathSegment(explicitFeature, 'feature');
-	}
-	const feature = resolveFeature(explicitFeature);
-	if (!feature) {
-		return {
-			ok: false,
-			error: 'No feature specified. Create a feature or provide feature param.',
-		};
-	}
-	return { ok: true, feature };
+  if (explicitFeature) {
+    validatePathSegment(explicitFeature, 'feature');
+  }
+  const feature = resolveFeature(explicitFeature);
+  if (!feature) {
+    return {
+      ok: false,
+      error: 'No feature specified. Create a feature or provide feature param.',
+    };
+  }
+  return { ok: true, feature };
 }
 
 /**
@@ -58,5 +58,5 @@ export function resolveFeatureInput(
  * @throws Error if validation fails
  */
 export function validateTaskInput(task: string): string {
-	return validatePathSegment(task, 'task');
+  return validatePathSegment(task, 'task');
 }

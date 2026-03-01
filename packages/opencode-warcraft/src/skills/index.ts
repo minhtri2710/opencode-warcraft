@@ -1,16 +1,16 @@
 /**
  * Warcraft Skills System
- * 
+ *
  * Export skill infrastructure for use in warcraft_skill tool.
  */
 
-export type { SkillDefinition, SkillLoadResult } from './types.js';
-export { 
-  BUILTIN_SKILLS, 
-  loadBuiltinSkill, 
+export {
+  BUILTIN_SKILLS,
+  type BuiltinSkillName,
   getBuiltinSkills,
-  getFilteredSkills,
   getBuiltinSkillsXml,
-  type BuiltinSkillName 
+  getFilteredSkills,
+  loadBuiltinSkill,
 } from './builtin.js';
 export { loadFileSkill } from './file-loader.js';
+export type { SkillDefinition, SkillLoadResult } from './types.js';

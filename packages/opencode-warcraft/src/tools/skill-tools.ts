@@ -1,6 +1,6 @@
-import { tool, type ToolDefinition } from '@opencode-ai/plugin';
-import type { SkillDefinition } from '../skills/types.js';
+import { type ToolDefinition, tool } from '@opencode-ai/plugin';
 import { loadBuiltinSkill } from '../skills/builtin.js';
+import type { SkillDefinition } from '../skills/types.js';
 import { toolError, toolSuccess } from '../types.js';
 
 export interface SkillToolsDependencies {
@@ -39,18 +39,14 @@ export class SkillTools {
 
 Use this when a task matches an available skill's description. The descriptions below ("Use when...", "Use before...") are triggers; when one applies, you MUST load that skill before proceeding.`;
     const description =
-      filteredSkills.length === 0
-        ? base + '\n\nNo Warcraft skills available.'
-        : base + formatSkillsXml(filteredSkills);
+      filteredSkills.length === 0 ? `${base}\n\nNo Warcraft skills available.` : base + formatSkillsXml(filteredSkills);
 
     const availableNames = new Set(filteredSkills.map((s: SkillDefinition) => s.name));
 
     return tool({
       description,
       args: {
-        name: tool.schema
-          .string()
-          .describe('The skill name from available_skills'),
+        name: tool.schema.string().describe('The skill name from available_skills'),
       },
       async execute({ name }) {
         if (!availableNames.has(name)) {
@@ -66,13 +62,15 @@ Use this when a task matches an available skill's description. The descriptions 
         }
 
         const skill = result.skill;
-        return toolSuccess({ message: [
-          `## Warcraft Skill: ${skill.name}`,
-          '',
-          `**Description**: ${skill.description}`,
-          '',
-          skill.template,
-        ].join('\n') });
+        return toolSuccess({
+          message: [
+            `## Warcraft Skill: ${skill.name}`,
+            '',
+            `**Description**: ${skill.description}`,
+            '',
+            skill.template,
+          ].join('\n'),
+        });
       },
     });
   }

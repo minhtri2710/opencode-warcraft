@@ -2,7 +2,7 @@
  * Tests for plugin tool registration parity
  * Ensures tools are properly registered after modularization
  */
-import { describe, it, expect, beforeAll } from 'bun:test';
+import { beforeAll, describe, expect, it } from 'bun:test';
 import type { Plugin } from '@opencode-ai/plugin';
 import plugin from './index.js';
 
@@ -88,15 +88,9 @@ describe('Warcraft Plugin Tool Registration', () => {
 
 describe('Domain Tool Modules', () => {
   it('should export all tool classes from tools/index', async () => {
-    const {
-      FeatureTools,
-      PlanTools,
-      TaskTools,
-      WorktreeTools,
-      BatchTools,
-      ContextTools,
-      SkillTools,
-    } = await import('./tools/index.js');
+    const { FeatureTools, PlanTools, TaskTools, WorktreeTools, BatchTools, ContextTools, SkillTools } = await import(
+      './tools/index.js'
+    );
 
     expect(FeatureTools).toBeDefined();
     expect(PlanTools).toBeDefined();

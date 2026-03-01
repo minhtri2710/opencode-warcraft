@@ -1,10 +1,7 @@
-import {
-  getPlanPath,
-} from '../utils/paths.js';
-import { readText, writeText, fileExists } from '../utils/fs.js';
-import type { PlanComment, PlanReadResult } from '../types.js';
-import type { BeadsMode } from '../types.js';
 import * as crypto from 'crypto';
+import type { BeadsMode, PlanComment, PlanReadResult } from '../types.js';
+import { fileExists, readText, writeText } from '../utils/fs.js';
+import { getPlanPath } from '../utils/paths.js';
 import type { PlanStore } from './state/types.js';
 
 /**
@@ -47,7 +44,7 @@ export class PlanService {
   read(featureName: string): PlanReadResult | null {
     const planPath = getPlanPath(this.projectRoot, featureName, this.beadsMode);
     const content = readText(planPath);
-    
+
     if (content === null) return null;
 
     const comments = this.store.getComments(featureName);

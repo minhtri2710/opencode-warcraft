@@ -6,16 +6,9 @@
  * from domain services.
  */
 
-import type {
-  FeatureJson,
-  FeatureStatusType,
-  TaskStatus,
-  TaskInfo,
-  PlanComment,
-} from '../../types.js';
+import type { FeatureJson, FeatureStatusType, PlanComment, TaskInfo, TaskStatus } from '../../types.js';
 import type { LockOptions } from '../../utils/json-lock.js';
-import type { RunnableTasksResult } from '../taskService.js';
-import type { BackgroundPatchFields } from '../taskService.js';
+import type { BackgroundPatchFields, RunnableTasksResult } from '../taskService.js';
 
 // ============================================================================
 // Feature Store
@@ -82,13 +75,7 @@ export interface TaskStore {
    * Create a new task. Handles bead creation, directory creation, and initial state.
    * Returns the TaskStatus with beadId set (if applicable).
    */
-  createTask(
-    featureName: string,
-    folder: string,
-    title: string,
-    status: TaskStatus,
-    priority: number,
-  ): TaskStatus;
+  createTask(featureName: string, folder: string, title: string, status: TaskStatus, priority: number): TaskStatus;
 
   /** Get task info by folder name. Returns null if not found. */
   get(featureName: string, folder: string): TaskInfo | null;
@@ -106,12 +93,7 @@ export interface TaskStore {
    * Save updated task status.
    * @param options.syncBeadStatus - If true, sync the status to the bead system.
    */
-  save(
-    featureName: string,
-    folder: string,
-    status: TaskStatus,
-    options?: TaskSaveOptions,
-  ): void;
+  save(featureName: string, folder: string, status: TaskStatus, options?: TaskSaveOptions): void;
 
   /**
    * Patch background-owned fields atomically without clobbering completion fields.
@@ -128,19 +110,10 @@ export interface TaskStore {
   delete(featureName: string, folder: string): void;
 
   /** Write a task artifact (spec, worker_prompt, report). Returns an identifier (beadId or path). */
-  writeArtifact(
-    featureName: string,
-    folder: string,
-    kind: TaskArtifactKind,
-    content: string,
-  ): string;
+  writeArtifact(featureName: string, folder: string, kind: TaskArtifactKind, content: string): string;
 
   /** Read a task artifact. Returns null if not found. */
-  readArtifact(
-    featureName: string,
-    folder: string,
-    kind: TaskArtifactKind,
-  ): string | null;
+  readArtifact(featureName: string, folder: string, kind: TaskArtifactKind): string | null;
 
   /** Write a task report. Returns a path or identifier. */
   writeReport(featureName: string, folder: string, report: string): string;
@@ -177,13 +150,7 @@ export interface PlanStore {
    * @param timestamp - ISO timestamp of approval
    * @param sessionId - Optional session that approved
    */
-  approve(
-    featureName: string,
-    planContent: string,
-    planHash: string,
-    timestamp: string,
-    sessionId?: string,
-  ): void;
+  approve(featureName: string, planContent: string, planHash: string, timestamp: string, sessionId?: string): void;
 
   /**
    * Check if the plan is currently approved.

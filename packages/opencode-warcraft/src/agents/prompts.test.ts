@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'bun:test';
 import { readFileSync } from 'fs';
 import * as path from 'path';
+import { ALGALON_PROMPT } from './algalon';
+import { BRANN_PROMPT } from './brann';
 import { KHADGAR_PROMPT } from './khadgar';
+import { MEKKATORQUE_PROMPT } from './mekkatorque';
 import { MIMIRON_PROMPT } from './mimiron';
 import { SAURFANG_PROMPT } from './saurfang';
-import { MEKKATORQUE_PROMPT } from './mekkatorque';
-import { BRANN_PROMPT } from './brann';
-import { ALGALON_PROMPT } from './algalon';
 
 describe('Khadgar (Hybrid) prompt', () => {
   describe('delegation planning alignment', () => {
@@ -83,7 +83,9 @@ describe('Mimiron (Planner) prompt', () => {
     });
 
     it('permits research and review delegation via task()', () => {
-      expect(MIMIRON_PROMPT).toContain('You may use task() to delegate read-only research to Brann and plan review to Algalon.');
+      expect(MIMIRON_PROMPT).toContain(
+        'You may use task() to delegate read-only research to Brann and plan review to Algalon.',
+      );
       expect(MIMIRON_PROMPT).toContain('Never use task() to delegate implementation or coding work.');
     });
 

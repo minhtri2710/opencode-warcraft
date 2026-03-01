@@ -2,28 +2,28 @@
  * Tests for artifactSchemas module.
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
+import type { FeatureJson, PlanComment, TaskStatus } from '../../types.js';
 import {
-  encodeFeatureState,
-  decodeFeatureState,
-  encodeTaskState,
-  decodeTaskState,
-  encodePlanApproval,
-  decodePlanApproval,
-  encodeApprovedPlan,
   decodeApprovedPlan,
-  encodePlanComments,
+  decodeFeatureState,
+  decodePlanApproval,
   decodePlanComments,
-  encodeWorkerPrompt,
-  decodeWorkerPrompt,
-  encodeTaskReport,
   decodeTaskReport,
+  decodeTaskState,
+  decodeWorkerPrompt,
+  encodeApprovedPlan,
+  encodeFeatureState,
+  encodePlanApproval,
+  encodePlanComments,
+  encodeTaskReport,
+  encodeTaskState,
+  encodeWorkerPrompt,
   featureStateFromFeatureJson,
   featureStateToFeatureJson,
   taskStateFromTaskStatus,
   taskStateToTaskStatus,
 } from './artifactSchemas.js';
-import type { FeatureJson, TaskStatus, PlanComment } from '../../types.js';
 
 describe('artifactSchemas', () => {
   describe('FeatureStateArtifact', () => {

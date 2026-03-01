@@ -1,11 +1,10 @@
-import { describe, expect, it, beforeEach, afterEach, spyOn } from 'bun:test';
-import * as fs from 'fs';
-import * as path from 'path';
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import * as child_process from 'child_process';
-import { FeatureTools } from './feature-tools';
+import * as fs from 'fs';
 import type { FeatureService } from 'warcraft-core';
+import { FeatureTools } from './feature-tools';
 
-const TEST_DIR = '/tmp/opencode-warcraft-feature-tools-test-' + process.pid;
+const TEST_DIR = `/tmp/opencode-warcraft-feature-tools-test-${process.pid}`;
 
 function cleanup() {
   if (fs.existsSync(TEST_DIR)) {

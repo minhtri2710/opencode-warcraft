@@ -1,16 +1,20 @@
-import {
-  getPlanPath,
-  sanitizeName,
-} from '../utils/paths.js';
+import type {
+  BeadsMode,
+  SpecData,
+  TaskInfo,
+  TaskStatus,
+  TaskStatusType,
+  TasksSyncResult,
+  WorkerSession,
+} from '../types.js';
 import { readText } from '../utils/fs.js';
-import { deriveTaskFolder, slugifyTaskName } from '../utils/slug.js';
 import type { LockOptions } from '../utils/json-lock.js';
-import { TaskStatus, TaskStatusType, TasksSyncResult, TaskInfo, WorkerSession, SpecData } from '../types.js';
-import { computeRunnableAndBlocked } from './taskDependencyGraph.js';
+import { getPlanPath, sanitizeName } from '../utils/paths.js';
+import { deriveTaskFolder, slugifyTaskName } from '../utils/slug.js';
 import { formatSpecContent } from './specFormatter.js';
-import type { TaskWithDeps } from './taskDependencyGraph.js';
 import type { TaskStore } from './state/types.js';
-import type { BeadsMode } from '../types.js';
+import type { TaskWithDeps } from './taskDependencyGraph.js';
+import { computeRunnableAndBlocked } from './taskDependencyGraph.js';
 
 /** Current schema version for TaskStatus */
 export const TASK_STATUS_SCHEMA_VERSION = 1;
@@ -36,7 +40,6 @@ interface ParsedTask {
   /** Raw dependency numbers parsed from plan. null = not specified (use implicit), [] = explicit none */
   dependsOnNumbers: number[] | null;
 }
-
 
 export interface RunnableTask {
   folder: string;
@@ -68,18 +71,18 @@ export class TaskService {
   sync(featureName: string): TasksSyncResult {
     const planPath = getPlanPath(this.projectRoot, featureName, this.beadsMode);
     const planContent = readText(planPath);
-    
+
     if (!planContent) {
       throw new Error(`No plan.md found for feature '${featureName}'`);
     }
 
     const planTasks = this.parseTasksFromPlan(planContent);
-    
+
     // Validate dependency graph before proceeding
     this.validateDependencyGraph(planTasks);
-    
+
     const existingTasks = this.store.list(featureName);
-    
+
     const result: TasksSyncResult = {
       created: [],
       removed: [],
@@ -87,7 +90,7 @@ export class TaskService {
       manual: [],
     };
 
-    const existingByName = new Map(existingTasks.map(t => [t.folder, t]));
+    const existingByName = new Map(existingTasks.map((t) => [t.folder, t]));
 
     for (const existing of existingTasks) {
       if (existing.origin === 'manual') {
@@ -106,7 +109,7 @@ export class TaskService {
         continue;
       }
 
-      const stillInPlan = planTasks.some(p => p.folder === existing.folder);
+      const stillInPlan = planTasks.some((p) => p.folder === existing.folder);
       if (!stillInPlan) {
         this.store.delete(featureName, existing.folder);
         result.removed.push(existing.folder);
@@ -188,7 +191,7 @@ export class TaskService {
   /**
    * Update task status with locked atomic write.
    * Uses file locking to prevent race conditions between concurrent updates.
-   * 
+   *
    * @param featureName - Feature name
    * @param taskFolder - Task folder name
    * @param updates - Fields to update (status, summary, baseCommit, blocker)
@@ -198,13 +201,11 @@ export class TaskService {
   update(
     featureName: string,
     taskFolder: string,
-    updates: Partial<
-      Pick<TaskStatus, 'status' | 'summary' | 'baseCommit' | 'blocker'>
-    >,
-    _lockOptions?: LockOptions
+    updates: Partial<Pick<TaskStatus, 'status' | 'summary' | 'baseCommit' | 'blocker'>>,
+    _lockOptions?: LockOptions,
   ): TaskStatus {
     const current = this.store.getRawStatus(featureName, taskFolder);
-    
+
     if (!current) {
       throw new Error(`Task '${taskFolder}' not found`);
     }
@@ -230,11 +231,11 @@ export class TaskService {
   /**
    * Patch only background-owned fields without clobbering completion-owned fields.
    * Safe for concurrent use by background workers.
-   * 
+   *
    * Uses deep merge for workerSession to allow partial updates like:
    * - patchBackgroundFields(..., { workerSession: { lastHeartbeatAt: '...' } })
    *   will update only lastHeartbeatAt, preserving other workerSession fields.
-   * 
+   *
    * @param featureName - Feature name
    * @param taskFolder - Task folder name
    * @param patch - Background-owned fields to update
@@ -245,7 +246,7 @@ export class TaskService {
     featureName: string,
     taskFolder: string,
     patch: BackgroundPatchFields,
-    lockOptions?: LockOptions
+    lockOptions?: LockOptions,
   ): TaskStatus {
     return this.store.patchBackground(featureName, taskFolder, patch, lockOptions);
   }
@@ -322,7 +323,10 @@ export class TaskService {
     };
   }
 
-  private extractPlanSection(planContent: string | null, task: { name: string; order: number; folder: string }): string | null {
+  private extractPlanSection(
+    planContent: string | null,
+    task: { name: string; order: number; folder: string },
+  ): string | null {
     if (!planContent) return null;
 
     const escapedTitle = task.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -352,7 +356,7 @@ export class TaskService {
     // Explicit dependency numbers provided
     if (task.dependsOnNumbers !== null) {
       return task.dependsOnNumbers
-        .map(num => allTasks.find(t => t.order === num)?.folder)
+        .map((num) => allTasks.find((t) => t.order === num)?.folder)
         .filter((folder): folder is string => folder !== undefined);
     }
 
@@ -361,49 +365,51 @@ export class TaskService {
       return [];
     }
 
-    const previousTask = allTasks.find(t => t.order === task.order - 1);
+    const previousTask = allTasks.find((t) => t.order === task.order - 1);
     return previousTask ? [previousTask.folder] : [];
   }
 
   /**
    * Validate the dependency graph for errors before creating tasks.
    * Throws descriptive errors pointing the operator to fix plan.md.
-   * 
+   *
    * Checks for:
    * - Unknown task numbers in dependencies
    * - Self-dependencies
    * - Cycles (using DFS topological sort)
    */
   private validateDependencyGraph(tasks: ParsedTask[]): void {
-    const taskNumbers = new Set(tasks.map(t => t.order));
-    
+    const taskNumbers = new Set(tasks.map((t) => t.order));
+
     // Validate each task's dependencies
     for (const task of tasks) {
       if (task.dependsOnNumbers === null) {
         // Implicit dependencies - no validation needed
         continue;
       }
-      
+
       for (const depNum of task.dependsOnNumbers) {
         // Check for self-dependency
         if (depNum === task.order) {
           throw new Error(
             `Invalid dependency graph in plan.md: Self-dependency detected for task ${task.order} ("${task.name}"). ` +
-            `A task cannot depend on itself. Please fix the "Depends on:" line in plan.md.`
+              `A task cannot depend on itself. Please fix the "Depends on:" line in plan.md.`,
           );
         }
-        
+
         // Check for unknown task number
         if (!taskNumbers.has(depNum)) {
           throw new Error(
             `Invalid dependency graph in plan.md: Unknown task number ${depNum} referenced in dependencies for task ${task.order} ("${task.name}"). ` +
-            `Available task numbers are: ${Array.from(taskNumbers).sort((a, b) => a - b).join(', ')}. ` +
-            `Please fix the "Depends on:" line in plan.md.`
+              `Available task numbers are: ${Array.from(taskNumbers)
+                .sort((a, b) => a - b)
+                .join(', ')}. ` +
+              `Please fix the "Depends on:" line in plan.md.`,
           );
         }
       }
     }
-    
+
     // Check for cycles using DFS
     this.detectCycles(tasks);
   }
@@ -414,8 +420,8 @@ export class TaskService {
    */
   private detectCycles(tasks: ParsedTask[]): void {
     // Build adjacency list: task order -> [dependency orders]
-    const taskByOrder = new Map(tasks.map(t => [t.order, t]));
-    
+    const taskByOrder = new Map(tasks.map((t) => [t.order, t]));
+
     // Build dependency graph with resolved implicit dependencies
     const getDependencies = (task: ParsedTask): number[] => {
       if (task.dependsOnNumbers !== null) {
@@ -427,35 +433,35 @@ export class TaskService {
       }
       return [task.order - 1];
     };
-    
+
     // Track visited state: 0 = unvisited, 1 = in current path, 2 = fully processed
     const visited = new Map<number, number>();
     const path: number[] = [];
-    
+
     const dfs = (taskOrder: number): void => {
       const state = visited.get(taskOrder);
-      
+
       if (state === 2) {
         // Already fully processed, no cycle through here
         return;
       }
-      
+
       if (state === 1) {
         // Found a cycle! Build the cycle path for the error message
         const cycleStart = path.indexOf(taskOrder);
         const cyclePath = [...path.slice(cycleStart), taskOrder];
         const cycleDesc = cyclePath.join(' -> ');
-        
+
         throw new Error(
           `Invalid dependency graph in plan.md: Cycle detected in task dependencies: ${cycleDesc}. ` +
-          `Tasks cannot have circular dependencies. Please fix the "Depends on:" lines in plan.md.`
+            `Tasks cannot have circular dependencies. Please fix the "Depends on:" lines in plan.md.`,
         );
       }
-      
+
       // Mark as in current path
       visited.set(taskOrder, 1);
       path.push(taskOrder);
-      
+
       const task = taskByOrder.get(taskOrder);
       if (task) {
         const deps = getDependencies(task);
@@ -463,12 +469,12 @@ export class TaskService {
           dfs(depOrder);
         }
       }
-      
+
       // Mark as fully processed
       path.pop();
       visited.set(taskOrder, 2);
     };
-    
+
     // Run DFS from each node
     for (const task of tasks) {
       if (!visited.has(task.order)) {
@@ -484,7 +490,7 @@ export class TaskService {
     const allTasks = this.store.list(featureName);
 
     // Build dependency-aware task list for canonical engine
-    const tasksWithDeps: TaskWithDeps[] = allTasks.map(task => {
+    const tasksWithDeps: TaskWithDeps[] = allTasks.map((task) => {
       const rawStatus = this.store.getRawStatus(featureName, task.folder);
       return {
         folder: task.folder,
@@ -544,36 +550,36 @@ export class TaskService {
   private parseTasksFromPlan(content: string): ParsedTask[] {
     const tasks: ParsedTask[] = [];
     const lines = content.split('\n');
-    
+
     let currentTask: ParsedTask | null = null;
     let descriptionLines: string[] = [];
-    
+
     // Regex to match "Depends on:" or "**Depends on**:" with optional markdown
     // Strips markdown formatting (**, *, etc.) and captures the value
     const dependsOnRegex = /^\s*\*{0,2}Depends\s+on\*{0,2}\s*:\s*(.+)$/i;
-    
+
     for (const line of lines) {
       // Check for task header: ### N. Task Name
       const taskMatch = line.match(/^###\s+(\d+)\.\s+(.+)$/);
-      
+
       if (taskMatch) {
         // Save previous task if exists
         if (currentTask) {
           currentTask.description = descriptionLines.join('\n').trim();
           tasks.push(currentTask);
         }
-        
+
         const order = parseInt(taskMatch[1], 10);
         const rawName = taskMatch[2].trim();
         const folderName = slugifyTaskName(rawName);
         const folder = deriveTaskFolder(order, folderName);
-        
+
         currentTask = {
           folder,
           order,
           name: rawName,
           description: '',
-          dependsOnNumbers: null,  // null = not specified, use implicit
+          dependsOnNumbers: null, // null = not specified, use implicit
         };
         descriptionLines = [];
       } else if (currentTask) {
@@ -594,8 +600,8 @@ export class TaskService {
               // Parse comma-separated numbers
               const numbers = value
                 .split(/[,\s]+/)
-                .map(s => parseInt(s.trim(), 10))
-                .filter(n => !isNaN(n));
+                .map((s) => parseInt(s.trim(), 10))
+                .filter((n) => !Number.isNaN(n));
               currentTask.dependsOnNumbers = numbers;
             }
           }
@@ -603,7 +609,7 @@ export class TaskService {
         }
       }
     }
-    
+
     // Don't forget the last task
     if (currentTask) {
       currentTask.description = descriptionLines.join('\n').trim();
@@ -612,5 +618,4 @@ export class TaskService {
 
     return tasks;
   }
-
 }

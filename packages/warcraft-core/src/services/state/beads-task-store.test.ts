@@ -2,7 +2,9 @@ import { describe, expect, it } from 'bun:test';
 import { RepositoryError } from '../beads/BeadsRepository.js';
 import { BeadsTaskStore } from './beads-task-store.js';
 
-function initFailure(message: string = 'Failed to initialize beads repository [BR_INIT_FAILED]: br command failed'): RepositoryError {
+function initFailure(
+  message: string = 'Failed to initialize beads repository [BR_INIT_FAILED]: br command failed',
+): RepositoryError {
   return new RepositoryError('gateway_error', `Bead gateway error: ${message}`);
 }
 
@@ -51,7 +53,7 @@ describe('BeadsTaskStore fail-fast behavior', () => {
         '01-task',
         { status: 'in_progress', origin: 'manual', beadId: 'task-1', planTitle: 'Task 1' },
         { syncBeadStatus: true },
-      )
+      ),
     ).toThrow("Failed to sync bead status for 'task-1'");
   });
 });

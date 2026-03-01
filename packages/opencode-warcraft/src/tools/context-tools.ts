@@ -1,21 +1,17 @@
-import { tool, type ToolDefinition } from '@opencode-ai/plugin';
+import { type ToolDefinition, tool } from '@opencode-ai/plugin';
 import type {
+  AgentsMdService,
+  BvTriageService,
   ContextService,
   FeatureService,
   PlanService,
   TaskService,
   WorktreeService,
-  AgentsMdService,
 } from 'warcraft-core';
-import { resolveFeatureInput, validatePathSegment } from './tool-input.js';
-import {
-  buildEffectiveDependencies,
-  computeRunnableAndBlocked,
-  type TaskWithDeps,
-} from 'warcraft-core';
-import type { BvTriageService } from 'warcraft-core';
+import { buildEffectiveDependencies, computeRunnableAndBlocked, type TaskWithDeps } from 'warcraft-core';
 import type { BlockedResult } from '../types.js';
 import { toolError, toolSuccess } from '../types.js';
+import { resolveFeatureInput, validatePathSegment } from './tool-input.js';
 
 export interface ContextToolsDependencies {
   featureService: FeatureService;
@@ -44,16 +40,9 @@ export class ContextTools {
       description:
         'Write a context file for the feature. Context files store persistent notes, decisions, and reference material.',
       args: {
-        name: tool.schema
-          .string()
-          .describe(
-            'Context file name (e.g., "decisions", "architecture", "notes")',
-          ),
+        name: tool.schema.string().describe('Context file name (e.g., "decisions", "architecture", "notes")'),
         content: tool.schema.string().describe('Markdown content to write'),
-        feature: tool.schema
-          .string()
-          .optional()
-          .describe('Feature name (defaults to active)'),
+        feature: tool.schema.string().optional().describe('Feature name (defaults to active)'),
       },
       async execute({ name, content, feature: explicitFeature }) {
         const resolution = resolveFeatureInput(resolveFeature, explicitFeature);
@@ -71,15 +60,13 @@ export class ContextTools {
    */
   getStatusTool(resolveFeature: (name?: string) => string | null): ToolDefinition {
     // Capture deps in closure to avoid 'this' binding issues
-    const { featureService, planService, taskService, contextService, worktreeService, checkBlocked, bvTriageService } = this.deps;
+    const { featureService, planService, taskService, contextService, worktreeService, checkBlocked, bvTriageService } =
+      this.deps;
     return tool({
       description:
         'Get comprehensive status of a feature including plan, tasks, and context. Returns JSON with all relevant state for resuming work.',
       args: {
-        feature: tool.schema
-          .string()
-          .optional()
-          .describe('Feature name (defaults to active)'),
+        feature: tool.schema.string().optional().describe('Feature name (defaults to active)'),
       },
       async execute({ feature: explicitFeature }) {
         const resolution = resolveFeatureInput(resolveFeature, explicitFeature);
@@ -105,10 +92,7 @@ export class ContextTools {
             const rawStatus = taskService.getRawStatus(feature, t.folder);
             const worktree = await worktreeService.get(feature, t.folder);
             const hasChanges = worktree
-              ? await worktreeService.hasUncommittedChanges(
-                  worktree.feature,
-                  worktree.step,
-                )
+              ? await worktreeService.hasUncommittedChanges(worktree.feature, worktree.step)
               : null;
 
             return {
@@ -133,36 +117,34 @@ export class ContextTools {
           updatedAt: c.updatedAt,
         }));
 
-        const pendingTasks = tasksSummary.filter(
-          (t: { status: string }) => t.status === 'pending',
-        );
-        const inProgressTasks = tasksSummary.filter(
-          (t: { status: string }) => t.status === 'in_progress',
-        );
-        const doneTasks = tasksSummary.filter(
-          (t: { status: string }) => t.status === 'done',
-        );
+        const pendingTasks = tasksSummary.filter((t: { status: string }) => t.status === 'pending');
+        const inProgressTasks = tasksSummary.filter((t: { status: string }) => t.status === 'in_progress');
+        const doneTasks = tasksSummary.filter((t: { status: string }) => t.status === 'done');
 
-        const tasksWithDeps: TaskWithDeps[] = tasksSummary.map((t: { folder: string; status: string; dependsOn?: string[] | null }) => ({
-          folder: t.folder,
-          status: t.status as import('warcraft-core').TaskStatusType,
-          dependsOn: t.dependsOn ?? undefined,
-        }));
+        const tasksWithDeps: TaskWithDeps[] = tasksSummary.map(
+          (t: { folder: string; status: string; dependsOn?: string[] | null }) => ({
+            folder: t.folder,
+            status: t.status as import('warcraft-core').TaskStatusType,
+            dependsOn: t.dependsOn ?? undefined,
+          }),
+        );
         const effectiveDeps = buildEffectiveDependencies(tasksWithDeps);
         const normalizedTasks = tasksWithDeps.map((task) => ({
           ...task,
           dependsOn: effectiveDeps.get(task.folder),
         }));
-        const { runnable, blocked: blockedBy } =
-          computeRunnableAndBlocked(normalizedTasks);
+        const { runnable, blocked: blockedBy } = computeRunnableAndBlocked(normalizedTasks);
         const triageByTask: Record<string, { summary: string; source: string }> = {};
-        const triageDetailsByTask: Record<string, {
-          source: string;
-          summary: string;
-          topBlockers: string[];
-          blockerChain: unknown | null;
-          causality: unknown | null;
-        }> = {};
+        const triageDetailsByTask: Record<
+          string,
+          {
+            source: string;
+            summary: string;
+            topBlockers: string[];
+            blockerChain: unknown | null;
+            causality: unknown | null;
+          }
+        > = {};
         for (const taskFolder of Object.keys(blockedBy)) {
           const raw = taskService.getRawStatus(feature, taskFolder);
           if (!raw?.beadId) {
@@ -184,15 +166,9 @@ export class ContextTools {
           }
         }
         const globalTriageDetails = bvTriageService.getGlobalTriageDetails();
-        const globalTriage = globalTriageDetails
-          ? { summary: globalTriageDetails.summary }
-          : null;
+        const globalTriage = globalTriageDetails ? { summary: globalTriageDetails.summary } : null;
         const triageHealth = bvTriageService.getHealth();
-        const analyticsProvider = triageHealth.enabled
-          ? triageHealth.available
-            ? 'bv'
-            : 'unavailable'
-          : 'disabled';
+        const analyticsProvider = triageHealth.enabled ? (triageHealth.available ? 'bv' : 'unavailable') : 'disabled';
 
         const getNextAction = (
           planStatus: string | null,
@@ -263,14 +239,14 @@ export class ContextTools {
               health: triageHealth,
               global: globalTriageDetails
                 ? {
-                  summary: globalTriageDetails.summary,
-                  payload: globalTriageDetails.payload,
-                  dataHash: globalTriageDetails.dataHash ?? null,
-                  analysisConfig: globalTriageDetails.analysisConfig ?? null,
-                  metricStatus: globalTriageDetails.metricStatus ?? null,
-                  asOf: globalTriageDetails.asOf ?? null,
-                  asOfCommit: globalTriageDetails.asOfCommit ?? null,
-                }
+                    summary: globalTriageDetails.summary,
+                    payload: globalTriageDetails.payload,
+                    dataHash: globalTriageDetails.dataHash ?? null,
+                    analysisConfig: globalTriageDetails.analysisConfig ?? null,
+                    metricStatus: globalTriageDetails.metricStatus ?? null,
+                    asOf: globalTriageDetails.asOf ?? null,
+                    asOfCommit: globalTriageDetails.asOfCommit ?? null,
+                  }
                 : null,
               blockedTaskInsights: triageDetailsByTask,
             },
@@ -293,28 +269,24 @@ export class ContextTools {
     const { agentsMdService } = this.deps;
     return tool({
       description:
-        "Initialize or sync AGENTS.md. init: scan codebase and generate (preview only). sync: propose updates from feature contexts. apply: write approved content to disk.",
+        'Initialize or sync AGENTS.md. init: scan codebase and generate (preview only). sync: propose updates from feature contexts. apply: write approved content to disk.',
       args: {
-        action: tool.schema
-          .enum(['init', 'sync', 'apply'])
-          .describe('Action to perform'),
-        feature: tool.schema
-          .string()
-          .optional()
-          .describe('Feature name for sync action'),
-        content: tool.schema
-          .string()
-          .optional()
-          .describe('Content to write (required for apply action)'),
+        action: tool.schema.enum(['init', 'sync', 'apply']).describe('Action to perform'),
+        feature: tool.schema.string().optional().describe('Feature name for sync action'),
+        content: tool.schema.string().optional().describe('Content to write (required for apply action)'),
       },
       async execute({ action, feature, content }) {
         if (feature) validatePathSegment(feature, 'feature');
         if (action === 'init') {
           const result = await agentsMdService.init();
           if (result.existed) {
-            return toolSuccess({ message: `AGENTS.md already exists (${result.content.length} chars). Use 'sync' to propose updates.` });
+            return toolSuccess({
+              message: `AGENTS.md already exists (${result.content.length} chars). Use 'sync' to propose updates.`,
+            });
           }
-          return toolSuccess({ message: `Generated AGENTS.md from codebase scan (${result.content.length} chars):\n\n${result.content}\n\n⚠️ This has NOT been written to disk. Ask the user via question() whether to write it to AGENTS.md.` });
+          return toolSuccess({
+            message: `Generated AGENTS.md from codebase scan (${result.content.length} chars):\n\n${result.content}\n\n⚠️ This has NOT been written to disk. Ask the user via question() whether to write it to AGENTS.md.`,
+          });
         }
 
         if (action === 'sync') {
@@ -323,14 +295,20 @@ export class ContextTools {
           if (result.proposals.length === 0) {
             return toolSuccess({ message: 'No new findings to sync to AGENTS.md.' });
           }
-          return toolSuccess({ message: `Proposed AGENTS.md updates from feature "${feature}":\n\n${result.diff}\n\n⚠️ These changes have NOT been applied. Ask the user via question() whether to apply them.` });
+          return toolSuccess({
+            message: `Proposed AGENTS.md updates from feature "${feature}":\n\n${result.diff}\n\n⚠️ These changes have NOT been applied. Ask the user via question() whether to apply them.`,
+          });
         }
 
         if (action === 'apply') {
           if (!content)
-            return toolError('content required for apply action. Use init or sync first to get content, then apply with the approved content.');
+            return toolError(
+              'content required for apply action. Use init or sync first to get content, then apply with the approved content.',
+            );
           const result = agentsMdService.apply(content);
-          return toolSuccess({ message: `AGENTS.md ${result.isNew ? 'created' : 'updated'} (${result.chars} chars) at ${result.path}` });
+          return toolSuccess({
+            message: `AGENTS.md ${result.isNew ? 'created' : 'updated'} (${result.chars} chars) at ${result.path}`,
+          });
         }
 
         return toolError('unknown action');

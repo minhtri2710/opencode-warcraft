@@ -1,47 +1,52 @@
-export { FeatureService } from './featureService.js';
-export { PlanService } from './planService.js';
-export { TaskService } from './taskService.js';
-export { formatSpecContent } from './specFormatter.js';
-export { WorktreeService, createWorktreeService } from './worktreeService.js';
-export type { WorktreeInfo, DiffResult, ApplyResult, CommitResult, MergeResult, WorktreeConfig } from './worktreeService.js';
-export { ContextService } from './contextService.js';
-export { ConfigService } from './configService.js';
+export type { ApplyResult as AgentsMdApplyResult, InitResult, SyncResult } from './agentsMdService.js';
 export { AgentsMdService } from './agentsMdService.js';
-export type { InitResult, SyncResult, ApplyResult as AgentsMdApplyResult } from './agentsMdService.js';
-export { DockerSandboxService } from './dockerSandboxService.js';
-export type { SandboxConfig } from './dockerSandboxService.js';
-export { buildEffectiveDependencies, computeRunnableAndBlocked } from './taskDependencyGraph.js';
-export type { TaskWithDeps, RunnableBlockedResult } from './taskDependencyGraph.js';
 export { BeadGateway } from './beads/BeadGateway.js';
+export type { BeadArtifactKind, BeadGatewayErrorCode, TaskBeadArtifacts } from './beads/BeadGateway.types.js';
+export type { RepositoryError, RepositoryErrorCode, Result, SyncPolicy } from './beads/BeadsRepository.js';
 export { BeadsRepository } from './beads/BeadsRepository.js';
-export type { RepositoryError, RepositoryErrorCode, SyncPolicy } from './beads/BeadsRepository.js';
-export type { Result } from './beads/BeadsRepository.js';
+export type { ExecutionTrack, RobotPlanResult, RobotPlanSummary } from './beads/BeadsViewerGateway.js';
 export { BeadsViewerGateway } from './beads/BeadsViewerGateway.js';
-export { getTaskBeadActions } from './beads/beadMapping.js';
-export type { BeadArtifactKind, TaskBeadArtifacts, BeadGatewayErrorCode } from './beads/BeadGateway.types.js';
-export type { RobotPlanResult, RobotPlanSummary, ExecutionTrack } from './beads/BeadsViewerGateway.js';
+export type { BvBlockerTriageDetails, BvGlobalTriageDetails, BvTriageResult } from './beads/BvTriageService.js';
 export { BvTriageService } from './beads/BvTriageService.js';
-export type { BvTriageResult, BvBlockerTriageDetails, BvGlobalTriageDetails } from './beads/BvTriageService.js';
-export { runBvCommand, defaultBvExecutor } from './beads/bv-runner.js';
+export { getTaskBeadActions } from './beads/beadMapping.js';
 export type { BvCommandExecutor, BvHealth } from './beads/bv-runner.js';
-
-
-// Storage ports and adapters
-export { createStores } from './state/index.js';
+export { defaultBvExecutor, runBvCommand } from './beads/bv-runner.js';
+export { ConfigService } from './configService.js';
+export { ContextService } from './contextService.js';
+export type { SandboxConfig } from './dockerSandboxService.js';
+export { DockerSandboxService } from './dockerSandboxService.js';
+export { FeatureService } from './featureService.js';
+export * from './planGates/index.js';
+export { PlanService } from './planService.js';
+export { formatSpecContent } from './specFormatter.js';
 export type {
+  CreateFeatureInput,
   FeatureStore,
-  TaskStore,
   PlanStore,
   StoreSet,
-  CreateFeatureInput,
   TaskArtifactKind,
   TaskSaveOptions,
+  TaskStore,
 } from './state/index.js';
-export { BeadsFeatureStore } from './state/index.js';
-export { FilesystemFeatureStore } from './state/index.js';
-export { BeadsTaskStore } from './state/index.js';
-export { FilesystemTaskStore } from './state/index.js';
-export { BeadsPlanStore } from './state/index.js';
-export { FilesystemPlanStore } from './state/index.js';
-
-export * from './planGates/index.js';
+// Storage ports and adapters
+export {
+  BeadsFeatureStore,
+  BeadsPlanStore,
+  BeadsTaskStore,
+  createStores,
+  FilesystemFeatureStore,
+  FilesystemPlanStore,
+  FilesystemTaskStore,
+} from './state/index.js';
+export type { RunnableBlockedResult, TaskWithDeps } from './taskDependencyGraph.js';
+export { buildEffectiveDependencies, computeRunnableAndBlocked } from './taskDependencyGraph.js';
+export { TaskService } from './taskService.js';
+export type {
+  ApplyResult,
+  CommitResult,
+  DiffResult,
+  MergeResult,
+  WorktreeConfig,
+  WorktreeInfo,
+} from './worktreeService.js';
+export { createWorktreeService, WorktreeService } from './worktreeService.js';

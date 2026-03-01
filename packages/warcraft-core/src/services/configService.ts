@@ -1,33 +1,25 @@
+import * as fs from 'fs';
 import * as os from 'os';
-import * as fs from "fs";
-import * as path from "path";
-import { WarcraftConfig, DEFAULT_WARCRAFT_CONFIG } from "../types.js";
-import type { BeadsMode } from "../types.js";
-import type { ParallelExecutionConfig } from "../types.js";
-import type { SandboxConfig } from "./dockerSandboxService.js";
+import * as path from 'path';
+import { DEFAULT_WARCRAFT_CONFIG } from '../defaults.js';
+import type { BeadsMode, ParallelExecutionConfig, WarcraftConfig } from '../types.js';
+import type { SandboxConfig } from './dockerSandboxService.js';
 
 /**
  * All supported agent names for config merging.
  * Used to iterate over agent configs without duplication.
  */
-const AGENT_KEYS = [
-  "khadgar",
-  "mimiron",
-  "saurfang",
-  "brann",
-  "mekkatorque",
-  "algalon",
-] as const;
+const AGENT_KEYS = ['khadgar', 'mimiron', 'saurfang', 'brann', 'mekkatorque', 'algalon'] as const;
 
 /**
  * Deep merge agent configs from defaults and stored config.
  * Handles each agent in AGENT_KEYS with proper deep merge semantics.
  */
 function mergeAgentConfigs(
-  defaultAgents: WarcraftConfig["agents"],
+  defaultAgents: WarcraftConfig['agents'],
   storedAgents: Record<string, unknown>,
-): WarcraftConfig["agents"] {
-  const merged: WarcraftConfig["agents"] = {
+): WarcraftConfig['agents'] {
+  const merged: WarcraftConfig['agents'] = {
     ...defaultAgents,
     ...storedAgents,
   };
@@ -54,8 +46,8 @@ export class ConfigService {
 
   constructor() {
     const homeDir = process.env.HOME || process.env.USERPROFILE || os.homedir();
-    const configDir = path.join(homeDir, ".config", "opencode");
-    this.configPath = path.join(configDir, "opencode_warcraft.json");
+    const configDir = path.join(homeDir, '.config', 'opencode');
+    this.configPath = path.join(configDir, 'opencode_warcraft.json');
   }
 
   /**
@@ -78,7 +70,7 @@ export class ConfigService {
         this.cachedConfig = result;
         return result;
       }
-      const raw = fs.readFileSync(this.configPath, "utf-8");
+      const raw = fs.readFileSync(this.configPath, 'utf-8');
       const stored = JSON.parse(raw) as Partial<WarcraftConfig>;
       const storedAgents = (stored.agents ?? {}) as Record<string, unknown>;
       const storedParallelExecution = (stored.parallelExecution ?? {}) as ParallelExecutionConfig;
@@ -91,18 +83,13 @@ export class ConfigService {
           ...DEFAULT_WARCRAFT_CONFIG.parallelExecution,
           ...storedParallelExecution,
         },
-        agents: mergeAgentConfigs(
-          DEFAULT_WARCRAFT_CONFIG.agents,
-          storedAgents
-        ),
+        agents: mergeAgentConfigs(DEFAULT_WARCRAFT_CONFIG.agents, storedAgents),
       };
       this.cachedConfig = result;
       return result;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      console.warn(
-        `[warcraft] Failed to read config at ${this.configPath}: ${message}`,
-      );
+      console.warn(`[warcraft] Failed to read config at ${this.configPath}: ${message}`);
       return { ...DEFAULT_WARCRAFT_CONFIG };
     }
   }
@@ -155,15 +142,7 @@ export class ConfigService {
   /**
    * Get agent-specific model config
    */
-  getAgentConfig(
-    agent:
-      | "khadgar"
-      | "mimiron"
-      | "saurfang"
-      | "brann"
-      | "mekkatorque"
-      | "algalon",
-  ): {
+  getAgentConfig(agent: 'khadgar' | 'mimiron' | 'saurfang' | 'brann' | 'mekkatorque' | 'algalon'): {
     model?: string;
     temperature?: number;
     skills?: string[];
@@ -172,25 +151,19 @@ export class ConfigService {
   } {
     const config = this.get();
     const agentConfig = config.agents?.[agent] ?? {};
-    const defaultAutoLoadSkills =
-      DEFAULT_WARCRAFT_CONFIG.agents?.[agent]?.autoLoadSkills ?? [];
+    const defaultAutoLoadSkills = DEFAULT_WARCRAFT_CONFIG.agents?.[agent]?.autoLoadSkills ?? [];
     const userAutoLoadSkills = agentConfig.autoLoadSkills ?? [];
-    const isPlannerAgent = agent === "khadgar" || agent === "mimiron";
+    const isPlannerAgent = agent === 'khadgar' || agent === 'mimiron';
     const effectiveUserAutoLoadSkills = isPlannerAgent
       ? userAutoLoadSkills
-      : userAutoLoadSkills.filter((skill) => skill !== "onboarding");
+      : userAutoLoadSkills.filter((skill) => skill !== 'onboarding');
     const effectiveDefaultAutoLoadSkills = isPlannerAgent
       ? defaultAutoLoadSkills
-      : defaultAutoLoadSkills.filter((skill) => skill !== "onboarding");
-    const combinedAutoLoadSkills = [
-      ...effectiveDefaultAutoLoadSkills,
-      ...effectiveUserAutoLoadSkills,
-    ];
+      : defaultAutoLoadSkills.filter((skill) => skill !== 'onboarding');
+    const combinedAutoLoadSkills = [...effectiveDefaultAutoLoadSkills, ...effectiveUserAutoLoadSkills];
     const uniqueAutoLoadSkills = Array.from(new Set(combinedAutoLoadSkills));
     const disabledSkills = config.disableSkills ?? [];
-    const effectiveAutoLoadSkills = uniqueAutoLoadSkills.filter(
-      (skill) => !disabledSkills.includes(skill),
-    );
+    const effectiveAutoLoadSkills = uniqueAutoLoadSkills.filter((skill) => !disabledSkills.includes(skill));
 
     return {
       ...agentConfig,
@@ -228,9 +201,9 @@ export class ConfigService {
    */
   getSandboxConfig(): SandboxConfig {
     const config = this.get();
-    const mode = config.sandbox ?? "none";
+    const mode = config.sandbox ?? 'none';
     const image = config.dockerImage;
-    const persistent = config.persistentContainers ?? mode === "docker";
+    const persistent = config.persistentContainers ?? mode === 'docker';
 
     return { mode, ...(image && { image }), persistent };
   }
@@ -267,32 +240,32 @@ export class ConfigService {
 
     // Handle boolean values
     if (raw === true) {
-      return "on";
+      return 'on';
     }
     if (raw === false) {
-      return "off";
+      return 'off';
     }
 
     // Validate string values
-    if (raw === "on" || raw === "off") {
+    if (raw === 'on' || raw === 'off') {
       return raw;
     }
 
     // Reject legacy strings explicitly
-    if (raw === "dual-write" || raw === "beads-primary") {
+    if (raw === 'dual-write' || raw === 'beads-primary') {
       throw new Error(
-        `Invalid beadsMode: '${raw}'. Use "on" or "off". Legacy values "dual-write" and "beads-primary" are no longer supported.`
+        `Invalid beadsMode: '${raw}'. Use "on" or "off". Legacy values "dual-write" and "beads-primary" are no longer supported.`,
       );
     }
 
     // Default fallback for undefined, null, or invalid values
-    return "on";
+    return 'on';
   }
 
   private mergeAgents(
-    currentAgents: WarcraftConfig["agents"],
-    updateAgents: WarcraftConfig["agents"] | undefined,
-  ): WarcraftConfig["agents"] {
+    currentAgents: WarcraftConfig['agents'],
+    updateAgents: WarcraftConfig['agents'] | undefined,
+  ): WarcraftConfig['agents'] {
     if (!updateAgents) {
       return currentAgents;
     }

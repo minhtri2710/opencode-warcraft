@@ -34,13 +34,13 @@ export interface WorkerPromptParams {
 
 /**
  * Build a context-rich prompt for a worker agent.
- * 
+ *
  * Includes:
  * - Assignment details (feature, task, worktree, branch)
  * - Mission (spec) - contains plan section, context, and completed tasks
  * - Blocker protocol (NOT question tool)
  * - Completion protocol
- * 
+ *
  * NOTE: Plan, context files, and previous tasks are NOT included separately
  * because they are already embedded in the spec. This prevents duplication
  * and keeps the prompt size bounded.
@@ -58,7 +58,8 @@ export function buildWorkerPrompt(params: WorkerPromptParams): string {
   } = params;
 
   // Build continuation section if resuming from blocked
-  const continuationSection = continueFrom ? `
+  const continuationSection = continueFrom
+    ? `
 ## Continuation from Blocked State
 
 Previous worker was blocked and exited. Here's the context:
@@ -69,7 +70,8 @@ Previous worker was blocked and exited. Here's the context:
 
 Continue from where the previous worker left off, incorporating the user's decision.
 The worktree already contains the previous worker's progress.
-` : '';
+`
+    : '';
 
   return `# Warcraft Worker Assignment
 

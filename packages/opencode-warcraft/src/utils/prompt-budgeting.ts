@@ -160,10 +160,7 @@ function truncateWithMarker(str: string, maxLength: number): { result: string; t
  * - Emits truncation events for observability
  * - Provides hints for accessing full info
  */
-export function applyTaskBudget(
-  tasks: TaskInput[],
-  config: BudgetConfig = {}
-): TaskBudgetResult {
+export function applyTaskBudget(tasks: TaskInput[], config: BudgetConfig = {}): TaskBudgetResult {
   const maxTasks = config.maxTasks ?? DEFAULT_BUDGET.maxTasks;
   const maxSummaryChars = config.maxSummaryChars ?? DEFAULT_BUDGET.maxSummaryChars;
   const feature = config.feature;
@@ -182,7 +179,7 @@ export function applyTaskBudget(
 
   if (tasks.length > maxTasks) {
     const dropCount = tasks.length - maxTasks;
-    droppedTasks.push(...tasks.slice(0, dropCount).map(t => t.name));
+    droppedTasks.push(...tasks.slice(0, dropCount).map((t) => t.name));
     selectedTasks = tasks.slice(dropCount);
 
     truncationEvents.push({
@@ -201,7 +198,7 @@ export function applyTaskBudget(
   }
 
   // Truncate summaries if needed
-  const budgetedTasks: BudgetedTask[] = selectedTasks.map(task => {
+  const budgetedTasks: BudgetedTask[] = selectedTasks.map((task) => {
     const { result, truncated } = truncateWithMarker(task.summary, maxSummaryChars);
 
     if (truncated) {
@@ -239,10 +236,7 @@ export function applyTaskBudget(
  * - Emits truncation events for observability
  * - Provides file path hints for accessing full content
  */
-export function applyContextBudget(
-  files: ContextInput[],
-  config: BudgetConfig = {}
-): ContextBudgetResult {
+export function applyContextBudget(files: ContextInput[], config: BudgetConfig = {}): ContextBudgetResult {
   const maxContextChars = config.maxContextChars ?? DEFAULT_BUDGET.maxContextChars;
   const maxTotalContextChars = config.maxTotalContextChars ?? DEFAULT_BUDGET.maxTotalContextChars;
   const feature = config.feature;
@@ -270,7 +264,7 @@ export function applyContextBudget(
       truncationEvents.push({
         type: 'context_names_only',
         message: `Switched to name-only listing after ${totalChars} chars (budget: ${maxTotalContextChars})`,
-        affected: files.slice(files.indexOf(file)).map(f => f.name),
+        affected: files.slice(files.indexOf(file)).map((f) => f.name),
       });
     }
 

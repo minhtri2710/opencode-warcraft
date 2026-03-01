@@ -1,6 +1,6 @@
+import type { BeadsModeProvider, FeatureJson } from '../../types.js';
 import { BeadGateway } from './BeadGateway.js';
 import { isBeadsEnabled } from './beadsMode.js';
-import type { BeadsModeProvider, FeatureJson } from '../../types.js';
 
 /**
  * Resolution options for epic bead ID lookup.
@@ -34,15 +34,11 @@ function resolveEpicBeadId(options: EpicResolutionOptions, strict: boolean): str
   const { projectRoot, featureName, getFeatureJsonPath, readJson, beadsModeProvider } = options;
 
   // Try reading feature.json with current beads mode
-  let feature = readJson<FeatureJson>(
-    getFeatureJsonPath(projectRoot, featureName, beadsModeProvider.getBeadsMode())
-  );
+  let feature = readJson<FeatureJson>(getFeatureJsonPath(projectRoot, featureName, beadsModeProvider.getBeadsMode()));
 
   // Strict variant: fall back to 'off' mode if first read failed
   if (strict && !feature?.epicBeadId) {
-    feature = readJson<FeatureJson>(
-      getFeatureJsonPath(projectRoot, featureName, 'off')
-    );
+    feature = readJson<FeatureJson>(getFeatureJsonPath(projectRoot, featureName, 'off'));
   }
 
   // Return epic bead ID if found in feature.json
@@ -55,7 +51,7 @@ function resolveEpicBeadId(options: EpicResolutionOptions, strict: boolean): str
     const gateway = new BeadGateway(projectRoot);
     const epics = gateway.list({ type: 'epic', status: 'all' });
     const epic = epics.find((entry) => entry.title === featureName);
-    
+
     if (epic?.id) {
       return epic.id;
     }
@@ -92,10 +88,10 @@ export function getEpicBeadIdOptional(options: EpicResolutionOptions): string | 
  */
 export function getEpicBeadIdStrict(options: EpicResolutionOptions): string {
   const result = resolveEpicBeadId(options, true);
-  
+
   if (!result) {
     throw new Error(`Feature '${options.featureName}' not found`);
   }
-  
+
   return result;
 }

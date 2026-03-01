@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { fileExists, readText, writeText } from '../utils/fs.js';
 import type { ContextFile } from '../types.js';
+import { fileExists, readText, writeText } from '../utils/fs.js';
 import type { ContextService } from './contextService.js';
 
 export interface InitResult {
@@ -67,7 +67,7 @@ export class AgentsMdService {
 
   private extractFindings(contexts: ContextFile[]): string[] {
     const findings: string[] = [];
-    
+
     // Regex patterns for actionable findings
     const patterns = [
       // "we use X" / "prefer X over Y" / "don't use X"
@@ -122,7 +122,7 @@ export class AgentsMdService {
   private formatDiff(proposals: string[]): string {
     if (proposals.length === 0) return '';
 
-    const lines = proposals.map(p => `+ ${p}`);
+    const lines = proposals.map((p) => `+ ${p}`);
     return lines.join('\n');
   }
 

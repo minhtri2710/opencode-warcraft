@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach } from 'bun:test';
+import { beforeEach, describe, expect, test } from 'bun:test';
 import { BvTriageService } from './BvTriageService.js';
 import type { BvCommandExecutor } from './bv-runner.js';
 
@@ -15,7 +15,11 @@ import type { BvCommandExecutor } from './bv-runner.js';
 describe('BvTriageService', () => {
   const TEST_DIRECTORY = '/tmp/test-project';
   let mockExecutor: BvCommandExecutor;
-  let callLog: Array<{ command: string; args: string[]; options: { cwd: string; encoding: 'utf-8'; timeout?: number } }>;
+  let callLog: Array<{
+    command: string;
+    args: string[];
+    options: { cwd: string; encoding: 'utf-8'; timeout?: number };
+  }>;
 
   beforeEach(() => {
     callLog = [];
@@ -238,10 +242,7 @@ describe('BvTriageService', () => {
 
       expect(details).not.toBeNull();
       expect(details?.summary).toBe('Blocker summary | Causality summary');
-      expect(details?.topBlockers).toEqual([
-        'BLK-1: First blocker',
-        'BLK-2: Second blocker',
-      ]);
+      expect(details?.topBlockers).toEqual(['BLK-1: First blocker', 'BLK-2: Second blocker']);
       expect(details?.blockerChain).toEqual({
         summary: 'Blocker summary',
         blockers: [
@@ -388,15 +389,16 @@ describe('BvTriageService', () => {
     });
 
     test('extracts summary from robot-triage quick_ref envelope', () => {
-      mockExecutor = (): string => JSON.stringify({
-        triage: {
-          quick_ref: {
-            actionable_count: 14,
-            open_count: 22,
-            top_picks: [{ id: 'bd-1' }],
+      mockExecutor = (): string =>
+        JSON.stringify({
+          triage: {
+            quick_ref: {
+              actionable_count: 14,
+              open_count: 22,
+              top_picks: [{ id: 'bd-1' }],
+            },
           },
-        },
-      });
+        });
       const service = new BvTriageService(TEST_DIRECTORY, true, mockExecutor);
 
       const result = service.getGlobalTriage();
@@ -405,14 +407,15 @@ describe('BvTriageService', () => {
     });
 
     test('includes robot metadata fields in structured global triage details', () => {
-      mockExecutor = (): string => JSON.stringify({
-        summary: 'Global triage summary',
-        data_hash: '553adcf4b95003cb',
-        analysis_config: { phase_2_timeout_ms: 500 },
-        status: { pageRank: { state: 'computed' } },
-        as_of: 'HEAD~5',
-        as_of_commit: 'abc123def',
-      });
+      mockExecutor = (): string =>
+        JSON.stringify({
+          summary: 'Global triage summary',
+          data_hash: '553adcf4b95003cb',
+          analysis_config: { phase_2_timeout_ms: 500 },
+          status: { pageRank: { state: 'computed' } },
+          as_of: 'HEAD~5',
+          as_of_commit: 'abc123def',
+        });
       const service = new BvTriageService(TEST_DIRECTORY, true, mockExecutor);
 
       const result = service.getGlobalTriageDetails();
@@ -436,10 +439,11 @@ describe('BvTriageService', () => {
     });
 
     test('returns structured global triage details', () => {
-      mockExecutor = (): string => JSON.stringify({
-        summary: 'Global triage summary',
-        blockers: [{ id: 'BLK-1', title: 'First blocker' }],
-      });
+      mockExecutor = (): string =>
+        JSON.stringify({
+          summary: 'Global triage summary',
+          blockers: [{ id: 'BLK-1', title: 'First blocker' }],
+        });
       const service = new BvTriageService(TEST_DIRECTORY, true, mockExecutor);
 
       const result = service.getGlobalTriageDetails();
@@ -456,7 +460,11 @@ describe('BvTriageService', () => {
 
   describe('bv CLI flags', () => {
     test('calls bv with --robot-blocker-chain flag', () => {
-      const localCallLog: Array<{ command: string; args: string[]; options: { cwd: string; encoding: 'utf-8'; timeout?: number } }> = [];
+      const localCallLog: Array<{
+        command: string;
+        args: string[];
+        options: { cwd: string; encoding: 'utf-8'; timeout?: number };
+      }> = [];
       mockExecutor = (command, args, options): string => {
         localCallLog.push({ command, args, options });
         return '{}';
@@ -473,7 +481,11 @@ describe('BvTriageService', () => {
     });
 
     test('calls bv with --robot-causality flag', () => {
-      const localCallLog: Array<{ command: string; args: string[]; options: { cwd: string; encoding: 'utf-8'; timeout?: number } }> = [];
+      const localCallLog: Array<{
+        command: string;
+        args: string[];
+        options: { cwd: string; encoding: 'utf-8'; timeout?: number };
+      }> = [];
       mockExecutor = (command, args, options): string => {
         localCallLog.push({ command, args, options });
         return '{}';
@@ -490,7 +502,11 @@ describe('BvTriageService', () => {
     });
 
     test('calls bv with --robot-triage flag for global triage', () => {
-      const localCallLog: Array<{ command: string; args: string[]; options: { cwd: string; encoding: 'utf-8'; timeout?: number } }> = [];
+      const localCallLog: Array<{
+        command: string;
+        args: string[];
+        options: { cwd: string; encoding: 'utf-8'; timeout?: number };
+      }> = [];
       mockExecutor = (command, args, options): string => {
         localCallLog.push({ command, args, options });
         return '{}';

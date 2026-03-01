@@ -1,6 +1,6 @@
 /**
  * Variant hook for applying per-agent model variants to OpenCode prompts.
- * 
+ *
  * This module provides the `chat.message` hook implementation that:
  * - Reads the target agent name from the message being created
  * - Looks up the configured variant for that Warcraft agent from ConfigService
@@ -8,8 +8,8 @@
  * - Never overrides an already-set variant (respects explicit selection)
  */
 
-import type { ConfigService } from 'warcraft-core';
 import type { Hooks } from '@opencode-ai/plugin';
+import type { ConfigService } from 'warcraft-core';
 
 /**
  * Hook function type extracted from the OpenCode plugin's Hooks interface.
@@ -20,16 +20,9 @@ export type ChatMessageHook = NonNullable<Hooks['chat.message']>;
 /**
  * List of Warcraft agent names that can have variants configured.
  */
-export const WARCRAFT_AGENT_NAMES = [
-  'khadgar',
-  'mimiron',
-  'saurfang',
-  'brann',
-  'mekkatorque',
-  'algalon',
-] as const;
+export const WARCRAFT_AGENT_NAMES = ['khadgar', 'mimiron', 'saurfang', 'brann', 'mekkatorque', 'algalon'] as const;
 
-export type WarcraftAgentName = typeof WARCRAFT_AGENT_NAMES[number];
+export type WarcraftAgentName = (typeof WARCRAFT_AGENT_NAMES)[number];
 
 /**
  * Check if an agent name is a Warcraft agent.
@@ -49,13 +42,13 @@ export function normalizeVariant(variant: string | undefined): string | undefine
 
 /**
  * Create the chat.message hook for variant injection.
- * 
+ *
  * The hook signature matches OpenCode plugin's expected type:
  * - input: { sessionID, agent?, model?, messageID?, variant? }
  * - output: { message: UserMessage, parts: Part[] }
- * 
+ *
  * We only access output.message.variant which exists on UserMessage.
- * 
+ *
  * @param configService - The ConfigService instance to read agent configs from
  * @returns The chat.message hook function
  */

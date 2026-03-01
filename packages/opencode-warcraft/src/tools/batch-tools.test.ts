@@ -1,8 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import {
-  mapWithConcurrencyLimit,
-  resolveParallelPolicy,
-} from './batch-tools.js';
+import { mapWithConcurrencyLimit, resolveParallelPolicy } from './batch-tools.js';
 
 describe('batch-tools parallel helpers', () => {
   test('resolveParallelPolicy defaults to unbounded', () => {

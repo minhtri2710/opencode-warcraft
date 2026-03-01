@@ -1,14 +1,14 @@
-import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
-import * as fs from "fs";
-import * as os from "os";
-import * as path from "path";
-import { ConfigService } from "./configService";
-import { DEFAULT_WARCRAFT_CONFIG, DEFAULT_AGENT_MODELS } from "../types";
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import { DEFAULT_AGENT_MODELS, DEFAULT_WARCRAFT_CONFIG } from '../defaults';
+import { ConfigService } from './configService';
 
 let originalHome: string | undefined;
 let tempHome: string;
 
-const makeTempHome = () => fs.mkdtempSync(path.join(os.tmpdir(), "warcraft-home-"));
+const makeTempHome = () => fs.mkdtempSync(path.join(os.tmpdir(), 'warcraft-home-'));
 
 beforeEach(() => {
   originalHome = process.env.HOME;
@@ -25,29 +25,23 @@ afterEach(() => {
   fs.rmSync(tempHome, { recursive: true, force: true });
 });
 
-describe("ConfigService defaults", () => {
-  it("returns DEFAULT_WARCRAFT_CONFIG when config is missing", () => {
+describe('ConfigService defaults', () => {
+  it('returns DEFAULT_WARCRAFT_CONFIG when config is missing', () => {
     const service = new ConfigService();
     const config = service.get();
 
     expect(config).toEqual(DEFAULT_WARCRAFT_CONFIG);
     expect(Object.keys(config.agents ?? {}).sort()).toEqual([
-      "algalon",
-      "brann",
-      "khadgar",
-      "mekkatorque",
-      "mimiron",
-      "saurfang",
+      'algalon',
+      'brann',
+      'khadgar',
+      'mekkatorque',
+      'mimiron',
+      'saurfang',
     ]);
-    expect(config.agents?.["mimiron"]?.model).toBe(
-      DEFAULT_AGENT_MODELS.mimiron,
-    );
-    expect(config.agents?.["khadgar"]?.model).toBe(
-      DEFAULT_AGENT_MODELS.khadgar,
-    );
-    expect(config.agents?.["saurfang"]?.model).toBe(
-      DEFAULT_AGENT_MODELS.saurfang,
-    );
+    expect(config.agents?.mimiron?.model).toBe(DEFAULT_AGENT_MODELS.mimiron);
+    expect(config.agents?.khadgar?.model).toBe(DEFAULT_AGENT_MODELS.khadgar);
+    expect(config.agents?.saurfang?.model).toBe(DEFAULT_AGENT_MODELS.saurfang);
   });
 
   it("returns 'unified' as default agentMode", () => {
@@ -61,7 +55,7 @@ describe("ConfigService defaults", () => {
     expect(service.getBeadsMode()).toBe('on');
   });
 
-  it("returns default parallelExecution config", () => {
+  it('returns default parallelExecution config', () => {
     const service = new ConfigService();
     const parallel = service.getParallelExecutionConfig();
 
@@ -71,7 +65,7 @@ describe("ConfigService defaults", () => {
     });
   });
 
-  it("returns defaults and warns when config JSON is invalid", () => {
+  it('returns defaults and warns when config JSON is invalid', () => {
     const service = new ConfigService();
     const configPath = service.getPath();
 
@@ -96,7 +90,7 @@ describe("ConfigService defaults", () => {
     expect(warnings[0]).toContain(configPath);
   });
 
-  it("deep-merges agent overrides with defaults", () => {
+  it('deep-merges agent overrides with defaults', () => {
     const service = new ConfigService();
     const configPath = service.getPath();
 
@@ -106,7 +100,7 @@ describe("ConfigService defaults", () => {
       JSON.stringify(
         {
           agents: {
-            "khadgar": { temperature: 0.8 },
+            khadgar: { temperature: 0.8 },
           },
         },
         null,
@@ -115,17 +109,15 @@ describe("ConfigService defaults", () => {
     );
 
     const config = service.get();
-    expect(config.agents?.["khadgar"]?.temperature).toBe(0.8);
-    expect(config.agents?.["khadgar"]?.model).toBe(
-      DEFAULT_AGENT_MODELS.khadgar,
-    );
+    expect(config.agents?.khadgar?.temperature).toBe(0.8);
+    expect(config.agents?.khadgar?.model).toBe(DEFAULT_AGENT_MODELS.khadgar);
 
-    const agentConfig = service.getAgentConfig("khadgar");
+    const agentConfig = service.getAgentConfig('khadgar');
     expect(agentConfig.temperature).toBe(0.8);
     expect(agentConfig.model).toBe(DEFAULT_AGENT_MODELS.khadgar);
   });
 
-  it("deep-merges variant field from user config", () => {
+  it('deep-merges variant field from user config', () => {
     const service = new ConfigService();
     const configPath = service.getPath();
 
@@ -135,8 +127,8 @@ describe("ConfigService defaults", () => {
       JSON.stringify(
         {
           agents: {
-            "mekkatorque": { variant: "high" },
-            "brann": { variant: "low", temperature: 0.2 },
+            mekkatorque: { variant: 'high' },
+            brann: { variant: 'low', temperature: 0.2 },
           },
         },
         null,
@@ -146,25 +138,23 @@ describe("ConfigService defaults", () => {
 
     const config = service.get();
     // variant should be merged from user config
-    expect(config.agents?.["mekkatorque"]?.variant).toBe("high");
-    expect(config.agents?.["brann"]?.variant).toBe("low");
+    expect(config.agents?.mekkatorque?.variant).toBe('high');
+    expect(config.agents?.brann?.variant).toBe('low');
     // other defaults should still be present
-    expect(config.agents?.["mekkatorque"]?.model).toBe(
-      DEFAULT_AGENT_MODELS.mekkatorque,
-    );
-    expect(config.agents?.["brann"]?.temperature).toBe(0.2);
+    expect(config.agents?.mekkatorque?.model).toBe(DEFAULT_AGENT_MODELS.mekkatorque);
+    expect(config.agents?.brann?.temperature).toBe(0.2);
 
     // getAgentConfig should also return variant
-    const mekkatorqueConfig = service.getAgentConfig("mekkatorque");
-    expect(mekkatorqueConfig.variant).toBe("high");
+    const mekkatorqueConfig = service.getAgentConfig('mekkatorque');
+    expect(mekkatorqueConfig.variant).toBe('high');
     expect(mekkatorqueConfig.model).toBe(DEFAULT_AGENT_MODELS.mekkatorque);
 
-    const brannConfig = service.getAgentConfig("brann");
-    expect(brannConfig.variant).toBe("low");
+    const brannConfig = service.getAgentConfig('brann');
+    expect(brannConfig.variant).toBe('low');
     expect(brannConfig.temperature).toBe(0.2);
   });
 
-  it("merges autoLoadSkills defaults and overrides", () => {
+  it('merges autoLoadSkills defaults and overrides', () => {
     const service = new ConfigService();
     const configPath = service.getPath();
 
@@ -174,8 +164,8 @@ describe("ConfigService defaults", () => {
       JSON.stringify(
         {
           agents: {
-            "mekkatorque": {
-              autoLoadSkills: ["custom-skill", "verification-before-completion"],
+            mekkatorque: {
+              autoLoadSkills: ['custom-skill', 'verification-before-completion'],
             },
           },
         },
@@ -184,15 +174,15 @@ describe("ConfigService defaults", () => {
       ),
     );
 
-    const config = service.getAgentConfig("mekkatorque");
+    const config = service.getAgentConfig('mekkatorque');
     expect(config.autoLoadSkills).toEqual([
-      "test-driven-development",
-      "verification-before-completion",
-      "custom-skill",
+      'test-driven-development',
+      'verification-before-completion',
+      'custom-skill',
     ]);
   });
 
-  it("removes autoLoadSkills via disableSkills", () => {
+  it('removes autoLoadSkills via disableSkills', () => {
     const service = new ConfigService();
     const configPath = service.getPath();
 
@@ -201,10 +191,10 @@ describe("ConfigService defaults", () => {
       configPath,
       JSON.stringify(
         {
-          disableSkills: ["parallel-exploration", "custom-skill"],
+          disableSkills: ['parallel-exploration', 'custom-skill'],
           agents: {
-            "khadgar": {
-              autoLoadSkills: ["custom-skill"],
+            khadgar: {
+              autoLoadSkills: ['custom-skill'],
             },
           },
         },
@@ -213,11 +203,11 @@ describe("ConfigService defaults", () => {
       ),
     );
 
-    const config = service.getAgentConfig("khadgar");
+    const config = service.getAgentConfig('khadgar');
     expect(config.autoLoadSkills).toEqual([]);
   });
 
-  it("defaults have no variant set", () => {
+  it('defaults have no variant set', () => {
     const service = new ConfigService();
     const config = service.get();
 
@@ -228,15 +218,15 @@ describe("ConfigService defaults", () => {
     }
   });
 
-  it("brann autoLoadSkills does NOT include parallel-exploration", () => {
+  it('brann autoLoadSkills does NOT include parallel-exploration', () => {
     // Brann should not auto-load parallel-exploration to prevent recursive delegation.
     // Brann is a leaf agent that should not spawn further Brann agents.
     const service = new ConfigService();
-    const brannConfig = service.getAgentConfig("brann");
+    const brannConfig = service.getAgentConfig('brann');
 
-    expect(brannConfig.autoLoadSkills).not.toContain("parallel-exploration");
+    expect(brannConfig.autoLoadSkills).not.toContain('parallel-exploration');
   });
-  it("caches merged config after a successful file read", () => {
+  it('caches merged config after a successful file read', () => {
     const service = new ConfigService();
     const configPath = service.getPath();
 
@@ -244,7 +234,7 @@ describe("ConfigService defaults", () => {
     fs.writeFileSync(
       configPath,
       JSON.stringify({
-        agentMode: "dedicated",
+        agentMode: 'dedicated',
       }),
     );
 
@@ -260,17 +250,16 @@ describe("ConfigService defaults", () => {
       readSpy.mockRestore();
     }
   });
-
 });
 
-describe("ConfigService disabled skills/mcps", () => {
-  it("returns empty arrays when not configured", () => {
+describe('ConfigService disabled skills/mcps', () => {
+  it('returns empty arrays when not configured', () => {
     const service = new ConfigService();
     expect(service.getDisabledSkills()).toEqual([]);
     expect(service.getDisabledMcps()).toEqual([]);
   });
 
-  it("returns configured disabled skills", () => {
+  it('returns configured disabled skills', () => {
     const service = new ConfigService();
     const configPath = service.getPath();
 
@@ -278,14 +267,14 @@ describe("ConfigService disabled skills/mcps", () => {
     fs.writeFileSync(
       configPath,
       JSON.stringify({
-        disableSkills: ["brainstorming", "writing-plans"],
+        disableSkills: ['brainstorming', 'writing-plans'],
       }),
     );
 
-    expect(service.getDisabledSkills()).toEqual(["brainstorming", "writing-plans"]);
+    expect(service.getDisabledSkills()).toEqual(['brainstorming', 'writing-plans']);
   });
 
-  it("returns configured disabled MCPs", () => {
+  it('returns configured disabled MCPs', () => {
     const service = new ConfigService();
     const configPath = service.getPath();
 
@@ -293,16 +282,16 @@ describe("ConfigService disabled skills/mcps", () => {
     fs.writeFileSync(
       configPath,
       JSON.stringify({
-        disableMcps: ["websearch", "grep_app"],
+        disableMcps: ['websearch', 'grep_app'],
       }),
     );
 
-    expect(service.getDisabledMcps()).toEqual(["websearch", "grep_app"]);
+    expect(service.getDisabledMcps()).toEqual(['websearch', 'grep_app']);
   });
 });
 
-describe("ConfigService set() merge behavior", () => {
-  it("deep-merges nested agent config updates", () => {
+describe('ConfigService set() merge behavior', () => {
+  it('deep-merges nested agent config updates', () => {
     const service = new ConfigService();
 
     service.set({
@@ -326,7 +315,7 @@ describe("ConfigService set() merge behavior", () => {
     expect(updated.agents?.khadgar?.temperature).toBe(0.9);
   });
 
-  it("persists and returns beadsMode updates", () => {
+  it('persists and returns beadsMode updates', () => {
     const service = new ConfigService();
     service.set({ beadsMode: 'off' });
 
@@ -334,7 +323,7 @@ describe("ConfigService set() merge behavior", () => {
     expect(service.get().beadsMode).toBe('off');
   });
 
-  it("deep-merges parallelExecution updates", () => {
+  it('deep-merges parallelExecution updates', () => {
     const service = new ConfigService();
 
     service.set({
@@ -359,7 +348,7 @@ describe("ConfigService set() merge behavior", () => {
     });
   });
 
-  it("clamps invalid parallelExecution maxConcurrency values", () => {
+  it('clamps invalid parallelExecution maxConcurrency values', () => {
     const service = new ConfigService();
     const configPath = service.getPath();
 
@@ -393,7 +382,7 @@ describe("ConfigService set() merge behavior", () => {
   });
 });
 
-describe("ConfigService beadsMode validation", () => {
+describe('ConfigService beadsMode validation', () => {
   it("getBeadsMode() normalizes beadsMode: true to 'on'", () => {
     const service = new ConfigService();
     const configPath = service.getPath();
@@ -436,7 +425,9 @@ describe("ConfigService beadsMode validation", () => {
       }),
     );
 
-    expect(() => service.getBeadsMode()).toThrow("Invalid beadsMode: 'dual-write'. Use \"on\" or \"off\". Legacy values \"dual-write\" and \"beads-primary\" are no longer supported.");
+    expect(() => service.getBeadsMode()).toThrow(
+      'Invalid beadsMode: \'dual-write\'. Use "on" or "off". Legacy values "dual-write" and "beads-primary" are no longer supported.',
+    );
   });
 
   it("getBeadsMode() rejects legacy 'beads-primary' with error", () => {
@@ -451,7 +442,9 @@ describe("ConfigService beadsMode validation", () => {
       }),
     );
 
-    expect(() => service.getBeadsMode()).toThrow("Invalid beadsMode: 'beads-primary'. Use \"on\" or \"off\". Legacy values \"dual-write\" and \"beads-primary\" are no longer supported.");
+    expect(() => service.getBeadsMode()).toThrow(
+      'Invalid beadsMode: \'beads-primary\'. Use "on" or "off". Legacy values "dual-write" and "beads-primary" are no longer supported.',
+    );
   });
 
   it("getBeadsMode() falls back to 'on' when beadsMode is missing", () => {
@@ -459,10 +452,7 @@ describe("ConfigService beadsMode validation", () => {
     const configPath = service.getPath();
 
     fs.mkdirSync(path.dirname(configPath), { recursive: true });
-    fs.writeFileSync(
-      configPath,
-      JSON.stringify({}),
-    );
+    fs.writeFileSync(configPath, JSON.stringify({}));
 
     expect(service.getBeadsMode()).toBe('on');
   });
@@ -499,7 +489,7 @@ describe("ConfigService beadsMode validation", () => {
     expect(service.getBeadsMode()).toBe('on');
   });
 
-  it("getBeadsMode() with boolean true enables full beads_rust workflow", () => {
+  it('getBeadsMode() with boolean true enables full beads_rust workflow', () => {
     const service = new ConfigService();
     const configPath = service.getPath();
 
@@ -558,7 +548,7 @@ describe("ConfigService beadsMode validation", () => {
   });
 });
 
-describe("ConfigService sandbox config", () => {
+describe('ConfigService sandbox config', () => {
   it("getSandboxConfig() returns { mode: 'none' } when not configured", () => {
     const service = new ConfigService();
     const sandboxConfig = service.getSandboxConfig();
@@ -599,7 +589,6 @@ describe("ConfigService sandbox config", () => {
     expect(sandboxConfig).toEqual({ mode: 'docker', image: 'node:22-slim', persistent: true });
   });
 });
-
 
 describe('ConfigService HOME fallback', () => {
   it('falls back to os.homedir() when HOME and USERPROFILE are both unset', () => {

@@ -1,6 +1,6 @@
 /**
  * Prompt and payload observability utilities for Warcraft.
- * 
+ *
  * Provides visibility into prompt/payload sizes to detect when
  * thresholds are exceeded, preventing silent truncation risks.
  */
@@ -75,23 +75,23 @@ export interface PromptThresholds {
 
 /**
  * Default thresholds for prompt/payload size warnings.
- * 
+ *
  * These are conservative defaults based on typical LLM context limits
  * and tool output size restrictions.
  */
 export const DEFAULT_THRESHOLDS: PromptThresholds = {
   // Worker prompt: 100KB (~25K tokens at 4 chars/token)
   workerPromptMaxChars: 100_000,
-  
+
   // JSON payload: 150KB (includes prompt + metadata)
   jsonPayloadMaxChars: 150_000,
-  
+
   // Context files: 50KB (encourages bounded context)
   contextMaxChars: 50_000,
-  
+
   // Previous task summaries: 20KB (encourages concise summaries)
   previousTasksMaxChars: 20_000,
-  
+
   // Plan: 30KB (encourages focused plans)
   planMaxChars: 30_000,
 };
@@ -140,13 +140,13 @@ export function calculatePayloadMeta(inputs: {
 
 /**
  * Check for threshold exceedances and generate warnings.
- * 
+ *
  * Returns an array of warnings. Empty array means all sizes are within limits.
  */
 export function checkWarnings(
   promptMeta: PromptMeta,
   payloadMeta: PayloadMeta,
-  thresholds: Partial<PromptThresholds> = {}
+  thresholds: Partial<PromptThresholds> = {},
 ): PromptWarning[] {
   const t = { ...DEFAULT_THRESHOLDS, ...thresholds };
   const warnings: PromptWarning[] = [];
@@ -229,7 +229,7 @@ function safeLength(str: string | null | undefined): number {
 /**
  * Determine severity based on how much the threshold is exceeded.
  * - info: 1-1.5x threshold
- * - warning: 1.5-2x threshold  
+ * - warning: 1.5-2x threshold
  * - critical: >2x threshold
  */
 function getSeverity(value: number, threshold: number): 'info' | 'warning' | 'critical' {

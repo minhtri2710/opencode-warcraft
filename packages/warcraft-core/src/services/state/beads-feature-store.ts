@@ -1,16 +1,12 @@
-import * as path from 'path';
 import * as fs from 'fs';
+import * as path from 'path';
 import type { FeatureJson, FeatureStatusType } from '../../types.js';
+import { ensureDir, fileExists, writeJson } from '../../utils/fs.js';
+import { acquireLockSync } from '../../utils/json-lock.js';
+import { getContextPath, getFeatureJsonPath, getFeaturePath } from '../../utils/paths.js';
 import { type BeadsRepository, isRepositoryInitFailure } from '../beads/BeadsRepository.js';
 import { mapBeadStatusToFeatureStatus } from '../beads/beadStatus.js';
-import {
-  getFeaturePath,
-  getFeatureJsonPath,
-  getContextPath,
-} from '../../utils/paths.js';
-import { ensureDir, writeJson, fileExists } from '../../utils/fs.js';
-import { acquireLockSync } from '../../utils/json-lock.js';
-import type { FeatureStore, CreateFeatureInput } from './types.js';
+import type { CreateFeatureInput, FeatureStore } from './types.js';
 
 /**
  * FeatureStore implementation for beadsMode='on'.
@@ -62,9 +58,7 @@ export class BeadsFeatureStore implements FeatureStore {
           fs.rmSync(featurePath, { recursive: true, force: true });
         }
         const reason = error instanceof Error ? error.message : String(error);
-        throw new Error(
-          `Failed to initialize feature '${input.name}' after creating epic '${epicBeadId}': ${reason}`,
-        );
+        throw new Error(`Failed to initialize feature '${input.name}' after creating epic '${epicBeadId}': ${reason}`);
       }
 
       return feature;
@@ -139,7 +133,7 @@ export class BeadsFeatureStore implements FeatureStore {
   list(): string[] {
     const gateway = this.repository.getGateway();
     const epics = gateway.list({ type: 'epic', status: 'all' });
-    return epics.map(e => e.title).sort();
+    return epics.map((e) => e.title).sort();
   }
 
   save(feature: FeatureJson): void {

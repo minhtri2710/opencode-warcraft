@@ -1,13 +1,8 @@
-import { tool, type ToolDefinition } from '@opencode-ai/plugin';
-import type {
-  FeatureService,
-  PlanService,
-  TaskService,
-  TaskStatusType,
-} from 'warcraft-core';
+import { type ToolDefinition, tool } from '@opencode-ai/plugin';
+import type { FeatureService, PlanService, TaskService, TaskStatusType } from 'warcraft-core';
 import { detectWorkflowPath, validateLightweightPlan } from 'warcraft-core';
-import { resolveFeatureInput, validateTaskInput } from './tool-input.js';
 import { toolError, toolSuccess } from '../types.js';
+import { resolveFeatureInput, validateTaskInput } from './tool-input.js';
 
 export interface TaskToolsDependencies {
   featureService: FeatureService;
@@ -32,10 +27,7 @@ export class TaskTools {
     return tool({
       description: 'Generate tasks from approved plan',
       args: {
-        feature: tool.schema
-          .string()
-          .optional()
-          .describe('Feature name (defaults to detection or single feature)'),
+        feature: tool.schema.string().optional().describe('Feature name (defaults to detection or single feature)'),
       },
       async execute({ feature: explicitFeature }) {
         const resolution = resolveFeatureInput(resolveFeature, explicitFeature);
@@ -73,7 +65,9 @@ export class TaskTools {
         if (featureData.status === 'approved') {
           featureService.updateStatus(feature, 'executing');
         }
-        return toolSuccess({ message: `Tasks synced: ${result.created.length} created, ${result.removed.length} removed, ${result.kept.length} kept${warning}` });
+        return toolSuccess({
+          message: `Tasks synced: ${result.created.length} created, ${result.removed.length} removed, ${result.kept.length} kept${warning}`,
+        });
       },
     });
   }
@@ -89,10 +83,7 @@ export class TaskTools {
       args: {
         name: tool.schema.string().describe('Task name'),
         order: tool.schema.number().optional().describe('Task order'),
-        feature: tool.schema
-          .string()
-          .optional()
-          .describe('Feature name (defaults to detection or single feature)'),
+        feature: tool.schema.string().optional().describe('Feature name (defaults to detection or single feature)'),
         priority: tool.schema.number().optional().describe('Priority (1-5, default: 3)'),
       },
       async execute({ name, order, feature: explicitFeature, priority }) {
@@ -104,7 +95,9 @@ export class TaskTools {
           return toolError(`Priority must be an integer between 1 and 5 (inclusive), got: ${priorityValue}`);
         }
         const folder = taskService.create(feature, name, order, priorityValue);
-          return toolSuccess({ message: `Manual task created: ${folder}\nReminder: start work with warcraft_worktree_create to use its worktree, and ensure any subagents work in that worktree too.` });
+        return toolSuccess({
+          message: `Manual task created: ${folder}\nReminder: start work with warcraft_worktree_create to use its worktree, and ensure any subagents work in that worktree too.`,
+        });
       },
     });
   }
@@ -119,15 +112,9 @@ export class TaskTools {
       description: 'Update task status or summary',
       args: {
         task: tool.schema.string().describe('Task folder name'),
-        status: tool.schema
-          .string()
-          .optional()
-          .describe('New status: pending, in_progress, done, cancelled'),
+        status: tool.schema.string().optional().describe('New status: pending, in_progress, done, cancelled'),
         summary: tool.schema.string().optional().describe('Summary of work'),
-        feature: tool.schema
-          .string()
-          .optional()
-          .describe('Feature name (defaults to detection or single feature)'),
+        feature: tool.schema.string().optional().describe('Feature name (defaults to detection or single feature)'),
       },
       async execute({ task, status, summary, feature: explicitFeature }) {
         const resolution = resolveFeatureInput(resolveFeature, explicitFeature);

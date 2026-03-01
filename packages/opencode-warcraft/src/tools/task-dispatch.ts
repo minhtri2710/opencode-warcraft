@@ -1,13 +1,13 @@
 import type { PlanService, TaskService } from 'warcraft-core';
 import { formatSpecContent } from 'warcraft-core';
-import type { WorkerContextFile, CompletedTask, ContinueFromBlocked } from '../utils/worker-prompt.js';
-import { buildWorkerPrompt } from '../utils/worker-prompt.js';
 import {
-  applyTaskBudget,
   applyContextBudget,
+  applyTaskBudget,
   DEFAULT_BUDGET,
   type TruncationEvent,
 } from '../utils/prompt-budgeting.js';
+import type { CompletedTask, ContinueFromBlocked, WorkerContextFile } from '../utils/worker-prompt.js';
+import { buildWorkerPrompt } from '../utils/worker-prompt.js';
 
 // Re-export budget defaults for consumers that need them in response assembly
 export { DEFAULT_BUDGET, type TruncationEvent };
@@ -54,10 +54,7 @@ export interface TaskDispatchPrep {
  * Call once and pass the result to multiple `prepareTaskDispatch` calls
  * when dispatching a batch of tasks.
  */
-export function fetchSharedDispatchData(
-  feature: string,
-  services: TaskDispatchServices,
-): SharedDispatchData {
+export function fetchSharedDispatchData(feature: string, services: TaskDispatchServices): SharedDispatchData {
   const planResult = services.planService.read(feature);
   const allTasks = services.taskService.list(feature);
 
@@ -108,19 +105,15 @@ export function prepareTaskDispatch(
     feature,
   });
 
-  const contextFiles: WorkerContextFile[] = contextBudgetResult.files.map(
-    (f: { name: string; content: string }) => ({
-      name: f.name,
-      content: f.content,
-    }),
-  );
+  const contextFiles: WorkerContextFile[] = contextBudgetResult.files.map((f: { name: string; content: string }) => ({
+    name: f.name,
+    content: f.content,
+  }));
 
-  const previousTasks: CompletedTask[] = taskBudgetResult.tasks.map(
-    (t: { name: string; summary: string }) => ({
-      name: t.name,
-      summary: t.summary,
-    }),
-  );
+  const previousTasks: CompletedTask[] = taskBudgetResult.tasks.map((t: { name: string; summary: string }) => ({
+    name: t.name,
+    summary: t.summary,
+  }));
 
   const truncationEvents: TruncationEvent[] = [
     ...taskBudgetResult.truncationEvents,
@@ -176,11 +169,7 @@ export function prepareTaskDispatch(
   taskService.writeWorkerPrompt(feature, task, workerPrompt);
 
   // Read persisted worker prompt back (bead round-trip verification)
-  const persistedWorkerPrompt = taskService.readTaskBeadArtifact(
-    feature,
-    task,
-    'worker_prompt',
-  );
+  const persistedWorkerPrompt = taskService.readTaskBeadArtifact(feature, task, 'worker_prompt');
 
   return {
     specContent,

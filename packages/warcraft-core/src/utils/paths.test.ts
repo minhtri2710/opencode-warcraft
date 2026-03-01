@@ -1,41 +1,36 @@
-import { describe, expect, it, beforeEach, afterEach } from "bun:test";
-import * as fs from "fs";
-import * as path from "path";
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import * as fs from 'fs';
 import * as os from 'os';
-import {
-  normalizePath,
-  getFeaturePath,
-  sanitizeName,
-  getWarcraftDir,
-  getWarcraftPath,
-  getPlanPath,
-  getFeatureJsonPath,
-  getContextPath,
-  getTasksPath,
-  getTaskPath,
-  getTaskStatusPath,
-  getTaskReportPath,
-  getTaskSpecPath,
-  listFeatureDirectories,
-} from './paths';
-import {
-  readJson,
-  ensureDir,
-} from './fs';
+import * as path from 'path';
+import { ensureDir, readJson } from './fs';
 import {
   acquireLock,
   acquireLockSync,
+  deepMerge,
+  getLockPath,
+  patchJsonLocked,
+  patchJsonLockedSync,
   writeAtomic,
   writeJsonAtomic,
   writeJsonLocked,
   writeJsonLockedSync,
-  patchJsonLocked,
-  patchJsonLockedSync,
-  deepMerge,
-  getLockPath,
 } from './json-lock';
+import {
+  getFeatureJsonPath,
+  getFeaturePath,
+  getPlanPath,
+  getTaskPath,
+  getTaskReportPath,
+  getTaskSpecPath,
+  getTaskStatusPath,
+  getWarcraftDir,
+  getWarcraftPath,
+  listFeatureDirectories,
+  normalizePath,
+  sanitizeName,
+} from './paths';
 
-const TEST_DIR = "/tmp/warcraft-core-test-" + process.pid;
+const TEST_DIR = `/tmp/warcraft-core-test-${process.pid}`;
 
 function cleanup() {
   if (fs.existsSync(TEST_DIR)) {
@@ -43,7 +38,7 @@ function cleanup() {
   }
 }
 
-describe("Atomic + Locked JSON Utilities", () => {
+describe('Atomic + Locked JSON Utilities', () => {
   beforeEach(() => {
     cleanup();
     fs.mkdirSync(TEST_DIR, { recursive: true });
@@ -53,9 +48,9 @@ describe("Atomic + Locked JSON Utilities", () => {
     cleanup();
   });
 
-  describe("acquireLock", () => {
-    it("creates lock file and returns release function", async () => {
-      const filePath = path.join(TEST_DIR, "test.json");
+  describe('acquireLock', () => {
+    it('creates lock file and returns release function', async () => {
+      const filePath = path.join(TEST_DIR, 'test.json');
       const lockPath = getLockPath(filePath);
 
       const release = await acquireLock(filePath);
@@ -67,55 +62,48 @@ describe("Atomic + Locked JSON Utilities", () => {
       expect(fs.existsSync(lockPath)).toBe(false);
     });
 
-    it("blocks second acquirer until lock is released", async () => {
-      const filePath = path.join(TEST_DIR, "test.json");
+    it('blocks second acquirer until lock is released', async () => {
+      const filePath = path.join(TEST_DIR, 'test.json');
       const order: string[] = [];
 
       const release1 = await acquireLock(filePath);
-      order.push("lock1-acquired");
+      order.push('lock1-acquired');
 
       // Start second lock attempt (will wait)
-      const lock2Promise = acquireLock(filePath, { timeout: 1000 }).then(
-        (release) => {
-          order.push("lock2-acquired");
-          return release;
-        }
-      );
+      const lock2Promise = acquireLock(filePath, { timeout: 1000 }).then((release) => {
+        order.push('lock2-acquired');
+        return release;
+      });
 
       // Give lock2 a chance to attempt
       await new Promise((r) => setTimeout(r, 100));
 
       // Release first lock
       release1();
-      order.push("lock1-released");
+      order.push('lock1-released');
 
       // Wait for lock2
       const release2 = await lock2Promise;
       release2();
-      order.push("lock2-released");
+      order.push('lock2-released');
 
-      expect(order).toEqual([
-        "lock1-acquired",
-        "lock1-released",
-        "lock2-acquired",
-        "lock2-released",
-      ]);
+      expect(order).toEqual(['lock1-acquired', 'lock1-released', 'lock2-acquired', 'lock2-released']);
     });
 
-    it("times out when lock cannot be acquired", async () => {
-      const filePath = path.join(TEST_DIR, "test.json");
+    it('times out when lock cannot be acquired', async () => {
+      const filePath = path.join(TEST_DIR, 'test.json');
 
       const release = await acquireLock(filePath);
 
-      await expect(
-        acquireLock(filePath, { timeout: 100, retryInterval: 10 })
-      ).rejects.toThrow(/Failed to acquire lock/);
+      await expect(acquireLock(filePath, { timeout: 100, retryInterval: 10 })).rejects.toThrow(
+        /Failed to acquire lock/,
+      );
 
       release();
     });
 
-    it("breaks stale lock after TTL", async () => {
-      const filePath = path.join(TEST_DIR, "test.json");
+    it('breaks stale lock after TTL', async () => {
+      const filePath = path.join(TEST_DIR, 'test.json');
       const lockPath = getLockPath(filePath);
 
       // Create a stale lock manually
@@ -130,16 +118,16 @@ describe("Atomic + Locked JSON Utilities", () => {
       expect(fs.existsSync(lockPath)).toBe(true);
 
       // Verify it's our lock (has current timestamp)
-      const lockContent = JSON.parse(fs.readFileSync(lockPath, "utf-8"));
+      const lockContent = JSON.parse(fs.readFileSync(lockPath, 'utf-8'));
       expect(lockContent.pid).toBe(process.pid);
 
       release();
     });
   });
 
-  describe("acquireLockSync", () => {
-    it("creates lock file synchronously", () => {
-      const filePath = path.join(TEST_DIR, "test.json");
+  describe('acquireLockSync', () => {
+    it('creates lock file synchronously', () => {
+      const filePath = path.join(TEST_DIR, 'test.json');
       const lockPath = getLockPath(filePath);
 
       const release = acquireLockSync(filePath);
@@ -151,73 +139,71 @@ describe("Atomic + Locked JSON Utilities", () => {
       expect(fs.existsSync(lockPath)).toBe(false);
     });
 
-    it("times out synchronously when lock held", () => {
-      const filePath = path.join(TEST_DIR, "test.json");
+    it('times out synchronously when lock held', () => {
+      const filePath = path.join(TEST_DIR, 'test.json');
 
       const release = acquireLockSync(filePath);
 
-      expect(() =>
-        acquireLockSync(filePath, { timeout: 100, retryInterval: 10 })
-      ).toThrow(/Failed to acquire lock/);
+      expect(() => acquireLockSync(filePath, { timeout: 100, retryInterval: 10 })).toThrow(/Failed to acquire lock/);
 
       release();
     });
   });
 
-  describe("writeAtomic", () => {
-    it("writes file atomically via temp+rename", () => {
-      const filePath = path.join(TEST_DIR, "atomic.txt");
+  describe('writeAtomic', () => {
+    it('writes file atomically via temp+rename', () => {
+      const filePath = path.join(TEST_DIR, 'atomic.txt');
 
-      writeAtomic(filePath, "hello world");
+      writeAtomic(filePath, 'hello world');
 
-      expect(fs.readFileSync(filePath, "utf-8")).toBe("hello world");
+      expect(fs.readFileSync(filePath, 'utf-8')).toBe('hello world');
     });
 
-    it("creates parent directories", () => {
-      const filePath = path.join(TEST_DIR, "nested", "dir", "atomic.txt");
+    it('creates parent directories', () => {
+      const filePath = path.join(TEST_DIR, 'nested', 'dir', 'atomic.txt');
 
-      writeAtomic(filePath, "nested content");
+      writeAtomic(filePath, 'nested content');
 
-      expect(fs.readFileSync(filePath, "utf-8")).toBe("nested content");
+      expect(fs.readFileSync(filePath, 'utf-8')).toBe('nested content');
     });
 
-    it("cleans up temp file on failure", () => {
-      const filePath = path.join(TEST_DIR, "readonly", "fail.txt");
+    it('cleans up temp file on failure', () => {
+      const filePath = path.join(TEST_DIR, 'readonly', 'fail.txt');
 
       // Create readonly directory
-      const readonlyDir = path.join(TEST_DIR, "readonly");
+      const readonlyDir = path.join(TEST_DIR, 'readonly');
       fs.mkdirSync(readonlyDir);
       fs.chmodSync(readonlyDir, 0o444);
 
       try {
-        expect(() => writeAtomic(filePath, "should fail")).toThrow();
+        expect(() => writeAtomic(filePath, 'should fail')).toThrow();
       } finally {
         fs.chmodSync(readonlyDir, 0o755);
       }
 
       // No temp files should remain
       const files = fs.readdirSync(readonlyDir);
-      expect(files.filter((f) => f.includes(".tmp."))).toHaveLength(0);
+      expect(files.filter((f) => f.includes('.tmp.'))).toHaveLength(0);
     });
   });
 
-  describe("writeJsonAtomic", () => {
-    it("writes JSON atomically with formatting", () => {
-      const filePath = path.join(TEST_DIR, "data.json");
-      const data = { foo: "bar", num: 42 };
+  describe('writeJsonAtomic', () => {
+    it('writes JSON atomically with formatting', () => {
+      const filePath = path.join(TEST_DIR, 'data.json');
+      const data = { foo: 'bar', num: 42 };
 
       writeJsonAtomic(filePath, data);
 
-      const content = fs.readFileSync(filePath, "utf-8");
+      const content = fs.readFileSync(filePath, 'utf-8');
       expect(JSON.parse(content)).toEqual(data);
-      expect(content).toContain("\n"); // Formatted
+      expect(content).toContain('\n'); // Formatted
     });
   });
 
-  describe("writeJsonLocked", () => {
-    it("writes JSON with lock protection", async () => {
-      const filePath = path.join(TEST_DIR, "locked.json");
-      const data = { key: "value" };
+  describe('writeJsonLocked', () => {
+    it('writes JSON with lock protection', async () => {
+      const filePath = path.join(TEST_DIR, 'locked.json');
+      const data = { key: 'value' };
 
       await writeJsonLocked(filePath, data);
 
@@ -225,8 +211,8 @@ describe("Atomic + Locked JSON Utilities", () => {
       expect(fs.existsSync(getLockPath(filePath))).toBe(false);
     });
 
-    it("serializes concurrent writes", async () => {
-      const filePath = path.join(TEST_DIR, "concurrent.json");
+    it('serializes concurrent writes', async () => {
+      const filePath = path.join(TEST_DIR, 'concurrent.json');
       const writes: number[] = [];
 
       // Start multiple concurrent writes
@@ -247,9 +233,9 @@ describe("Atomic + Locked JSON Utilities", () => {
     });
   });
 
-  describe("writeJsonLockedSync", () => {
-    it("writes JSON with lock protection synchronously", () => {
-      const filePath = path.join(TEST_DIR, "locked-sync.json");
+  describe('writeJsonLockedSync', () => {
+    it('writes JSON with lock protection synchronously', () => {
+      const filePath = path.join(TEST_DIR, 'locked-sync.json');
       const data = { sync: true };
 
       writeJsonLockedSync(filePath, data);
@@ -259,8 +245,8 @@ describe("Atomic + Locked JSON Utilities", () => {
     });
   });
 
-  describe("deepMerge", () => {
-    it("merges top-level fields", () => {
+  describe('deepMerge', () => {
+    it('merges top-level fields', () => {
       const target: Record<string, unknown> = { a: 1, b: 2 };
       const patch: Record<string, unknown> = { b: 3, c: 4 };
 
@@ -269,24 +255,24 @@ describe("Atomic + Locked JSON Utilities", () => {
       expect(result).toEqual({ a: 1, b: 3, c: 4 });
     });
 
-    it("deep merges nested objects", () => {
+    it('deep merges nested objects', () => {
       const target: Record<string, unknown> = {
-        outer: { inner1: "a", inner2: "b" },
-        other: "x",
+        outer: { inner1: 'a', inner2: 'b' },
+        other: 'x',
       };
       const patch: Record<string, unknown> = {
-        outer: { inner2: "c", inner3: "d" },
+        outer: { inner2: 'c', inner3: 'd' },
       };
 
       const result = deepMerge(target, patch);
 
       expect(result).toEqual({
-        outer: { inner1: "a", inner2: "c", inner3: "d" },
-        other: "x",
+        outer: { inner1: 'a', inner2: 'c', inner3: 'd' },
+        other: 'x',
       });
     });
 
-    it("replaces arrays (no merge)", () => {
+    it('replaces arrays (no merge)', () => {
       const target: Record<string, unknown> = { arr: [1, 2, 3] };
       const patch: Record<string, unknown> = { arr: [4, 5] };
 
@@ -295,7 +281,7 @@ describe("Atomic + Locked JSON Utilities", () => {
       expect(result).toEqual({ arr: [4, 5] });
     });
 
-    it("ignores undefined values in patch", () => {
+    it('ignores undefined values in patch', () => {
       const target: Record<string, unknown> = { a: 1, b: 2 };
       const patch: Record<string, unknown> = { a: undefined, c: 3 };
 
@@ -304,7 +290,7 @@ describe("Atomic + Locked JSON Utilities", () => {
       expect(result).toEqual({ a: 1, b: 2, c: 3 });
     });
 
-    it("allows null to overwrite", () => {
+    it('allows null to overwrite', () => {
       const target: Record<string, unknown> = { a: { nested: true } };
       const patch: Record<string, unknown> = { a: null };
 
@@ -313,18 +299,18 @@ describe("Atomic + Locked JSON Utilities", () => {
       expect(result).toEqual({ a: null });
     });
 
-    it("handles deeply nested objects", () => {
+    it('handles deeply nested objects', () => {
       const target: Record<string, unknown> = {
         level1: {
           level2: {
-            level3: { keep: true, update: "old" },
+            level3: { keep: true, update: 'old' },
           },
         },
       };
       const patch: Record<string, unknown> = {
         level1: {
           level2: {
-            level3: { update: "new", add: true },
+            level3: { update: 'new', add: true },
           },
         },
       };
@@ -334,64 +320,61 @@ describe("Atomic + Locked JSON Utilities", () => {
       expect(result).toEqual({
         level1: {
           level2: {
-            level3: { keep: true, update: "new", add: true },
+            level3: { keep: true, update: 'new', add: true },
           },
         },
       });
     });
   });
 
-  describe("patchJsonLocked", () => {
-    it("patches existing JSON file", async () => {
-      const filePath = path.join(TEST_DIR, "patch.json");
+  describe('patchJsonLocked', () => {
+    it('patches existing JSON file', async () => {
+      const filePath = path.join(TEST_DIR, 'patch.json');
       fs.writeFileSync(filePath, JSON.stringify({ a: 1, b: 2 }));
 
-      const result = await patchJsonLocked<{ a: number; b: number; c?: number }>(
-        filePath,
-        { b: 3, c: 4 }
-      );
+      const result = await patchJsonLocked<{ a: number; b: number; c?: number }>(filePath, { b: 3, c: 4 });
 
       expect(result).toEqual({ a: 1, b: 3, c: 4 });
       expect(readJson<typeof result>(filePath)).toEqual({ a: 1, b: 3, c: 4 });
     });
 
-    it("creates file if not exists", async () => {
-      const filePath = path.join(TEST_DIR, "new-patch.json");
+    it('creates file if not exists', async () => {
+      const filePath = path.join(TEST_DIR, 'new-patch.json');
 
       const result = await patchJsonLocked<{ x: number }>(filePath, { x: 1 });
 
       expect(result).toEqual({ x: 1 });
     });
 
-    it("deep merges nested objects in patch", async () => {
-      const filePath = path.join(TEST_DIR, "nested-patch.json");
+    it('deep merges nested objects in patch', async () => {
+      const filePath = path.join(TEST_DIR, 'nested-patch.json');
       fs.writeFileSync(
         filePath,
         JSON.stringify({
-          status: "pending",
-          workerSession: { sessionId: "abc", attempt: 1 },
-        })
+          status: 'pending',
+          workerSession: { sessionId: 'abc', attempt: 1 },
+        }),
       );
 
       await patchJsonLocked(filePath, {
-        workerSession: { lastHeartbeatAt: "2025-01-01T00:00:00Z" },
+        workerSession: { lastHeartbeatAt: '2025-01-01T00:00:00Z' },
       });
 
       const result = readJson<Record<string, unknown>>(filePath);
       expect(result).toEqual({
-        status: "pending",
+        status: 'pending',
         workerSession: {
-          sessionId: "abc",
+          sessionId: 'abc',
           attempt: 1,
-          lastHeartbeatAt: "2025-01-01T00:00:00Z",
+          lastHeartbeatAt: '2025-01-01T00:00:00Z',
         },
       });
     });
   });
 
-  describe("patchJsonLockedSync", () => {
-    it("patches synchronously", () => {
-      const filePath = path.join(TEST_DIR, "patch-sync.json");
+  describe('patchJsonLockedSync', () => {
+    it('patches synchronously', () => {
+      const filePath = path.join(TEST_DIR, 'patch-sync.json');
       fs.writeFileSync(filePath, JSON.stringify({ x: 1 }));
 
       const result = patchJsonLockedSync<{ x: number; y?: number }>(filePath, {
@@ -402,36 +385,44 @@ describe("Atomic + Locked JSON Utilities", () => {
     });
   });
 
-  describe("normalizePath", () => {
-    it("converts Windows backslashes to forward slashes", () => {
-      expect(normalizePath("C:\\Users\\test\\project")).toBe("C:/Users/test/project");
+  describe('normalizePath', () => {
+    it('converts Windows backslashes to forward slashes', () => {
+      expect(normalizePath('C:\\Users\\test\\project')).toBe('C:/Users/test/project');
     });
 
-    it("leaves Unix paths unchanged", () => {
-      expect(normalizePath("/home/user/project")).toBe("/home/user/project");
+    it('leaves Unix paths unchanged', () => {
+      expect(normalizePath('/home/user/project')).toBe('/home/user/project');
     });
   });
 
-
-
-  describe("getFeaturePath flat layout (canonical)", () => {
-    it("returns canonical flat path when feature exists at new location", () => {
+  describe('getFeaturePath flat layout (canonical)', () => {
+    it('returns canonical flat path when feature exists at new location', () => {
       const flatPath = path.join(TEST_DIR, '.beads', 'artifacts', 'my-feature');
       fs.mkdirSync(flatPath, { recursive: true });
       fs.writeFileSync(
         path.join(flatPath, 'feature.json'),
-        JSON.stringify({ name: 'my-feature', epicBeadId: 'bd-1', status: 'planning', createdAt: new Date().toISOString() })
+        JSON.stringify({
+          name: 'my-feature',
+          epicBeadId: 'bd-1',
+          status: 'planning',
+          createdAt: new Date().toISOString(),
+        }),
       );
 
       expect(getFeaturePath(TEST_DIR, 'my-feature', 'on')).toBe(flatPath);
     });
 
-    it("returns canonical path even if legacy nested path exists", () => {
+    it('returns canonical path even if legacy nested path exists', () => {
       const oldPath = path.join(TEST_DIR, '.beads', 'artifacts', 'features', 'legacy-feature');
       fs.mkdirSync(oldPath, { recursive: true });
       fs.writeFileSync(
         path.join(oldPath, 'feature.json'),
-        JSON.stringify({ name: 'legacy-feature', epicBeadId: 'bd-2', status: 'planning', createdAt: new Date().toISOString() })
+        JSON.stringify({
+          name: 'legacy-feature',
+          epicBeadId: 'bd-2',
+          status: 'planning',
+          createdAt: new Date().toISOString(),
+        }),
       );
 
       const result = getFeaturePath(TEST_DIR, 'legacy-feature', 'on');
@@ -440,7 +431,7 @@ describe("Atomic + Locked JSON Utilities", () => {
       expect(fs.existsSync(oldPath)).toBe(true);
     });
 
-    it("returns canonical path when both canonical and legacy paths exist", () => {
+    it('returns canonical path when both canonical and legacy paths exist', () => {
       const oldPath = path.join(TEST_DIR, '.beads', 'artifacts', 'features', 'conflict-feature');
       const newPath = path.join(TEST_DIR, '.beads', 'artifacts', 'conflict-feature');
 
@@ -457,38 +448,38 @@ describe("Atomic + Locked JSON Utilities", () => {
     });
   });
 
-  describe("sanitizeName", () => {
-    it("allows valid names", () => {
-      expect(sanitizeName("my-feature")).toBe("my-feature");
-      expect(sanitizeName("task_01")).toBe("task_01");
-      expect(sanitizeName("Feature Name")).toBe("Feature Name");
-      expect(sanitizeName("a")).toBe("a");
+  describe('sanitizeName', () => {
+    it('allows valid names', () => {
+      expect(sanitizeName('my-feature')).toBe('my-feature');
+      expect(sanitizeName('task_01')).toBe('task_01');
+      expect(sanitizeName('Feature Name')).toBe('Feature Name');
+      expect(sanitizeName('a')).toBe('a');
     });
 
-    it("rejects empty names", () => {
-      expect(() => sanitizeName("")).toThrow("cannot be empty");
-      expect(() => sanitizeName("   ")).toThrow("cannot be empty");
+    it('rejects empty names', () => {
+      expect(() => sanitizeName('')).toThrow('cannot be empty');
+      expect(() => sanitizeName('   ')).toThrow('cannot be empty');
     });
 
-    it("rejects path separators", () => {
-      expect(() => sanitizeName("../../etc/passwd")).toThrow("path separators");
-      expect(() => sanitizeName("a/b")).toThrow("path separators");
-      expect(() => sanitizeName("a\\b")).toThrow("path separators");
+    it('rejects path separators', () => {
+      expect(() => sanitizeName('../../etc/passwd')).toThrow('path separators');
+      expect(() => sanitizeName('a/b')).toThrow('path separators');
+      expect(() => sanitizeName('a\\b')).toThrow('path separators');
     });
 
-    it("rejects relative path references", () => {
-      expect(() => sanitizeName("..")).toThrow("relative path");
-      expect(() => sanitizeName("..foo")).toThrow("relative path");
+    it('rejects relative path references', () => {
+      expect(() => sanitizeName('..')).toThrow('relative path');
+      expect(() => sanitizeName('..foo')).toThrow('relative path');
     });
 
-    it("rejects dot-prefixed names", () => {
-      expect(() => sanitizeName(".")).toThrow("relative path");
-      expect(() => sanitizeName(".hidden")).toThrow("dot");
+    it('rejects dot-prefixed names', () => {
+      expect(() => sanitizeName('.')).toThrow('relative path');
+      expect(() => sanitizeName('.hidden')).toThrow('dot');
     });
 
-    it("rejects control characters", () => {
-      expect(() => sanitizeName("foo\x00bar")).toThrow("control characters");
-      expect(() => sanitizeName("foo\nbar")).toThrow("control characters");
+    it('rejects control characters', () => {
+      expect(() => sanitizeName('foo\x00bar')).toThrow('control characters');
+      expect(() => sanitizeName('foo\nbar')).toThrow('control characters');
     });
   });
 
@@ -536,7 +527,7 @@ describe("Atomic + Locked JSON Utilities", () => {
           sessionId: 'dead-process-session',
           hostname: os.hostname(),
           lockId: 'dead-lock-id',
-        })
+        }),
       );
       const oldTime = new Date(Date.now() - 60000);
       fs.utimesSync(lockPath, oldTime, oldTime);
@@ -563,14 +554,14 @@ describe("Atomic + Locked JSON Utilities", () => {
           sessionId: 'foreign-session',
           hostname: os.hostname(),
           lockId: 'foreign-lock-id',
-        })
+        }),
       );
       const oldTime = new Date(Date.now() - 60000);
       fs.utimesSync(lockPath, oldTime, oldTime);
 
-      await expect(
-        acquireLock(filePath, { staleLockTTL: 1000, timeout: 120, retryInterval: 20 })
-      ).rejects.toThrow(/Failed to acquire lock/);
+      await expect(acquireLock(filePath, { staleLockTTL: 1000, timeout: 120, retryInterval: 20 })).rejects.toThrow(
+        /Failed to acquire lock/,
+      );
     });
 
     it('reclaims lock when PID probe is inconclusive using TTL fallback', async () => {
@@ -587,7 +578,7 @@ describe("Atomic + Locked JSON Utilities", () => {
           sessionId: 'inconclusive-session',
           hostname: os.hostname(),
           lockId: 'inconclusive-lock-id',
-        })
+        }),
       );
       const oldTime = new Date(Date.now() - 60000);
       fs.utimesSync(lockPath, oldTime, oldTime);
@@ -611,11 +602,8 @@ describe("Atomic + Locked JSON Utilities", () => {
     });
   });
 
-
-
-  describe("beadsMode path resolution", () => {
-
-    describe("getWarcraftDir", () => {
+  describe('beadsMode path resolution', () => {
+    describe('getWarcraftDir', () => {
       it("returns '.beads/artifacts' when beadsMode is 'on'", () => {
         expect(getWarcraftDir('on')).toBe('.beads/artifacts');
       });
@@ -629,7 +617,7 @@ describe("Atomic + Locked JSON Utilities", () => {
       });
     });
 
-    describe("getWarcraftPath", () => {
+    describe('getWarcraftPath', () => {
       it("returns beads artifacts path when beadsMode is 'on'", () => {
         const result = getWarcraftPath('/project', 'on');
         expect(result).toBe(path.join('/project', '.beads', 'artifacts'));
@@ -646,7 +634,7 @@ describe("Atomic + Locked JSON Utilities", () => {
       });
     });
 
-    describe("getFeaturePath (direct)", () => {
+    describe('getFeaturePath (direct)', () => {
       it("returns flat path under beads when beadsMode is 'on'", () => {
         const result = getFeaturePath('/project', 'my-feature', 'on');
         expect(result).toBe(path.join('/project', '.beads', 'artifacts', 'my-feature'));
@@ -658,24 +646,24 @@ describe("Atomic + Locked JSON Utilities", () => {
       });
     });
 
-    describe("getFeaturePath with beadsMode", () => {
-      it("resolves to beads path when feature exists at canonical beads location", () => {
+    describe('getFeaturePath with beadsMode', () => {
+      it('resolves to beads path when feature exists at canonical beads location', () => {
         const beadsPath = path.join(TEST_DIR, '.beads', 'artifacts', 'test-feat');
         fs.mkdirSync(beadsPath, { recursive: true });
         fs.writeFileSync(
           path.join(beadsPath, 'feature.json'),
-          JSON.stringify({ name: 'test-feat', status: 'planning', createdAt: new Date().toISOString() })
+          JSON.stringify({ name: 'test-feat', status: 'planning', createdAt: new Date().toISOString() }),
         );
 
         expect(getFeaturePath(TEST_DIR, 'test-feat', 'on')).toBe(beadsPath);
       });
 
-      it("resolves to docs path when feature exists at canonical path", () => {
+      it('resolves to docs path when feature exists at canonical path', () => {
         const docsPath = path.join(TEST_DIR, 'docs', 'test-feat');
         fs.mkdirSync(docsPath, { recursive: true });
         fs.writeFileSync(
           path.join(docsPath, 'feature.json'),
-          JSON.stringify({ name: 'test-feat', status: 'planning', createdAt: new Date().toISOString() })
+          JSON.stringify({ name: 'test-feat', status: 'planning', createdAt: new Date().toISOString() }),
         );
 
         expect(getFeaturePath(TEST_DIR, 'test-feat', 'off')).toBe(docsPath);
@@ -687,7 +675,7 @@ describe("Atomic + Locked JSON Utilities", () => {
       });
     });
 
-    describe("getPlanPath with beadsMode", () => {
+    describe('getPlanPath with beadsMode', () => {
       it("returns plan.md path under beads when beadsMode is 'on'", () => {
         const result = getPlanPath('/project', 'my-feature', 'on');
         expect(result).toBe(path.join('/project', '.beads', 'artifacts', 'my-feature', 'plan.md'));
@@ -699,7 +687,7 @@ describe("Atomic + Locked JSON Utilities", () => {
       });
     });
 
-    describe("getFeatureJsonPath with beadsMode", () => {
+    describe('getFeatureJsonPath with beadsMode', () => {
       it("returns feature.json path under beads when beadsMode is 'on'", () => {
         const result = getFeatureJsonPath('/project', 'my-feature', 'on');
         expect(result).toBe(path.join('/project', '.beads', 'artifacts', 'my-feature', 'feature.json'));
@@ -711,7 +699,7 @@ describe("Atomic + Locked JSON Utilities", () => {
       });
     });
 
-    describe("listFeatureDirectories with beadsMode", () => {
+    describe('listFeatureDirectories with beadsMode', () => {
       it("lists features from beads location when beadsMode is 'on'", () => {
         // Create features at beads location
         const beadsPath = path.join(TEST_DIR, '.beads', 'artifacts');
@@ -737,27 +725,25 @@ describe("Atomic + Locked JSON Utilities", () => {
         expect(features).toContain('docs-feat-2');
       });
     });
-
-
   });
 
-  describe("task path functions (off-mode only)", () => {
-    it("getTaskPath resolves under docs/", () => {
+  describe('task path functions (off-mode only)', () => {
+    it('getTaskPath resolves under docs/', () => {
       const result = getTaskPath('/project', 'my-feature', '01-task');
       expect(result).toBe(path.join('/project', 'docs', 'my-feature', 'tasks', '01-task'));
     });
 
-    it("getTaskStatusPath resolves status.json under docs/", () => {
+    it('getTaskStatusPath resolves status.json under docs/', () => {
       const result = getTaskStatusPath('/project', 'my-feature', '01-task');
       expect(result).toBe(path.join('/project', 'docs', 'my-feature', 'tasks', '01-task', 'status.json'));
     });
 
-    it("getTaskReportPath resolves report.md under docs/", () => {
+    it('getTaskReportPath resolves report.md under docs/', () => {
       const result = getTaskReportPath('/project', 'my-feature', '01-task');
       expect(result).toBe(path.join('/project', 'docs', 'my-feature', 'tasks', '01-task', 'report.md'));
     });
 
-    it("getTaskSpecPath resolves spec.md under docs/", () => {
+    it('getTaskSpecPath resolves spec.md under docs/', () => {
       const result = getTaskSpecPath('/project', 'my-feature', '01-task');
       expect(result).toBe(path.join('/project', 'docs', 'my-feature', 'tasks', '01-task', 'spec.md'));
     });

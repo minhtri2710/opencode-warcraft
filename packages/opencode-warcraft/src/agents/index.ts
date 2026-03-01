@@ -10,14 +10,13 @@
  * - Algalon (Consultant/Reviewer): Reviews plan quality
  */
 
+export { ALGALON_PROMPT, algalonAgent } from './algalon.js';
+export { BRANN_PROMPT, brannAgent } from './brann.js';
 // Specialist agents (lean, focused)
-export { khadgarAgent, KHADGAR_PROMPT } from './khadgar.js';
-export { mimironAgent, MIMIRON_PROMPT } from './mimiron.js';
-export { saurfangAgent, SAURFANG_PROMPT } from './saurfang.js';
-export { brannAgent, BRANN_PROMPT } from './brann.js';
-export { mekkatorqueAgent, MEKKATORQUE_PROMPT } from './mekkatorque.js';
-export { algalonAgent, ALGALON_PROMPT } from './algalon.js';
-
+export { KHADGAR_PROMPT, khadgarAgent } from './khadgar.js';
+export { MEKKATORQUE_PROMPT, mekkatorqueAgent } from './mekkatorque.js';
+export { MIMIRON_PROMPT, mimironAgent } from './mimiron.js';
+export { SAURFANG_PROMPT, saurfangAgent } from './saurfang.js';
 
 /**
  * Agent registry for OpenCode plugin

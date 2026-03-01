@@ -1,6 +1,6 @@
 /**
  * Unit tests for the chat.message hook variant injection.
- * 
+ *
  * Tests:
  * - Applies configured variant to Warcraft agents
  * - Does not override already-set variant
@@ -8,8 +8,8 @@
  * - Handles empty/whitespace-only variants
  */
 
-import { describe, it, expect } from 'bun:test';
-import { normalizeVariant, createVariantHook, WARCRAFT_AGENT_NAMES } from './variant-hook.js';
+import { describe, expect, it } from 'bun:test';
+import { createVariantHook, normalizeVariant, WARCRAFT_AGENT_NAMES } from './variant-hook.js';
 
 // ============================================================================
 // normalizeVariant tests
@@ -73,7 +73,7 @@ describe('createVariantHook', () => {
   describe('applies variant to Warcraft agents', () => {
     it('sets variant when message has no variant and agent has configured variant', async () => {
       const configService = createMockConfigService({
-        'mekkatorque': 'high',
+        mekkatorque: 'high',
       });
 
       const hook = createVariantHook(configService as any);
@@ -95,12 +95,12 @@ describe('createVariantHook', () => {
 
     it('applies variant to all Warcraft agents', async () => {
       const configService = createMockConfigService({
-        'khadgar': 'max',
-        'mimiron': 'high',
-        'saurfang': 'medium',
-        'brann': 'low',
-        'mekkatorque': 'high',
-        'algalon': 'medium',
+        khadgar: 'max',
+        mimiron: 'high',
+        saurfang: 'medium',
+        brann: 'low',
+        mekkatorque: 'high',
+        algalon: 'medium',
       });
 
       const hook = createVariantHook(configService as any);
@@ -108,10 +108,7 @@ describe('createVariantHook', () => {
       for (const agentName of WARCRAFT_AGENT_NAMES) {
         const output = createOutput(undefined);
 
-        await hook(
-          { sessionID: 'session-123', agent: agentName },
-          output,
-        );
+        await hook({ sessionID: 'session-123', agent: agentName }, output);
 
         expect(output.message.variant).toBeDefined();
       }
@@ -121,17 +118,14 @@ describe('createVariantHook', () => {
   describe('respects explicit variant', () => {
     it('does not override already-set variant', async () => {
       const configService = createMockConfigService({
-        'mekkatorque': 'high',
+        mekkatorque: 'high',
       });
 
       const hook = createVariantHook(configService as any);
 
       const output = createOutput('low'); // Already set
 
-      await hook(
-        { sessionID: 'session-123', agent: 'mekkatorque', variant: 'low' },
-        output,
-      );
+      await hook({ sessionID: 'session-123', agent: 'mekkatorque', variant: 'low' }, output);
 
       // Should remain 'low', not overridden to 'high'
       expect(output.message.variant).toBe('low');
@@ -141,24 +135,21 @@ describe('createVariantHook', () => {
   describe('does not apply to non-Warcraft agents', () => {
     it('does not set variant for unknown agent', async () => {
       const configService = createMockConfigService({
-        'mekkatorque': 'high',
+        mekkatorque: 'high',
       });
 
       const hook = createVariantHook(configService as any);
 
       const output = createOutput(undefined);
 
-      await hook(
-        { sessionID: 'session-123', agent: 'some-other-agent' },
-        output,
-      );
+      await hook({ sessionID: 'session-123', agent: 'some-other-agent' }, output);
 
       expect(output.message.variant).toBeUndefined();
     });
 
     it('does not set variant for built-in OpenCode agents', async () => {
       const configService = createMockConfigService({
-        'mekkatorque': 'high',
+        mekkatorque: 'high',
       });
 
       const hook = createVariantHook(configService as any);
@@ -168,10 +159,7 @@ describe('createVariantHook', () => {
       for (const agentName of builtinAgents) {
         const output = createOutput(undefined);
 
-        await hook(
-          { sessionID: 'session-123', agent: agentName },
-          output,
-        );
+        await hook({ sessionID: 'session-123', agent: agentName }, output);
 
         expect(output.message.variant).toBeUndefined();
       }
@@ -181,17 +169,14 @@ describe('createVariantHook', () => {
   describe('handles edge cases', () => {
     it('handles missing agent in input', async () => {
       const configService = createMockConfigService({
-        'mekkatorque': 'high',
+        mekkatorque: 'high',
       });
 
       const hook = createVariantHook(configService as any);
 
       const output = createOutput(undefined);
 
-      await hook(
-        { sessionID: 'session-123', agent: undefined },
-        output,
-      );
+      await hook({ sessionID: 'session-123', agent: undefined }, output);
 
       // Should not crash, should not set variant (no agent to look up)
       expect(output.message.variant).toBeUndefined();
@@ -199,17 +184,14 @@ describe('createVariantHook', () => {
 
     it('handles empty variant config', async () => {
       const configService = createMockConfigService({
-        'mekkatorque': '', // Empty string
+        mekkatorque: '', // Empty string
       });
 
       const hook = createVariantHook(configService as any);
 
       const output = createOutput(undefined);
 
-      await hook(
-        { sessionID: 'session-123', agent: 'mekkatorque' },
-        output,
-      );
+      await hook({ sessionID: 'session-123', agent: 'mekkatorque' }, output);
 
       // Empty string should be treated as unset
       expect(output.message.variant).toBeUndefined();
@@ -217,17 +199,14 @@ describe('createVariantHook', () => {
 
     it('handles whitespace-only variant config', async () => {
       const configService = createMockConfigService({
-        'mekkatorque': '   ', // Whitespace only
+        mekkatorque: '   ', // Whitespace only
       });
 
       const hook = createVariantHook(configService as any);
 
       const output = createOutput(undefined);
 
-      await hook(
-        { sessionID: 'session-123', agent: 'mekkatorque' },
-        output,
-      );
+      await hook({ sessionID: 'session-123', agent: 'mekkatorque' }, output);
 
       // Whitespace-only should be treated as unset
       expect(output.message.variant).toBeUndefined();
@@ -235,17 +214,14 @@ describe('createVariantHook', () => {
 
     it('handles undefined variant config', async () => {
       const configService = createMockConfigService({
-        'mekkatorque': undefined,
+        mekkatorque: undefined,
       });
 
       const hook = createVariantHook(configService as any);
 
       const output = createOutput(undefined);
 
-      await hook(
-        { sessionID: 'session-123', agent: 'mekkatorque' },
-        output,
-      );
+      await hook({ sessionID: 'session-123', agent: 'mekkatorque' }, output);
 
       // Undefined should be treated as unset
       expect(output.message.variant).toBeUndefined();
@@ -253,17 +229,14 @@ describe('createVariantHook', () => {
 
     it('trims variant before applying', async () => {
       const configService = createMockConfigService({
-        'mekkatorque': '  high  ', // Has whitespace
+        mekkatorque: '  high  ', // Has whitespace
       });
 
       const hook = createVariantHook(configService as any);
 
       const output = createOutput(undefined);
 
-      await hook(
-        { sessionID: 'session-123', agent: 'mekkatorque' },
-        output,
-      );
+      await hook({ sessionID: 'session-123', agent: 'mekkatorque' }, output);
 
       // Should be trimmed
       expect(output.message.variant).toBe('high');

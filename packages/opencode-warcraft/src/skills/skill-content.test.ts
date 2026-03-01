@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 import { BUILTIN_SKILLS } from './registry.generated.js';
 
 describe('skill content', () => {
@@ -7,9 +7,7 @@ describe('skill content', () => {
 
     expect(skill).toBeDefined();
     expect(skill!.template).toContain('task({');
-    expect(skill!.template).toContain(
-      'Parallelize by issuing multiple task() calls in the same assistant message.'
-    );
+    expect(skill!.template).toContain('Parallelize by issuing multiple task() calls in the same assistant message.');
   });
 
   it('includes task() parallel guidance for dispatching-parallel-agents', () => {
@@ -17,8 +15,6 @@ describe('skill content', () => {
 
     expect(skill).toBeDefined();
     expect(skill!.template).toContain('task({');
-    expect(skill!.template).toContain(
-      'Parallelize by issuing multiple task() calls in the same assistant message.'
-    );
+    expect(skill!.template).toContain('Parallelize by issuing multiple task() calls in the same assistant message.');
   });
 });

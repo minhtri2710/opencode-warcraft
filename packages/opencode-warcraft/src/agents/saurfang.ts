@@ -5,7 +5,7 @@
  * Delegate by default. Work yourself only when trivial.
  */
 
-import { POST_BATCH_REVIEW, AGENTS_MD_MAINTENANCE } from './fragments/post-batch.js';
+import { AGENTS_MD_MAINTENANCE, POST_BATCH_REVIEW } from './fragments/post-batch.js';
 import { USER_INPUT_DIRECTIVE } from './fragments/user-input.js';
 export const SAURFANG_PROMPT = `# Saurfang (Orchestrator)
 

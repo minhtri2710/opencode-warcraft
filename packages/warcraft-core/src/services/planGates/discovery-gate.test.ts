@@ -1,9 +1,9 @@
-import { describe, test, expect } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import { validateDiscoverySection } from './discovery-gate.js';
 
 /**
  * Discovery Gate Tests
- * 
+ *
  * The discovery gate ensures plan writers include substantive discovery
  * documentation before proceeding to implementation planning.
  */
@@ -19,7 +19,7 @@ This is a plan without discovery.
 - Step 1
 - Step 2
 `;
-    
+
     const result = validateDiscoverySection(content);
     expect(result).toContain('BLOCKED: Discovery section required');
     expect(result).toContain('## Discovery');
@@ -34,7 +34,7 @@ This is a plan without discovery.
 - Step 1
 - Step 2
 `;
-    
+
     const result = validateDiscoverySection(content);
     expect(result).toContain('BLOCKED: Discovery section is too thin');
     expect(result).toContain('0 chars, minimum 100');
@@ -49,7 +49,7 @@ Just a short note here.
 ## Implementation
 - Step 1
 `;
-    
+
     const result = validateDiscoverySection(content);
     expect(result).toContain('BLOCKED: Discovery section is too thin');
     expect(result).toContain('minimum 100');
@@ -64,7 +64,7 @@ Hidden discovery that should not count.
 ## Implementation
 - Step 1
 `;
-    
+
     const result = validateDiscoverySection(content);
     expect(result).toContain('BLOCKED: Discovery section required');
   });
@@ -78,7 +78,7 @@ This is not the right header.
 ## Implementation
 - Step 1
 `;
-    
+
     const result = validateDiscoverySection(content);
     expect(result).toContain('BLOCKED: Discovery section required');
   });
@@ -92,7 +92,7 @@ This header has extra text after Discovery.
 ## Implementation
 - Step 1
 `;
-    
+
     const result = validateDiscoverySection(content);
     expect(result).toContain('BLOCKED: Discovery section required');
   });
@@ -109,7 +109,7 @@ Researched existing auth patterns in src/lib/auth.ts:45-120. Found AuthProvider 
 - Step 1
 - Step 2
 `;
-    
+
     const result = validateDiscoverySection(content);
     expect(result).toBeNull(); // Should pass
   });
@@ -126,7 +126,7 @@ Asked user about authentication requirements. They confirmed OAuth2 with PKCE fl
 Researched existing auth patterns in src/lib/auth.ts:45-120. Found AuthProvider component that handles token refresh.
 Key decision: Reuse AuthProvider instead of creating new component.
 `;
-    
+
     const result = validateDiscoverySection(content);
     expect(result).toBeNull(); // Should pass
   });
@@ -141,7 +141,7 @@ This is exactly 100 characters of discovery content that should pass the validat
 ## Implementation
 This should not be counted as part of discovery.
 `;
-    
+
     const result = validateDiscoverySection(content);
     expect(result).toBeNull(); // Should pass
   });
@@ -157,7 +157,7 @@ Researched existing auth patterns in src/lib/auth.ts:45-120. Found AuthProvider 
 ## Implementation
 - Step 1
 `;
-    
+
     const result = validateDiscoverySection(content);
     expect(result).toBeNull(); // Should pass
   });

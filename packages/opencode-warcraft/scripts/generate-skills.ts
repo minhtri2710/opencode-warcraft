@@ -1,10 +1,10 @@
 #!/usr/bin/env bun
 /**
  * Generate skills registry from markdown files.
- * 
+ *
  * Reads skill markdown from:
  * - packages/opencode-warcraft/skills/[dir]/SKILL.md
- * 
+ *
  * Outputs: packages/opencode-warcraft/src/skills/registry.generated.ts
  */
 
@@ -24,8 +24,7 @@ interface SkillEntry {
 function stripQuotes(value: string): string {
   const trimmed = value.trim();
   // Handle both single and double quotes
-  if ((trimmed.startsWith('"') && trimmed.endsWith('"')) ||
-      (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
+  if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
     return trimmed.slice(1, -1);
   }
   return trimmed;
@@ -141,15 +140,17 @@ function main() {
   // Generate the registry file
   const outputPath = path.join(rootDir, 'packages/opencode-warcraft/src/skills/registry.generated.ts');
 
-  const namesList = skills.map(s => JSON.stringify(s.name)).join(', ');
+  const namesList = skills.map((s) => JSON.stringify(s.name)).join(', ');
 
-  const skillsArray = skills.map(s => {
-    return `  {
+  const skillsArray = skills
+    .map((s) => {
+      return `  {
     name: ${JSON.stringify(s.name)},
     description: ${JSON.stringify(s.description)},
     template: ${JSON.stringify(s.template)},
   }`;
-  }).join(',\n');
+    })
+    .join(',\n');
 
   const output = `/**
  * AUTO-GENERATED FILE - DO NOT EDIT

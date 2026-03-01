@@ -4,10 +4,10 @@
  * Verifies skill ID validation, search path order, and YAML frontmatter parsing.
  */
 
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'node:fs';
-import * as path from 'node:path';
 import * as os from 'node:os';
+import * as path from 'node:path';
 import { loadFileSkill } from './file-loader.js';
 
 // ============================================================================

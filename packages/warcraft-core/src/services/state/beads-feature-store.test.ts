@@ -10,7 +10,9 @@ function createTempProjectRoot(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'warcraft-feature-store-'));
 }
 
-function initFailure(message: string = 'Failed to initialize beads repository [BR_INIT_FAILED]: br command failed'): RepositoryError {
+function initFailure(
+  message: string = 'Failed to initialize beads repository [BR_INIT_FAILED]: br command failed',
+): RepositoryError {
   return new RepositoryError('gateway_error', `Bead gateway error: ${message}`);
 }
 

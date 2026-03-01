@@ -1,11 +1,8 @@
-import {
-  sanitizeName,
-  getPlanPath,
-} from '../utils/paths.js';
+import type { BeadsMode, FeatureInfo, FeatureJson, FeatureStatusType, TaskInfo } from '../types.js';
 import { fileExists } from '../utils/fs.js';
-import type { FeatureJson, FeatureStatusType, TaskInfo, FeatureInfo, BeadsMode } from '../types.js';
-import type { FeatureStore } from './state/types.js';
+import { getPlanPath, sanitizeName } from '../utils/paths.js';
 import type { PlanService } from './planService.js';
+import type { FeatureStore } from './state/types.js';
 
 export class FeatureService {
   constructor(
@@ -125,9 +122,7 @@ export class FeatureService {
     const immutableKeys: Array<keyof FeatureJson> = ['name', 'epicBeadId', 'createdAt'];
     const blockedKeys = immutableKeys.filter((key) => patch[key] !== undefined);
     if (blockedKeys.length > 0) {
-      console.warn(
-        `[warcraft] Ignoring immutable feature metadata fields: ${blockedKeys.join(', ')}`,
-      );
+      console.warn(`[warcraft] Ignoring immutable feature metadata fields: ${blockedKeys.join(', ')}`);
     }
 
     const mutablePatch: Partial<FeatureJson> = { ...patch };

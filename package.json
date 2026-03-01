@@ -15,8 +15,13 @@
   "scripts": {
     "build": "bun run --filter warcraft-core build && bun run --filter opencode-warcraft build",
     "test": "bun run --filter '*' test",
-    "lint": "bun run --filter warcraft-core typecheck && bun run --filter opencode-warcraft typecheck",
+    "lint": "bun run --filter warcraft-core typecheck && bun run --filter opencode-warcraft typecheck && bunx biome check .",
+    "format": "bunx biome check --write .",
+    "format:check": "bunx biome check .",
     "release:check": "bun install --frozen-lockfile && bun run build && bun run test && bun run lint"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.4"
+  }
 }

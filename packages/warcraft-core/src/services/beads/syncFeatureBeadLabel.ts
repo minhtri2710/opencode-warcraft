@@ -1,6 +1,6 @@
 import type { BeadsModeProvider } from '../../types.js';
-import { getFeatureJsonPath } from '../../utils/paths.js';
 import { readJson } from '../../utils/fs.js';
+import { getFeatureJsonPath } from '../../utils/paths.js';
 
 interface FeatureBeadLabelClient {
   addLabel(beadId: string, label: string): void;

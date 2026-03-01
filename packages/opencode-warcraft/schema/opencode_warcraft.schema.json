@@ -82,10 +82,7 @@
     },
     "agentMode": {
       "type": "string",
-      "enum": [
-        "unified",
-        "dedicated"
-      ],
+      "enum": ["unified", "dedicated"],
       "default": "unified",
       "description": "Agent specialization mode. 'unified' (default) uses a single hybrid agent for all roles; 'dedicated' uses specialized agents for each role."
     },

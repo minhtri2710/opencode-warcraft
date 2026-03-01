@@ -14,14 +14,9 @@ Your plan must include a \`## Discovery\` section documenting:
 Add this section to your plan content and try again.`;
   }
 
-  const afterDiscovery = content.slice(
-    discoveryMatch.index! + discoveryMatch[0].length,
-  );
+  const afterDiscovery = content.slice(discoveryMatch.index! + discoveryMatch[0].length);
   const nextHeading = afterDiscovery.search(/^##\s+/m);
-  const discoveryContent =
-    nextHeading > -1
-      ? afterDiscovery.slice(0, nextHeading).trim()
-      : afterDiscovery.trim();
+  const discoveryContent = nextHeading > -1 ? afterDiscovery.slice(0, nextHeading).trim() : afterDiscovery.trim();
 
   const minLength = workflowPath === 'lightweight' ? 40 : 100;
   if (discoveryContent.length < minLength) {

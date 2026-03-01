@@ -1,7 +1,7 @@
-import { describe, expect, test, beforeEach, afterEach } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import * as fs from 'fs';
-import * as path from 'path';
 import * as os from 'os';
+import * as path from 'path';
 
 // Test the updateJsonLockedSync function by importing from warcraft-core
 import { updateJsonLockedSync } from 'warcraft-core';
@@ -26,11 +26,7 @@ describe('metadata update with atomic locking', () => {
     const filePath = path.join(tempDir, 'test.json');
     const fallback = { version: 1, count: 0 };
 
-    const result = updateJsonLockedSync(
-      filePath,
-      (current) => ({ ...current, count: current.count + 1 }),
-      fallback
-    );
+    const result = updateJsonLockedSync(filePath, (current) => ({ ...current, count: current.count + 1 }), fallback);
 
     expect(result).toEqual({ version: 1, count: 1 });
     expect(JSON.parse(fs.readFileSync(filePath, 'utf-8'))).toEqual({ version: 1, count: 1 });
@@ -40,11 +36,10 @@ describe('metadata update with atomic locking', () => {
     const filePath = path.join(tempDir, 'test.json');
     fs.writeFileSync(filePath, JSON.stringify({ version: 1, count: 5 }));
 
-    const result = updateJsonLockedSync(
-      filePath,
-      (current) => ({ ...current, count: current.count + 1 }),
-      { version: 1, count: 0 }
-    );
+    const result = updateJsonLockedSync(filePath, (current) => ({ ...current, count: current.count + 1 }), {
+      version: 1,
+      count: 0,
+    });
 
     expect(result).toEqual({ version: 1, count: 6 });
     expect(JSON.parse(fs.readFileSync(filePath, 'utf-8'))).toEqual({ version: 1, count: 6 });
@@ -53,7 +48,7 @@ describe('metadata update with atomic locking', () => {
   test('concurrent updates do not lose data', async () => {
     const filePath = path.join(tempDir, 'concurrent.json');
     const initial = { counter: 0, updates: [] as number[] };
-    
+
     // Create initial file
     fs.writeFileSync(filePath, JSON.stringify(initial));
 
@@ -73,18 +68,18 @@ describe('metadata update with atomic locking', () => {
                 counter: current.counter + 1,
                 updates: [...current.updates, worker],
               }),
-              initial
+              initial,
             );
           }
           resolve();
-        })
+        }),
       );
     }
 
     await Promise.all(promises);
 
     const final = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-    
+
     // Counter should reflect all updates (no lost updates)
     expect(final.counter).toBe(workerCount * updatesPerWorker);
     expect(final.updates.length).toBe(workerCount * updatesPerWorker);
@@ -101,7 +96,7 @@ describe('metadata update with atomic locking', () => {
         () => {
           throw new Error('Updater error');
         },
-        { valid: false }
+        { valid: false },
       );
     }).toThrow('Updater error');
 
@@ -111,14 +106,14 @@ describe('metadata update with atomic locking', () => {
 
   test('returns updated data from updater function', () => {
     const filePath = path.join(tempDir, 'return.json');
-    
+
     const result = updateJsonLockedSync(
       filePath,
       (current) => {
         const next = { ...current, value: (current.value || 0) + 10 };
         return next;
       },
-      { value: 0 }
+      { value: 0 },
     );
 
     expect(result).toEqual({ value: 10 });

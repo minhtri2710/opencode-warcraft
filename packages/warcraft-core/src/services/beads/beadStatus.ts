@@ -1,4 +1,4 @@
-import type { TaskStatusType, FeatureStatusType } from '../../types.js';
+import type { FeatureStatusType, TaskStatusType } from '../../types.js';
 
 /**
  * Map bead status to task status.
@@ -21,8 +21,6 @@ export function mapBeadStatusToTaskStatus(beadStatus: string): TaskStatusType {
     case 'blocked':
     case 'deferred':
       return 'blocked';
-    case 'open':
-    case 'pinned':
     default:
       return 'pending';
   }
@@ -49,7 +47,6 @@ export function mapBeadStatusToFeatureStatus(beadStatus: string): FeatureStatusT
     case 'hooked':
     case 'review':
       return 'executing';
-    case 'open':
     default:
       return 'planning';
   }

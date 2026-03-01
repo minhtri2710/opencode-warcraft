@@ -1,14 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
+import * as childProcess from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import * as childProcess from 'child_process';
-import { BeadsRepository } from './beads/BeadsRepository.js';
+import type { BeadsRepository } from './beads/BeadsRepository.js';
 import { FeatureService } from './featureService';
 import { PlanService } from './planService.js';
 import { createStores } from './state/index.js';
 import { TaskService } from './taskService.js';
-
 
 let testRoot = '';
 
@@ -28,22 +27,24 @@ function createMockRepository(overrides: Partial<BeadsRepository> = {}): BeadsRe
   const defaultRepo: BeadsRepository = {
     createEpic: () => ({ success: true, value: 'bd-epic-1' }),
     closeBead: () => ({ success: true, value: undefined }),
-    getGateway: () => ({
-      createEpic: () => 'bd-epic-1',
-      closeBead: () => {},
-      flushArtifacts: () => {},
-      readArtifact: () => null,
-      upsertArtifact: () => {},
-      readDescription: () => null,
-      updateDescription: () => {},
-      addComment: () => {},
-      addLabel: () => {},
-      list: () => [{ id: 'bd-epic-1', title: 'test-feature', status: 'open', type: 'epic' }],
-      show: () => ({ id: 'bd-epic-1', title: 'test-feature', status: 'open', created_at: '2024-01-01T00:00:00Z' }),
-    } as any),
-    getViewerGateway: () => ({
-      getRobotPlan: () => ({ success: false, error: new Error('Not implemented') }),
-    } as any),
+    getGateway: () =>
+      ({
+        createEpic: () => 'bd-epic-1',
+        closeBead: () => {},
+        flushArtifacts: () => {},
+        readArtifact: () => null,
+        upsertArtifact: () => {},
+        readDescription: () => null,
+        updateDescription: () => {},
+        addComment: () => {},
+        addLabel: () => {},
+        list: () => [{ id: 'bd-epic-1', title: 'test-feature', status: 'open', type: 'epic' }],
+        show: () => ({ id: 'bd-epic-1', title: 'test-feature', status: 'open', created_at: '2024-01-01T00:00:00Z' }),
+      }) as any,
+    getViewerGateway: () =>
+      ({
+        getRobotPlan: () => ({ success: false, error: new Error('Not implemented') }),
+      }) as any,
     getEpicByFeatureName: () => ({ success: true, value: 'bd-epic-1' }),
     getFeatureState: () => ({ success: true, value: null }),
     setFeatureState: () => ({ success: true, value: undefined }),
@@ -73,9 +74,9 @@ function createMockRepository(overrides: Partial<BeadsRepository> = {}): BeadsRe
 
 describe('FeatureService flat layout', () => {
   it('creates features at canonical flat path', () => {
-  const mockRepository = createMockRepository({
-    createEpic: () => 'bd-epic-1',
-  });
+    const mockRepository = createMockRepository({
+      createEpic: () => 'bd-epic-1',
+    });
 
     // Use offMode to test filesystem-only behavior
     const stores = createStores(testRoot, 'off', mockRepository);
@@ -96,9 +97,9 @@ describe('FeatureService flat layout', () => {
   });
 
   it('lists features from canonical flat path excluding .worktrees', () => {
-  const mockRepository = createMockRepository({
-    createEpic: (name) => `bd-${name}`,
-  });
+    const mockRepository = createMockRepository({
+      createEpic: (name) => `bd-${name}`,
+    });
 
     // Use offMode to test filesystem-only behavior
     const stores = createStores(testRoot, 'off', mockRepository);
@@ -120,15 +121,20 @@ describe('FeatureService flat layout', () => {
   });
 
   it('does not resolve features from legacy nested path', () => {
-  const mockRepository = createMockRepository({
-    createEpic: () => 'bd-epic-1',
-  });
+    const mockRepository = createMockRepository({
+      createEpic: () => 'bd-epic-1',
+    });
 
     const legacyPath = path.join(testRoot, 'docs', 'features', 'legacy-feature');
     fs.mkdirSync(legacyPath, { recursive: true });
     fs.writeFileSync(
       path.join(legacyPath, 'feature.json'),
-      JSON.stringify({ name: 'legacy-feature', epicBeadId: 'bd-1', status: 'planning', createdAt: new Date().toISOString() })
+      JSON.stringify({
+        name: 'legacy-feature',
+        epicBeadId: 'bd-1',
+        status: 'planning',
+        createdAt: new Date().toISOString(),
+      }),
     );
 
     const stores = createStores(testRoot, 'off', mockRepository);
@@ -140,16 +146,21 @@ describe('FeatureService flat layout', () => {
   });
 
   it('does not list legacy nested features directory entries', () => {
-  const mockRepository = createMockRepository({
-    createEpic: () => 'bd-epic-1',
-  });
+    const mockRepository = createMockRepository({
+      createEpic: () => 'bd-epic-1',
+    });
 
     // Create features at legacy locations
     const legacyPath1 = path.join(testRoot, 'docs', 'features', 'feature-1');
     fs.mkdirSync(legacyPath1, { recursive: true });
     fs.writeFileSync(
       path.join(legacyPath1, 'feature.json'),
-      JSON.stringify({ name: 'feature-1', epicBeadId: 'bd-1', status: 'planning', createdAt: new Date().toISOString() })
+      JSON.stringify({
+        name: 'feature-1',
+        epicBeadId: 'bd-1',
+        status: 'planning',
+        createdAt: new Date().toISOString(),
+      }),
     );
 
     // Use offMode to test filesystem-only behavior
@@ -181,17 +192,20 @@ describe('FeatureService.create', () => {
   });
 
   it('rolls back partial filesystem state when initialization fails after epic creation', () => {
-  const mockRepository = createMockRepository({
-    createEpic: () => 'bd-epic-1',
-  });
+    const mockRepository = createMockRepository({
+      createEpic: () => 'bd-epic-1',
+    });
 
     const originalMkdirSync = fs.mkdirSync;
-    const mkdirSpy = spyOn(fs, 'mkdirSync').mockImplementation(((target: fs.PathLike, options?: fs.MakeDirectoryOptions | null | undefined): string | void => {
+    const mkdirSpy = spyOn(fs, 'mkdirSync').mockImplementation(((
+      target: fs.PathLike,
+      options?: fs.MakeDirectoryOptions | null | undefined,
+    ): string | undefined => {
       const targetPath = String(target);
       if (targetPath.endsWith(`${path.sep}context`)) {
         throw new Error('simulated mkdir failure');
       }
-      return originalMkdirSync(target, options as fs.MakeDirectoryOptions) as string | void;
+      return originalMkdirSync(target, options as fs.MakeDirectoryOptions) as string | undefined;
     }) as typeof fs.mkdirSync);
 
     try {
@@ -221,7 +235,9 @@ describe('FeatureService.create', () => {
       Promise.resolve().then(() => service.create('race-feature')),
     ]);
 
-    const fulfilled = results.filter((result): result is PromiseFulfilledResult<unknown> => result.status === 'fulfilled');
+    const fulfilled = results.filter(
+      (result): result is PromiseFulfilledResult<unknown> => result.status === 'fulfilled',
+    );
     const rejected = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
 
     expect(fulfilled).toHaveLength(1);
@@ -247,7 +263,9 @@ describe('FeatureService.create', () => {
       Promise.resolve().then(() => service.create('race-feature')),
     ]);
 
-    const fulfilled = results.filter((result): result is PromiseFulfilledResult<unknown> => result.status === 'fulfilled');
+    const fulfilled = results.filter(
+      (result): result is PromiseFulfilledResult<unknown> => result.status === 'fulfilled',
+    );
     const rejected = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
 
     expect(fulfilled).toHaveLength(1);
@@ -262,7 +280,7 @@ describe('FeatureService.complete', () => {
     // Track repository method calls
     const closeCalls: Array<string> = [];
     const mockRepository = createMockRepository({
-      createEpic: (name: string, priority: number) => ({ success: true, value: 'bd-epic-1' }),
+      createEpic: (_name: string, _priority: number) => ({ success: true, value: 'bd-epic-1' }),
       closeBead: (beadId: string) => {
         closeCalls.push(beadId);
         return { success: true, value: undefined };
@@ -292,7 +310,7 @@ describe('FeatureService.complete', () => {
     const stores = createStores(testRoot, 'off', mockRepository);
     const planService = new PlanService(testRoot, stores.planStore, 'off');
     const service = new FeatureService(testRoot, stores.featureStore, planService, 'off');
-    const feature = service.create('my-feature');
+    const _feature = service.create('my-feature');
     service.complete('my-feature');
 
     expect(closeCalls).toHaveLength(0);
@@ -327,9 +345,9 @@ describe('FeatureService beadsMode off', () => {
   });
 
   it('gets features from filesystem when beadsMode is off', () => {
-  const mockRepository = createMockRepository({
-    createEpic: () => 'bd-epic-1',
-  });
+    const mockRepository = createMockRepository({
+      createEpic: () => 'bd-epic-1',
+    });
 
     // Setup spy BEFORE creating service to catch all calls
     const execSpy = spyOn(childProcess, 'execFileSync');
@@ -352,9 +370,9 @@ describe('FeatureService beadsMode off', () => {
   });
 
   it('lists features from filesystem when beadsMode is off', () => {
-  const mockRepository = createMockRepository({
-    createEpic: () => 'bd-epic-1',
-  });
+    const mockRepository = createMockRepository({
+      createEpic: () => 'bd-epic-1',
+    });
 
     // Setup spy BEFORE creating service to catch all calls
     const execSpy = spyOn(childProcess, 'execFileSync');
@@ -402,20 +420,21 @@ describe('FeatureService beadsMode on', () => {
 
   it('uses BeadGateway for get when beadsMode is on', () => {
     const mockRepository = createMockRepository({
-      createEpic: (name: string, priority: number) => ({ success: true, value: 'bd-epic-1' }),
-      getGateway: () => ({
-        createEpic: () => 'bd-epic-1',
-        closeBead: () => {},
-        flushArtifacts: () => {},
-        readArtifact: () => null,
-        upsertArtifact: () => {},
-        readDescription: () => null,
-        updateDescription: () => {},
-        addComment: () => {},
-        addLabel: () => {},
-        list: () => [],
-        show: () => ({ id: 'bd-epic-1', title: 'my-feature', status: 'open', created_at: '2024-01-01T00:00:00Z' }),
-      } as any),
+      createEpic: (_name: string, _priority: number) => ({ success: true, value: 'bd-epic-1' }),
+      getGateway: () =>
+        ({
+          createEpic: () => 'bd-epic-1',
+          closeBead: () => {},
+          flushArtifacts: () => {},
+          readArtifact: () => null,
+          upsertArtifact: () => {},
+          readDescription: () => null,
+          updateDescription: () => {},
+          addComment: () => {},
+          addLabel: () => {},
+          list: () => [],
+          show: () => ({ id: 'bd-epic-1', title: 'my-feature', status: 'open', created_at: '2024-01-01T00:00:00Z' }),
+        }) as any,
     });
 
     const stores = createStores(testRoot, 'on', mockRepository);
@@ -434,20 +453,26 @@ describe('FeatureService beadsMode on', () => {
 
   it('maps in-progress epic bead status to executing when feature_state artifact is absent', () => {
     const mockRepository = createMockRepository({
-      createEpic: (name: string, priority: number) => ({ success: true, value: 'bd-epic-1' }),
-      getGateway: () => ({
-        createEpic: () => 'bd-epic-1',
-        closeBead: () => {},
-        flushArtifacts: () => {},
-        readArtifact: () => null,
-        upsertArtifact: () => {},
-        readDescription: () => null,
-        updateDescription: () => {},
-        addComment: () => {},
-        addLabel: () => {},
-        list: () => [],
-        show: () => ({ id: 'bd-epic-1', title: 'my-feature', status: 'in_progress', created_at: '2024-01-01T00:00:00Z' }),
-      } as any),
+      createEpic: (_name: string, _priority: number) => ({ success: true, value: 'bd-epic-1' }),
+      getGateway: () =>
+        ({
+          createEpic: () => 'bd-epic-1',
+          closeBead: () => {},
+          flushArtifacts: () => {},
+          readArtifact: () => null,
+          upsertArtifact: () => {},
+          readDescription: () => null,
+          updateDescription: () => {},
+          addComment: () => {},
+          addLabel: () => {},
+          list: () => [],
+          show: () => ({
+            id: 'bd-epic-1',
+            title: 'my-feature',
+            status: 'in_progress',
+            created_at: '2024-01-01T00:00:00Z',
+          }),
+        }) as any,
       getFeatureState: () => ({ success: true, value: null }),
     });
 
@@ -463,23 +488,24 @@ describe('FeatureService beadsMode on', () => {
 
   it('uses BeadGateway for list when beadsMode is on', () => {
     const mockRepository = createMockRepository({
-      createEpic: (name: string, priority: number) => ({ success: true, value: 'bd-epic-1' }),
-      getGateway: () => ({
-        createEpic: () => 'bd-epic-1',
-        closeBead: () => {},
-        flushArtifacts: () => {},
-        readArtifact: () => null,
-        upsertArtifact: () => {},
-        readDescription: () => null,
-        updateDescription: () => {},
-        addComment: () => {},
-        addLabel: () => {},
-        list: () => [
-          { id: 'bd-epic-1', title: 'feature-a', status: 'open', type: 'epic' },
-          { id: 'bd-epic-2', title: 'feature-b', status: 'open', type: 'epic' },
-        ],
-        show: () => ({}),
-      } as any),
+      createEpic: (_name: string, _priority: number) => ({ success: true, value: 'bd-epic-1' }),
+      getGateway: () =>
+        ({
+          createEpic: () => 'bd-epic-1',
+          closeBead: () => {},
+          flushArtifacts: () => {},
+          readArtifact: () => null,
+          upsertArtifact: () => {},
+          readDescription: () => null,
+          updateDescription: () => {},
+          addComment: () => {},
+          addLabel: () => {},
+          list: () => [
+            { id: 'bd-epic-1', title: 'feature-a', status: 'open', type: 'epic' },
+            { id: 'bd-epic-2', title: 'feature-b', status: 'open', type: 'epic' },
+          ],
+          show: () => ({}),
+        }) as any,
     });
 
     const stores = createStores(testRoot, 'on', mockRepository);
@@ -494,7 +520,7 @@ describe('FeatureService beadsMode on', () => {
 
   it('returns null when feature not found via BeadGateway', () => {
     const mockRepository = createMockRepository({
-      createEpic: (name: string, priority: number) => ({ success: true, value: 'bd-epic-1' }),
+      createEpic: (_name: string, _priority: number) => ({ success: true, value: 'bd-epic-1' }),
       getEpicByFeatureName: (name: string) => {
         // Return failure for non-existent feature
         if (name === 'non-existent') {
@@ -516,35 +542,39 @@ describe('FeatureService beadsMode on', () => {
 describe('FeatureService getTasks folder stability', () => {
   it('persists generated folder name so reordering does not change it', () => {
     const mockRepository = createMockRepository({
-      getGateway: () => ({
-        createEpic: () => 'bd-epic-1',
-        closeBead: () => {},
-        flushArtifacts: () => {},
-        readArtifact: () => null,
-        upsertArtifact: () => {},
-        readDescription: () => null,
-        updateDescription: () => {},
-        addComment: () => {},
-        addLabel: () => {},
-        list: (opts?: any) => {
-          if (opts?.type === 'task') {
-            return [
-              { id: 'bd-task-1', title: 'Setup', status: 'open', type: 'task' },
-              { id: 'bd-task-2', title: 'API', status: 'open', type: 'task' },
-              { id: 'bd-task-3', title: 'Frontend', status: 'open', type: 'task' },
-            ];
-          }
-          return [];
-        },
-        show: () => ({ id: 'bd-epic-1', title: 'my-feature', status: 'open', created_at: '2024-01-01T00:00:00Z' }),
-      } as any),
+      getGateway: () =>
+        ({
+          createEpic: () => 'bd-epic-1',
+          closeBead: () => {},
+          flushArtifacts: () => {},
+          readArtifact: () => null,
+          upsertArtifact: () => {},
+          readDescription: () => null,
+          updateDescription: () => {},
+          addComment: () => {},
+          addLabel: () => {},
+          list: (opts?: any) => {
+            if (opts?.type === 'task') {
+              return [
+                { id: 'bd-task-1', title: 'Setup', status: 'open', type: 'task' },
+                { id: 'bd-task-2', title: 'API', status: 'open', type: 'task' },
+                { id: 'bd-task-3', title: 'Frontend', status: 'open', type: 'task' },
+              ];
+            }
+            return [];
+          },
+          show: () => ({ id: 'bd-epic-1', title: 'my-feature', status: 'open', created_at: '2024-01-01T00:00:00Z' }),
+        }) as any,
       createEpic: (_name, _priority) => ({ success: true, value: 'bd-epic-1' }),
       // getEpicByFeatureName: (_name, _useCache) => ({ success: true, value: 'bd-epic-1' }),
-      listTaskBeadsForEpic: () => ({ success: true, value: [
-        { id: 'bd-task-1', title: 'Setup', status: 'open' },
-        { id: 'bd-task-2', title: 'API', status: 'open' },
-        { id: 'bd-task-3', title: 'Frontend', status: 'open' },
-      ] }),
+      listTaskBeadsForEpic: () => ({
+        success: true,
+        value: [
+          { id: 'bd-task-1', title: 'Setup', status: 'open' },
+          { id: 'bd-task-2', title: 'API', status: 'open' },
+          { id: 'bd-task-3', title: 'Frontend', status: 'open' },
+        ],
+      }),
     });
 
     const stores = createStores(testRoot, 'on', mockRepository);
@@ -564,35 +594,39 @@ describe('FeatureService getTasks folder stability', () => {
   it('derives same folders regardless of gateway return order', () => {
     // Gateway returns tasks in REVERSE alphabetical order
     const mockRepository = createMockRepository({
-      getGateway: () => ({
-        createEpic: () => 'bd-epic-1',
-        closeBead: () => {},
-        flushArtifacts: () => {},
-        readArtifact: () => null,
-        upsertArtifact: () => {},
-        readDescription: () => null,
-        updateDescription: () => {},
-        addComment: () => {},
-        addLabel: () => {},
-        list: (opts?: any) => {
-          if (opts?.type === 'task') {
-            // Deliberately reversed order compared to existing test
-            return [
-              { id: 'bd-task-3', title: 'Frontend', status: 'open', type: 'task' },
-              { id: 'bd-task-2', title: 'API', status: 'open', type: 'task' },
-              { id: 'bd-task-1', title: 'Setup', status: 'open', type: 'task' },
-            ];
-          }
-          return [];
-        },
-        show: () => ({ id: 'bd-epic-1', title: 'my-feature', status: 'open', created_at: '2024-01-01T00:00:00Z' }),
-      } as any),
+      getGateway: () =>
+        ({
+          createEpic: () => 'bd-epic-1',
+          closeBead: () => {},
+          flushArtifacts: () => {},
+          readArtifact: () => null,
+          upsertArtifact: () => {},
+          readDescription: () => null,
+          updateDescription: () => {},
+          addComment: () => {},
+          addLabel: () => {},
+          list: (opts?: any) => {
+            if (opts?.type === 'task') {
+              // Deliberately reversed order compared to existing test
+              return [
+                { id: 'bd-task-3', title: 'Frontend', status: 'open', type: 'task' },
+                { id: 'bd-task-2', title: 'API', status: 'open', type: 'task' },
+                { id: 'bd-task-1', title: 'Setup', status: 'open', type: 'task' },
+              ];
+            }
+            return [];
+          },
+          show: () => ({ id: 'bd-epic-1', title: 'my-feature', status: 'open', created_at: '2024-01-01T00:00:00Z' }),
+        }) as any,
       createEpic: (_name: string, _priority: number) => ({ success: true, value: 'bd-epic-1' }),
-      listTaskBeadsForEpic: () => ({ success: true, value: [
-        { id: 'bd-task-3', title: 'Frontend', status: 'open' },
-        { id: 'bd-task-2', title: 'API', status: 'open' },
-        { id: 'bd-task-1', title: 'Setup', status: 'open' },
-      ] }),
+      listTaskBeadsForEpic: () => ({
+        success: true,
+        value: [
+          { id: 'bd-task-3', title: 'Frontend', status: 'open' },
+          { id: 'bd-task-2', title: 'API', status: 'open' },
+          { id: 'bd-task-1', title: 'Setup', status: 'open' },
+        ],
+      }),
     });
 
     const stores = createStores(testRoot, 'on', mockRepository);
