@@ -6,6 +6,7 @@
     "declaration": true,
     "emitDeclarationOnly": true,
     "outDir": "dist",
+    "rootDir": "src",
     "lib": ["ES2022"],
     "sourceMap": false,
     "strict": true,
