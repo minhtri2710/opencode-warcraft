@@ -3,7 +3,7 @@ import * as path from 'path';
 import { ConfigService, DockerSandboxService, getWarcraftPath } from 'warcraft-core';
 import { createWarcraftContainer } from './container.js';
 import { isPathInside } from './guards.js';
-import { createVariantHook } from './hooks/variant-hook.js';
+import { createVariantHook, isWarcraftAgent } from './hooks/variant-hook.js';
 import { applyWarcraftConfig } from './plugin-config.js';
 
 // ============================================================================
@@ -132,6 +132,10 @@ const plugin: Plugin = async (ctx) => {
       _input: { agent?: string } | unknown,
       output: { system: string[] },
     ) => {
+      // Skip warcraft prompt for non-warcraft agents (e.g. built-in build/plan)
+      const inputAgent = (_input as { agent?: string })?.agent;
+      if (inputAgent && !isWarcraftAgent(inputAgent)) return;
+
       output.system.push(WARCRAFT_SYSTEM_PROMPT);
 
       const activeFeature = container.resolveFeature();

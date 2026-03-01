@@ -46,11 +46,11 @@ function createStubClient(): unknown {
       prompt: async () => ({ data: {} }),
       get: async () => ({ data: { status: 'idle' } }),
       messages: async () => ({ data: [] }),
-      abort: async () => {},
+      abort: async () => { },
     },
     app: {
       agents: async () => ({ data: [] }),
-      log: async () => {},
+      log: async () => { },
     },
     config: {
       get: async () => ({ data: {} }),
@@ -224,5 +224,44 @@ describe('Agent permissions', () => {
       expect(perm!.task).toBe('deny');
       expect(perm!.delegate).toBe('deny');
     }
+  });
+
+  it('explicitly denies warcraft tools for built-in OpenCode agents (build, plan)', async () => {
+    spyOn(ConfigService.prototype, 'get').mockReturnValue({
+      agentMode: 'unified',
+      agents: {
+        khadgar: {},
+      },
+    } as any);
+
+    const repoRoot = path.resolve(import.meta.dir, '..', '..', '..', '..');
+
+    const ctx: PluginInput = {
+      directory: repoRoot,
+      worktree: repoRoot,
+      serverUrl: new URL('http://localhost:1'),
+      project: { id: 'test', worktree: repoRoot, time: { created: Date.now() } },
+      client: createStubClient(),
+      $: createStubShell(),
+    };
+
+    const hooks = await plugin(ctx as any);
+    const opencodeConfig: {
+      agent?: Record<string, { permission?: Record<string, string> }>;
+      default_agent?: string;
+    } = {};
+    await hooks.config?.(opencodeConfig);
+
+    const buildPerm = opencodeConfig.agent?.build?.permission;
+    expect(buildPerm).toBeTruthy();
+    expect(buildPerm!.warcraft_feature_create).toBe('deny');
+    expect(buildPerm!.warcraft_plan_write).toBe('deny');
+    expect(buildPerm!.warcraft_worktree_create).toBe('deny');
+
+    const planPerm = opencodeConfig.agent?.plan?.permission;
+    expect(planPerm).toBeTruthy();
+    expect(planPerm!.warcraft_feature_create).toBe('deny');
+    expect(planPerm!.warcraft_plan_write).toBe('deny');
+    expect(planPerm!.warcraft_worktree_create).toBe('deny');
   });
 });

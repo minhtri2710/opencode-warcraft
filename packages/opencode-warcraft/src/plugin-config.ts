@@ -272,6 +272,19 @@ export async function applyWarcraftConfig(
     }
   }
 
+  // Explicitly deny warcraft tools for OpenCode built-in default agents
+  const builtInAgents = ['build', 'plan'];
+  const configAgentObj = opencodeConfig.agent as Record<string, any>;
+  if (configAgentObj) {
+    for (const builtIn of builtInAgents) {
+      if (!configAgentObj[builtIn]) {
+        configAgentObj[builtIn] = {};
+      }
+      const currentPermission = configAgentObj[builtIn].permission || {};
+      configAgentObj[builtIn].permission = withWarcraftToolPermissions(currentPermission, 'deny');
+    }
+  }
+
   // Set default agent based on mode
   (opencodeConfig as Record<string, unknown>).default_agent = agentMode === 'unified' ? 'khadgar' : 'mimiron';
 
