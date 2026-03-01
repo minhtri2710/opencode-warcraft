@@ -24,7 +24,6 @@ bun run lint              # Run workspace type checks
 
 # Release preparation
 bun run release:check     # Install, build, and test all packages
-bun run release:prepare   # Prepare release
 ```
 
 Worktree dependency note: worktrees are isolated checkouts and do not share the root `node_modules`. If you run tests or builds inside a worktree, run `bun install` there first (or run tests from the repo root that already has dependencies installed).

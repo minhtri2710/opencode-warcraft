@@ -20,7 +20,6 @@ This repository is a Bun workspace monorepo containing shared core services and 
 | --- | --- |
 | `packages/warcraft-core/` | Shared domain services, task/plan/worktree logic, filesystem utilities |
 | `packages/opencode-warcraft/` | OpenCode plugin (agents, tools, hooks, MCP wiring, built-in skills) |
-| `scripts/` | CI and release verification scripts |
 | `.beads/artifacts/` | Beads artifact cache and task execution records |
 
 See also:
@@ -51,8 +50,7 @@ From the repository root:
 bun run build          # Build all workspace packages
 bun run test           # Run all package tests
 bun run lint           # Type-check all workspace packages
-bun run workflow:verify
-bun run release:check
+bun run release:check  # Install, build, test, and lint
 ```
 
 ## Install the OpenCode Plugin

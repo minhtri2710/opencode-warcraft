@@ -50,7 +50,6 @@ This enables tools like `grep_app_searchGitHub`, `context7_query-docs`, and `web
 Recommended local checks:
 
 ```bash
-bun run workflow:verify    # Validates beads artifacts + PR evidence structure
 bun run lint               # Type-check all packages
 ```
 
