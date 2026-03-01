@@ -266,7 +266,7 @@ export class WorktreeService {
   private parseFilesFromDiff(diffContent: string): string[] {
     const files: string[] = [];
     const regex = /^diff --git a\/(.+?) b\//gm;
-    let match;
+    let match: RegExpExecArray | null;
     while ((match = regex.exec(diffContent)) !== null) {
       files.push(match[1]);
     }

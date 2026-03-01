@@ -30,6 +30,7 @@ const DOCKER_IMAGE_PATTERN = /^[a-z0-9][a-z0-9._/-]*(?::[a-z0-9][a-z0-9._-]*)?$/
  *
  * Level 1: Lightweight docker run (no devcontainer.json, no persistent containers)
  */
+// biome-ignore lint/complexity/noStaticOnlyClass: intentional grouping of related Docker sandbox operations
 export class DockerSandboxService {
   /**
    * Detects appropriate Docker image based on project files in worktree.
