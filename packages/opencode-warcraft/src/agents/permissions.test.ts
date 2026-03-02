@@ -46,11 +46,11 @@ function createStubClient(): unknown {
       prompt: async () => ({ data: {} }),
       get: async () => ({ data: { status: 'idle' } }),
       messages: async () => ({ data: [] }),
-      abort: async () => { },
+      abort: async () => {},
     },
     app: {
       agents: async () => ({ data: [] }),
-      log: async () => { },
+      log: async () => {},
     },
     config: {
       get: async () => ({ data: {} }),
@@ -249,7 +249,12 @@ describe('Agent permissions', () => {
     const opencodeConfig: {
       agent?: Record<string, { permission?: Record<string, string> }>;
       default_agent?: string;
-    } = {};
+    } = {
+      agent: {
+        build: {},
+        plan: {},
+      },
+    };
     await hooks.config?.(opencodeConfig);
 
     const buildPerm = opencodeConfig.agent?.build?.permission;

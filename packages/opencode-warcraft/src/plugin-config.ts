@@ -273,6 +273,7 @@ export async function applyWarcraftConfig(
   }
 
   // Explicitly deny warcraft tools for OpenCode built-in default agents
+  // (Requires OpenCode SDK patching to merge this partial { permission } object with the built-in defaults)
   const builtInAgents = ['build', 'plan'];
   const configAgentObj = opencodeConfig.agent as Record<string, any>;
   if (configAgentObj) {
