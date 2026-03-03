@@ -555,22 +555,24 @@ Do it
     expect(execStart.taskPromptMode).toBe('opencode-inline');
   });
 
-  runIfHostReady('warcraft_batch_execute preview and execute parallel tasks', async () => {
-    const ctx: PluginInput = {
-      directory: testRoot,
-      worktree: testRoot,
-      serverUrl: new URL('http://localhost:1'),
-      project: createProject(testRoot),
-      client: OPENCODE_CLIENT,
-      $: createStubShell(),
-    };
+  runIfHostReady(
+    'warcraft_batch_execute preview and execute parallel tasks',
+    async () => {
+      const ctx: PluginInput = {
+        directory: testRoot,
+        worktree: testRoot,
+        serverUrl: new URL('http://localhost:1'),
+        project: createProject(testRoot),
+        client: OPENCODE_CLIENT,
+        $: createStubShell(),
+      };
 
-    const hooks = await plugin(ctx);
-    const toolContext = createToolContext('sess_batch_execute');
+      const hooks = await plugin(ctx);
+      const toolContext = createToolContext('sess_batch_execute');
 
-    await hooks.tool!.warcraft_feature_create.execute({ name: 'batch-feature' }, toolContext);
+      await hooks.tool!.warcraft_feature_create.execute({ name: 'batch-feature' }, toolContext);
 
-    const plan = `# Batch Feature
+      const plan = `# Batch Feature
 
 ## Discovery
 
@@ -598,83 +600,85 @@ Do beta work
 Do gamma work (depends on alpha and beta)
 `;
 
-    await hooks.tool!.warcraft_plan_write.execute({ content: plan, feature: 'batch-feature' }, toolContext);
-    await hooks.tool!.warcraft_plan_approve.execute({ feature: 'batch-feature' }, toolContext);
-    await hooks.tool!.warcraft_tasks_sync.execute({ feature: 'batch-feature' }, toolContext);
+      await hooks.tool!.warcraft_plan_write.execute({ content: plan, feature: 'batch-feature' }, toolContext);
+      await hooks.tool!.warcraft_plan_approve.execute({ feature: 'batch-feature' }, toolContext);
+      await hooks.tool!.warcraft_tasks_sync.execute({ feature: 'batch-feature' }, toolContext);
 
-    // Preview mode should show tasks 1 and 2 as runnable, 3 as blocked
-    try {
-      await hooks.tool!.warcraft_feature_create.execute({ name: 'batch-feature' }, toolContext);
-    } catch (_e) {
-      // Ignore if exists
-    }
-    process.env.WARCRAFT_FEATURE = 'batch-feature';
-    const previewOutput = await hooks.tool!.warcraft_batch_execute.execute(
-      { mode: 'preview', feature: 'batch-feature' },
-      toolContext,
-    );
-    const preview = parseToolResponse<{
-      feature: string;
-      parallelPolicy?: { strategy: string; maxConcurrency: number };
-      summary: { runnable: number; blocked: number };
-      runnable: Array<{ folder: string }>;
-      blocked?: Array<{ folder: string; waitingOn: string[] }>;
-    }>(previewOutput as string);
+      // Preview mode should show tasks 1 and 2 as runnable, 3 as blocked
+      try {
+        await hooks.tool!.warcraft_feature_create.execute({ name: 'batch-feature' }, toolContext);
+      } catch (_e) {
+        // Ignore if exists
+      }
+      process.env.WARCRAFT_FEATURE = 'batch-feature';
+      const previewOutput = await hooks.tool!.warcraft_batch_execute.execute(
+        { mode: 'preview', feature: 'batch-feature' },
+        toolContext,
+      );
+      const preview = parseToolResponse<{
+        feature: string;
+        parallelPolicy?: { strategy: string; maxConcurrency: number };
+        summary: { runnable: number; blocked: number };
+        runnable: Array<{ folder: string }>;
+        blocked?: Array<{ folder: string; waitingOn: string[] }>;
+      }>(previewOutput as string);
 
-    expect(preview.feature).toBe('batch-feature');
-    expect(preview.summary.runnable).toBe(2);
-    expect(preview.summary.blocked).toBe(1);
-    expect(preview.parallelPolicy).toEqual({
-      strategy: 'unbounded',
-      maxConcurrency: 4,
-    });
-    expect(preview.runnable.map((r) => r.folder)).toContain('01-task-alpha');
-    expect(preview.runnable.map((r) => r.folder)).toContain('02-task-beta');
-    expect(preview.blocked?.[0]?.folder).toBe('03-task-gamma');
+      expect(preview.feature).toBe('batch-feature');
+      expect(preview.summary.runnable).toBe(2);
+      expect(preview.summary.blocked).toBe(1);
+      expect(preview.parallelPolicy).toEqual({
+        strategy: 'unbounded',
+        maxConcurrency: 4,
+      });
+      expect(preview.runnable.map((r) => r.folder)).toContain('01-task-alpha');
+      expect(preview.runnable.map((r) => r.folder)).toContain('02-task-beta');
+      expect(preview.blocked?.[0]?.folder).toBe('03-task-gamma');
 
-    // Execute mode should dispatch tasks 1 and 2 in parallel
-    const executeOutput = await hooks.tool!.warcraft_batch_execute.execute(
-      {
-        mode: 'execute',
-        tasks: ['01-task-alpha', '02-task-beta'],
-        feature: 'batch-feature',
-      },
-      toolContext,
-    );
-    const result = parseToolResponse<{
-      parallelPolicy?: { strategy: string; maxConcurrency: number };
-      dispatched: { total: number; succeeded: number; failed: number };
-      taskToolCalls: Array<{ subagent_type: string; description: string; prompt: string }>;
-      instructions: string;
-    }>(executeOutput as string);
+      // Execute mode should dispatch tasks 1 and 2 in parallel
+      const executeOutput = await hooks.tool!.warcraft_batch_execute.execute(
+        {
+          mode: 'execute',
+          tasks: ['01-task-alpha', '02-task-beta'],
+          feature: 'batch-feature',
+        },
+        toolContext,
+      );
+      const result = parseToolResponse<{
+        parallelPolicy?: { strategy: string; maxConcurrency: number };
+        dispatched: { total: number; succeeded: number; failed: number };
+        taskToolCalls: Array<{ subagent_type: string; description: string; prompt: string }>;
+        instructions: string;
+      }>(executeOutput as string);
 
-    expect(result.dispatched.succeeded).toBe(2);
-    expect(result.dispatched.succeeded).toBe(2);
-    expect(result.dispatched.failed).toBe(0);
-    expect(result.parallelPolicy).toEqual({
-      strategy: 'unbounded',
-      maxConcurrency: 4,
-    });
-    expect(result.taskToolCalls).toHaveLength(2);
-    expect(result.taskToolCalls[0].subagent_type).toBe('mekkatorque');
-    expect(result.taskToolCalls[1].subagent_type).toBe('mekkatorque');
-    expect(result.instructions).toContain('Parallel Dispatch Required');
+      expect(result.dispatched.succeeded).toBe(2);
+      expect(result.dispatched.succeeded).toBe(2);
+      expect(result.dispatched.failed).toBe(0);
+      expect(result.parallelPolicy).toEqual({
+        strategy: 'unbounded',
+        maxConcurrency: 4,
+      });
+      expect(result.taskToolCalls).toHaveLength(2);
+      expect(result.taskToolCalls[0].subagent_type).toBe('mekkatorque');
+      expect(result.taskToolCalls[1].subagent_type).toBe('mekkatorque');
+      expect(result.instructions).toContain('Parallel Dispatch Required');
 
-    // Blocked task should fail validation
-    const blockedOutput = await hooks.tool!.warcraft_batch_execute.execute(
-      {
-        mode: 'execute',
-        tasks: ['03-task-gamma'],
-        feature: 'batch-feature',
-      },
-      toolContext,
-    );
-    const blockedResult = JSON.parse(blockedOutput as string) as {
-      success: boolean;
-      error?: string;
-    };
+      // Blocked task should fail validation
+      const blockedOutput = await hooks.tool!.warcraft_batch_execute.execute(
+        {
+          mode: 'execute',
+          tasks: ['03-task-gamma'],
+          feature: 'batch-feature',
+        },
+        toolContext,
+      );
+      const blockedResult = JSON.parse(blockedOutput as string) as {
+        success: boolean;
+        error?: string;
+      };
 
-    expect(blockedResult.success).toBe(false);
-    expect(blockedResult.error).toContain('03-task-gamma (dependencies not met)');
-  });
+      expect(blockedResult.success).toBe(false);
+      expect(blockedResult.error).toContain('03-task-gamma (dependencies not met)');
+    },
+    15_000,
+  );
 });

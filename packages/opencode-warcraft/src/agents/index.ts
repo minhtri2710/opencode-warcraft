@@ -13,10 +13,10 @@
 export { ALGALON_PROMPT, algalonAgent } from './algalon.js';
 export { BRANN_PROMPT, brannAgent } from './brann.js';
 // Specialist agents (lean, focused)
-export { KHADGAR_PROMPT, khadgarAgent } from './khadgar.js';
+export { buildKhadgarPrompt, KHADGAR_PROMPT, khadgarAgent } from './khadgar.js';
 export { MEKKATORQUE_PROMPT, mekkatorqueAgent } from './mekkatorque.js';
 export { MIMIRON_PROMPT, mimironAgent } from './mimiron.js';
-export { SAURFANG_PROMPT, saurfangAgent } from './saurfang.js';
+export { buildSaurfangPrompt, SAURFANG_PROMPT, saurfangAgent } from './saurfang.js';
 
 /**
  * Agent registry for OpenCode plugin

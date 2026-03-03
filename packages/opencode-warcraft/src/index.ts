@@ -3,6 +3,8 @@ import * as path from 'path';
 import { ConfigService, DockerSandboxService, getWarcraftPath } from 'warcraft-core';
 import { createWarcraftContainer } from './container.js';
 import { isPathInside } from './guards.js';
+import { buildCompactionPrompt } from './hooks/compaction-hook.js';
+import { shouldExecuteHook } from './hooks/hook-cadence.js';
 import { createVariantHook, isWarcraftAgent } from './hooks/variant-hook.js';
 import { applyWarcraftConfig } from './plugin-config.js';
 
@@ -136,8 +138,12 @@ const plugin: Plugin = async (ctx) => {
       const inputAgent = (_input as { agent?: string })?.agent;
       if (inputAgent && !isWarcraftAgent(inputAgent)) return;
 
-      output.system.push(WARCRAFT_SYSTEM_PROMPT);
+      // Static system prompt: gated by cadence
+      if (shouldExecuteHook('experimental.chat.system.transform', container.configService)) {
+        output.system.push(WARCRAFT_SYSTEM_PROMPT);
+      }
 
+      // Dynamic status hint: ALWAYS inject (small, changes per turn)
       const activeFeature = container.resolveFeature();
       if (activeFeature) {
         const info = container.featureService.getInfo(activeFeature);
@@ -177,6 +183,13 @@ const plugin: Plugin = async (ctx) => {
       output.args.command =
         typeof wrapped === 'string' ? wrapped : structuredToCommandString(wrapped.command, wrapped.args);
       output.args.workdir = undefined;
+    },
+
+    'experimental.session.compacting': async (
+      _input: { sessionID: string },
+      output: { context: string[]; prompt?: string },
+    ) => {
+      output.context.push(buildCompactionPrompt());
     },
 
     mcp: container.builtinMcps,

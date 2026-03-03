@@ -615,3 +615,121 @@ describe('ConfigService HOME fallback', () => {
     }
   });
 });
+
+describe('ConfigService hook cadence', () => {
+  it('returns 1 when no hook_cadence configured', () => {
+    const service = new ConfigService();
+    expect(service.getHookCadence('experimental.chat.system.transform')).toBe(1);
+  });
+
+  it('returns configured cadence value', () => {
+    const service = new ConfigService();
+    const configPath = service.getPath();
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify({
+        hook_cadence: { 'experimental.chat.system.transform': 3 },
+      }),
+    );
+    expect(service.getHookCadence('experimental.chat.system.transform')).toBe(3);
+  });
+
+  it('returns 1 for invalid values (0, -1, 1.5)', () => {
+    const service = new ConfigService();
+    const configPath = service.getPath();
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+
+    for (const invalid of [0, -1, 1.5]) {
+      fs.writeFileSync(
+        configPath,
+        JSON.stringify({
+          hook_cadence: { 'test.hook': invalid },
+        }),
+      );
+      const svc = new ConfigService();
+      expect(svc.getHookCadence('test.hook')).toBe(1);
+    }
+  });
+
+  it('returns 1 for safety-critical hooks regardless of config', () => {
+    const service = new ConfigService();
+    const configPath = service.getPath();
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify({
+        hook_cadence: { 'tool.execute.before': 5 },
+      }),
+    );
+    expect(service.getHookCadence('tool.execute.before', { safetyCritical: true })).toBe(1);
+  });
+});
+
+describe('ConfigService.getVerificationModel', () => {
+  it('returns tdd when not configured', () => {
+    const service = new ConfigService();
+    expect(service.getVerificationModel()).toBe('tdd');
+  });
+
+  it('returns best-effort when configured', () => {
+    const service = new ConfigService();
+    const configPath = service.getPath();
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    fs.writeFileSync(configPath, JSON.stringify({ verificationModel: 'best-effort' }));
+    const svc = new ConfigService();
+    expect(svc.getVerificationModel()).toBe('best-effort');
+  });
+
+  it('returns tdd for invalid values', () => {
+    const service = new ConfigService();
+    const configPath = service.getPath();
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+
+    for (const invalid of ['', 'invalid', 'TDD', 'BEST-EFFORT', null, 123]) {
+      fs.writeFileSync(configPath, JSON.stringify({ verificationModel: invalid }));
+      const svc = new ConfigService();
+      expect(svc.getVerificationModel()).toBe('tdd');
+    }
+  });
+});
+
+describe('ConfigService.getWorkflowGatesMode', () => {
+  it("returns 'warn' when not configured", () => {
+    const service = new ConfigService();
+    expect(service.getWorkflowGatesMode()).toBe('warn');
+  });
+
+  it("returns 'enforce' when config sets enforce", () => {
+    const service = new ConfigService();
+    const configPath = service.getPath();
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    fs.writeFileSync(configPath, JSON.stringify({ workflowGatesMode: 'enforce' }));
+    const svc = new ConfigService();
+    expect(svc.getWorkflowGatesMode()).toBe('enforce');
+  });
+
+  it("returns 'warn' for invalid values", () => {
+    const service = new ConfigService();
+    const configPath = service.getPath();
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    fs.writeFileSync(configPath, JSON.stringify({ workflowGatesMode: 'invalid' }));
+    const svc = new ConfigService();
+    expect(svc.getWorkflowGatesMode()).toBe('warn');
+  });
+
+  it('falls back to env var when config not set', () => {
+    const saved = process.env.WARCRAFT_WORKFLOW_GATES_MODE;
+    try {
+      process.env.WARCRAFT_WORKFLOW_GATES_MODE = 'enforce';
+      const service = new ConfigService();
+      expect(service.getWorkflowGatesMode()).toBe('enforce');
+    } finally {
+      if (saved === undefined) {
+        delete process.env.WARCRAFT_WORKFLOW_GATES_MODE;
+      } else {
+        process.env.WARCRAFT_WORKFLOW_GATES_MODE = saved;
+      }
+    }
+  });
+});

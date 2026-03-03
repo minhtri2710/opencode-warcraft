@@ -39,6 +39,11 @@ function mergeAgentConfigs(
  * This is USER config (not project-scoped):
  * - OpenCode plugin reads this to enable features
  * - Agent does NOT have tools to access this
+ *
+ * **Caching**: Config is read from disk once on first `get()` call and cached
+ * for the plugin lifetime. The cache is invalidated only after `set()` writes
+ * new values. External edits to the JSON file (e.g. manual editor changes)
+ * require a plugin/session restart to take effect.
  */
 export class ConfigService {
   private configPath: string;
@@ -227,6 +232,41 @@ export class ConfigService {
       strategy,
       maxConcurrency,
     };
+  }
+
+  /**
+   * Get the cadence (every Nth turn) for a specific hook.
+   * Returns 1 if not configured (fire every turn).
+   * Safety-critical hooks always return 1.
+   */
+  getHookCadence(hookName: string, options?: { safetyCritical?: boolean }): number {
+    if (options?.safetyCritical) return 1;
+    const config = this.get();
+    const cadence = config.hook_cadence?.[hookName];
+    if (cadence === undefined || cadence === null) return 1;
+    if (!Number.isInteger(cadence) || cadence < 1) return 1;
+    return cadence;
+  }
+
+  /**
+   * Get the verification model. Defaults to 'tdd'.
+   */
+  getVerificationModel(): 'tdd' | 'best-effort' {
+    const config = this.get();
+    const model = config.verificationModel;
+    if (model === 'best-effort') return 'best-effort';
+    return 'tdd';
+  }
+
+  /**
+   * Get workflow gates mode.
+   * Checks config first, falls back to WARCRAFT_WORKFLOW_GATES_MODE env var.
+   * Defaults to 'warn' when neither is set.
+   */
+  getWorkflowGatesMode(): 'enforce' | 'warn' {
+    const config = this.get();
+    const mode = config.workflowGatesMode ?? process.env.WARCRAFT_WORKFLOW_GATES_MODE;
+    return mode?.toLowerCase() === 'enforce' ? 'enforce' : 'warn';
   }
 
   /**

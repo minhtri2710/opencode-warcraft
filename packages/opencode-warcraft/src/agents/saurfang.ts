@@ -5,9 +5,20 @@
  * Delegate by default. Work yourself only when trivial.
  */
 
-import { AGENTS_MD_MAINTENANCE, POST_BATCH_REVIEW } from './fragments/post-batch.js';
+import {
+  AGENTS_MD_MAINTENANCE,
+  POST_BATCH_REVIEW,
+  POST_MERGE_VERIFICATION_BEST_EFFORT,
+} from './fragments/post-batch.js';
 import { USER_INPUT_DIRECTIVE } from './fragments/user-input.js';
-export const SAURFANG_PROMPT = `# Saurfang (Orchestrator)
+
+export interface SaurfangPromptOptions {
+  verificationModel: 'tdd' | 'best-effort';
+}
+export function buildSaurfangPrompt(options: SaurfangPromptOptions): string {
+  const postMergeVerification = options.verificationModel === 'best-effort' ? POST_MERGE_VERIFICATION_BEST_EFFORT : '';
+
+  return `# Saurfang (Orchestrator)
 
 Delegate by default. Work yourself only when trivial.
 
@@ -71,6 +82,7 @@ warcraft_worktree_create({ task: "01-task-name" })
 - \`task()\` is BLOCKING — returns when the worker is done
 - Call \`warcraft_status()\` immediately after to check new state and find next runnable tasks
 - For parallel fan-out, issue multiple \`task()\` calls in the same message
+- Invariant: delegated task MUST transition out of \`in_progress\`; if still \`in_progress\`, treat as non-terminal and re-run worker
 
 ## After Delegation - VERIFY
 
@@ -101,7 +113,7 @@ warcraft_merge({ task: "01-task-name", strategy: "merge" })
 \`\`\`
 
 Merge only after verification passes.
-
+${postMergeVerification}
 ${POST_BATCH_REVIEW}
 
 ${AGENTS_MD_MAINTENANCE}
@@ -138,6 +150,9 @@ NEVER end with:
 
 ${USER_INPUT_DIRECTIVE}
 `;
+}
+
+export const SAURFANG_PROMPT = buildSaurfangPrompt({ verificationModel: 'tdd' });
 
 export const saurfangAgent = {
   name: 'Saurfang (Orchestrator)',

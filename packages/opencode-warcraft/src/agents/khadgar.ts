@@ -6,9 +6,20 @@
  */
 
 import { CANONICAL_DELEGATION_THRESHOLD } from './fragments/delegation-threshold.js';
-import { AGENTS_MD_MAINTENANCE, POST_BATCH_REVIEW } from './fragments/post-batch.js';
+import {
+  AGENTS_MD_MAINTENANCE,
+  POST_BATCH_REVIEW,
+  POST_MERGE_VERIFICATION_BEST_EFFORT,
+} from './fragments/post-batch.js';
 import { USER_INPUT_DIRECTIVE } from './fragments/user-input.js';
-export const KHADGAR_PROMPT = `# Khadgar (Hybrid)
+
+export interface KhadgarPromptOptions {
+  verificationModel: 'tdd' | 'best-effort';
+}
+export function buildKhadgarPrompt(options: KhadgarPromptOptions): string {
+  const postMergeVerification = options.verificationModel === 'best-effort' ? POST_MERGE_VERIFICATION_BEST_EFFORT : '';
+
+  return `# Khadgar (Hybrid)
 
 Hybrid agent: plans AND orchestrates. Phase-aware, skills on-demand.
 
@@ -195,6 +206,7 @@ warcraft_worktree_create({ task: "01-task-name" })  // Creates worktree + Mekkat
 2. Immediately call \`warcraft_status()\` to check the new task state and find next runnable tasks
 3. If task status is blocked: read blocker info → \`question()\` → user decision → resume with \`continueFrom: "blocked"\`
 4. Do NOT wait for notifications or poll — the result is already available when \`task()\` returns
+5. Invariant: delegated task MUST transition out of \`in_progress\`; if still \`in_progress\`, treat as non-terminal worker completion and re-run/resume worker
 
 ### Failure Recovery
 
@@ -203,7 +215,7 @@ warcraft_worktree_create({ task: "01-task-name" })  // Creates worktree + Mekkat
 ### Merge Strategy
 
 \`warcraft_merge({ task: "01-task-name" })\` after verification
-
+${postMergeVerification}
 ${POST_BATCH_REVIEW}
 
 ${AGENTS_MD_MAINTENANCE}
@@ -240,6 +252,9 @@ BLOCKING violations:
 
 ${USER_INPUT_DIRECTIVE}
 `;
+}
+
+export const KHADGAR_PROMPT = buildKhadgarPrompt({ verificationModel: 'tdd' });
 
 export const khadgarAgent = {
   name: 'Khadgar (Hybrid)',

@@ -270,3 +270,152 @@ describe('Agent permissions', () => {
     expect(planPerm!.warcraft_worktree_create).toBe('deny');
   });
 });
+
+describe('Granular warcraft tool permissions', () => {
+  afterEach(() => {
+    mock.restore();
+  });
+  // Helper to get agent permissions from unified mode config
+  async function getAgentPermissions() {
+    spyOn(ConfigService.prototype, 'get').mockReturnValue({
+      agentMode: 'unified',
+      agents: { khadgar: {} },
+    } as any);
+
+    const repoRoot = path.resolve(import.meta.dir, '..', '..', '..', '..');
+    const ctx: PluginInput = {
+      directory: repoRoot,
+      worktree: repoRoot,
+      serverUrl: new URL('http://localhost:1'),
+      project: { id: 'test', worktree: repoRoot, time: { created: Date.now() } },
+      client: createStubClient(),
+      $: createStubShell(),
+    };
+
+    const hooks = await plugin(ctx as any);
+    const opencodeConfig: {
+      agent?: Record<string, { permission?: Record<string, string> }>;
+      default_agent?: string;
+    } = {};
+    await hooks.config?.(opencodeConfig);
+    return opencodeConfig.agent!;
+  }
+
+  it('khadgar has access to ALL warcraft tools', async () => {
+    const agents = await getAgentPermissions();
+    const perm = agents.khadgar?.permission;
+    expect(perm?.warcraft_feature_create).toBe('allow');
+    expect(perm?.warcraft_plan_write).toBe('allow');
+    expect(perm?.warcraft_worktree_create).toBe('allow');
+    expect(perm?.warcraft_worktree_commit).toBe('allow');
+    expect(perm?.warcraft_merge).toBe('allow');
+    expect(perm?.warcraft_batch_execute).toBe('allow');
+  });
+
+  it('mekkatorque can access worktree_commit and plan_read but not worktree_create or merge', async () => {
+    const agents = await getAgentPermissions();
+    const perm = agents.mekkatorque?.permission;
+    expect(perm?.warcraft_worktree_commit).toBe('allow');
+    expect(perm?.warcraft_plan_read).toBe('allow');
+    expect(perm?.warcraft_context_write).toBe('allow');
+    expect(perm?.warcraft_skill).toBe('allow');
+    // Denied
+    expect(perm?.warcraft_worktree_create).toBe('deny');
+    expect(perm?.warcraft_merge).toBe('deny');
+    expect(perm?.warcraft_feature_create).toBe('deny');
+    expect(perm?.warcraft_batch_execute).toBe('deny');
+  });
+
+  it('brann can access plan_read and status but not worktree_commit or merge', async () => {
+    const agents = await getAgentPermissions();
+    const perm = agents.brann?.permission;
+    expect(perm?.warcraft_plan_read).toBe('allow');
+    expect(perm?.warcraft_status).toBe('allow');
+    expect(perm?.warcraft_context_write).toBe('allow');
+    expect(perm?.warcraft_skill).toBe('allow');
+    // Denied
+    expect(perm?.warcraft_worktree_commit).toBe('deny');
+    expect(perm?.warcraft_merge).toBe('deny');
+    expect(perm?.warcraft_plan_write).toBe('deny');
+  });
+
+  it('algalon has same permissions as brann', async () => {
+    const agents = await getAgentPermissions();
+    const algPerm = agents.algalon?.permission;
+    // Same allowed tools
+    expect(algPerm?.warcraft_plan_read).toBe('allow');
+    expect(algPerm?.warcraft_status).toBe('allow');
+    // Same denied tools
+    expect(algPerm?.warcraft_worktree_commit).toBe('deny');
+    expect(algPerm?.warcraft_merge).toBe('deny');
+  });
+});
+
+describe('Granular warcraft tool permissions (dedicated mode)', () => {
+  afterEach(() => {
+    mock.restore();
+  });
+  it('saurfang cannot access worktree_commit or plan_write', async () => {
+    spyOn(ConfigService.prototype, 'get').mockReturnValue({
+      agentMode: 'dedicated',
+      agents: { mimiron: {}, saurfang: {} },
+    } as any);
+
+    const repoRoot = path.resolve(import.meta.dir, '..', '..', '..', '..');
+    const ctx: PluginInput = {
+      directory: repoRoot,
+      worktree: repoRoot,
+      serverUrl: new URL('http://localhost:1'),
+      project: { id: 'test', worktree: repoRoot, time: { created: Date.now() } },
+      client: createStubClient(),
+      $: createStubShell(),
+    };
+
+    const hooks = await plugin(ctx as any);
+    const opencodeConfig: {
+      agent?: Record<string, { permission?: Record<string, string> }>;
+    } = {};
+    await hooks.config?.(opencodeConfig);
+
+    const perm = opencodeConfig.agent?.saurfang?.permission;
+    expect(perm?.warcraft_worktree_commit).toBe('deny');
+    expect(perm?.warcraft_plan_write).toBe('deny');
+    // Saurfang CAN access these:
+    expect(perm?.warcraft_worktree_create).toBe('allow');
+    expect(perm?.warcraft_merge).toBe('allow');
+    expect(perm?.warcraft_batch_execute).toBe('allow');
+  });
+
+  it('mimiron can access feature_create and plan tools but not worktree tools', async () => {
+    spyOn(ConfigService.prototype, 'get').mockReturnValue({
+      agentMode: 'dedicated',
+      agents: { mimiron: {}, saurfang: {} },
+    } as any);
+
+    const repoRoot = path.resolve(import.meta.dir, '..', '..', '..', '..');
+    const ctx: PluginInput = {
+      directory: repoRoot,
+      worktree: repoRoot,
+      serverUrl: new URL('http://localhost:1'),
+      project: { id: 'test', worktree: repoRoot, time: { created: Date.now() } },
+      client: createStubClient(),
+      $: createStubShell(),
+    };
+
+    const hooks = await plugin(ctx as any);
+    const opencodeConfig: {
+      agent?: Record<string, { permission?: Record<string, string> }>;
+    } = {};
+    await hooks.config?.(opencodeConfig);
+
+    const perm = opencodeConfig.agent?.mimiron?.permission;
+    expect(perm?.warcraft_feature_create).toBe('allow');
+    expect(perm?.warcraft_plan_write).toBe('allow');
+    expect(perm?.warcraft_plan_read).toBe('allow');
+    expect(perm?.warcraft_status).toBe('allow');
+    // Denied
+    expect(perm?.warcraft_worktree_create).toBe('deny');
+    expect(perm?.warcraft_worktree_commit).toBe('deny');
+    expect(perm?.warcraft_merge).toBe('deny');
+  });
+});

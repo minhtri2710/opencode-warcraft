@@ -159,8 +159,9 @@ feat!: change plan format to support subtasks
 3. **Human Shapes, Agent Builds** - Humans decide direction, agents implement
 4. **Good Enough Wins** - Ship working code, iterate later
 5. **Batched Parallelism** - Delegate independent tasks to workers
-6. **Tests Define Done** - TDD subtasks: test → implement → verify
+6. **Tests Define Done** - Default: TDD subtasks (test → implement → verify). Opt-in: best-effort worker verification + orchestrator post-merge testing (`verificationModel: "best-effort"`)
 7. **Iron Laws + Hard Gates** - Non-negotiable constraints per agent
+8. **Cross-Model Prompts** — Agent prompts must work across all supported LLM providers. Use conditional triggers ("when X, do Y") instead of absolute mandates ("always do Y").
 
 ### Agent Roles
 

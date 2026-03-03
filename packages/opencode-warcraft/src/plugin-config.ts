@@ -2,48 +2,22 @@ import * as os from 'os';
 import type { ConfigService } from 'warcraft-core';
 import { ALGALON_PROMPT } from './agents/algalon.js';
 import { BRANN_PROMPT } from './agents/brann.js';
-import { KHADGAR_PROMPT } from './agents/khadgar.js';
-import { MEKKATORQUE_PROMPT } from './agents/mekkatorque.js';
+import { buildKhadgarPrompt } from './agents/khadgar.js';
+import { buildMekkatorquePrompt } from './agents/mekkatorque.js';
 import { MIMIRON_PROMPT } from './agents/mimiron.js';
-import { SAURFANG_PROMPT } from './agents/saurfang.js';
+import { buildSaurfangPrompt } from './agents/saurfang.js';
+import { getWarcraftToolPermissions, WARCRAFT_TOOL_IDS } from './agents/tool-permissions.js';
+import type { WarcraftAgentName } from './hooks/variant-hook.js';
+import { WARCRAFT_AGENT_NAMES } from './hooks/variant-hook.js';
 import { loadFileSkill } from './skills/file-loader.js';
 import { BUILTIN_SKILLS } from './skills/registry.generated.js';
+
+export { WARCRAFT_TOOL_IDS } from './agents/tool-permissions.js';
 
 // ============================================================================
 // Agent Configuration Builder
 // Builds per-agent config objects for the OpenCode config hook.
 // ============================================================================
-
-type WarcraftAgentName = 'khadgar' | 'mimiron' | 'saurfang' | 'brann' | 'mekkatorque' | 'algalon';
-
-const WARCRAFT_AGENT_NAMES = new Set<WarcraftAgentName>([
-  'khadgar',
-  'mimiron',
-  'saurfang',
-  'brann',
-  'mekkatorque',
-  'algalon',
-]);
-
-const WARCRAFT_TOOL_IDS = [
-  'warcraft_skill',
-  'warcraft_feature_create',
-  'warcraft_feature_complete',
-  'warcraft_plan_write',
-  'warcraft_plan_read',
-  'warcraft_plan_approve',
-  'warcraft_tasks_sync',
-  'warcraft_task_create',
-  'warcraft_task_update',
-  'warcraft_worktree_create',
-  'warcraft_worktree_commit',
-  'warcraft_worktree_discard',
-  'warcraft_merge',
-  'warcraft_batch_execute',
-  'warcraft_context_write',
-  'warcraft_status',
-  'warcraft_agents_md',
-] as const;
 
 type PermissionValue = 'allow' | 'deny';
 
@@ -128,7 +102,7 @@ async function buildAgentConfig(spec: AgentSpec, configService: ConfigService, d
     ...(spec.mode ? { mode: spec.mode } : {}),
     description: spec.description,
     prompt: spec.prompt + autoLoadedSkills,
-    permission: withWarcraftToolPermissions(spec.permission, 'allow'),
+    permission: getWarcraftToolPermissions(spec.name, spec.permission),
   };
 }
 
@@ -144,15 +118,25 @@ export async function applyWarcraftConfig(
   // Auto-generate config file with defaults if it doesn't exist
   configService.init();
 
+  const verificationModel = configService.getVerificationModel();
+  const khadgarPrompt = buildKhadgarPrompt({ verificationModel });
+  const saurfangPrompt = buildSaurfangPrompt({ verificationModel });
+  const mekkatorquePrompt = buildMekkatorquePrompt({ verificationModel });
+
   const [khadgarConfig, mimironConfig, saurfangConfig, brannConfig, mekkatorqueConfig, algalonConfig] =
     await Promise.all([
       buildAgentConfig(
         {
           name: 'khadgar',
-          prompt: KHADGAR_PROMPT,
+          prompt: khadgarPrompt,
           description: 'Khadgar (Hybrid) - Plans + orchestrates. Detects phase, loads skills on-demand.',
           temperature: 0.5,
-          permission: { question: 'allow', skill: 'allow', todowrite: 'allow', todoread: 'allow' },
+          permission: {
+            question: 'allow',
+            skill: 'allow',
+            todowrite: 'allow',
+            todoread: 'allow',
+          },
         },
         configService,
         directory,
@@ -180,10 +164,15 @@ export async function applyWarcraftConfig(
       buildAgentConfig(
         {
           name: 'saurfang',
-          prompt: SAURFANG_PROMPT,
+          prompt: saurfangPrompt,
           description: 'Saurfang (Orchestrator) - Orchestrates execution. Delegates, spawns workers, verifies, merges.',
           temperature: 0.5,
-          permission: { question: 'allow', skill: 'allow', todowrite: 'allow', todoread: 'allow' },
+          permission: {
+            question: 'allow',
+            skill: 'allow',
+            todowrite: 'allow',
+            todoread: 'allow',
+          },
         },
         configService,
         directory,
@@ -195,7 +184,13 @@ export async function applyWarcraftConfig(
           description: 'Brann (Explorer/Researcher/Retrieval) - Researches codebase + external docs/data.',
           temperature: 0.5,
           mode: 'subagent',
-          permission: { edit: 'deny', task: 'deny', delegate: 'deny', skill: 'allow', webfetch: 'allow' },
+          permission: {
+            edit: 'deny',
+            task: 'deny',
+            delegate: 'deny',
+            skill: 'allow',
+            webfetch: 'allow',
+          },
         },
         configService,
         directory,
@@ -203,7 +198,7 @@ export async function applyWarcraftConfig(
       buildAgentConfig(
         {
           name: 'mekkatorque',
-          prompt: MEKKATORQUE_PROMPT,
+          prompt: mekkatorquePrompt,
           description: 'Mekkatorque (Worker/Coder) - Executes tasks directly in isolated worktrees. Never delegates.',
           temperature: 0.3,
           mode: 'subagent',
@@ -220,7 +215,12 @@ export async function applyWarcraftConfig(
             'Algalon (Consultant/Reviewer/Debugger) - Reviews plan documentation quality. OKAY/REJECT verdict.',
           temperature: 0.3,
           mode: 'subagent',
-          permission: { edit: 'deny', task: 'deny', delegate: 'deny', skill: 'allow' },
+          permission: {
+            edit: 'deny',
+            task: 'deny',
+            delegate: 'deny',
+            skill: 'allow',
+          },
         },
         configService,
         directory,
@@ -258,7 +258,7 @@ export async function applyWarcraftConfig(
   const configuredAgents = opencodeConfig.agent as Record<string, unknown> | undefined;
   if (configuredAgents) {
     for (const [agentName, agentConfig] of Object.entries(configuredAgents)) {
-      if (WARCRAFT_AGENT_NAMES.has(agentName as WarcraftAgentName)) {
+      if (WARCRAFT_AGENT_NAMES.includes(agentName as WarcraftAgentName)) {
         continue;
       }
       if (!agentConfig || typeof agentConfig !== 'object') {
@@ -273,7 +273,6 @@ export async function applyWarcraftConfig(
   }
 
   // Explicitly deny warcraft tools for OpenCode built-in default agents
-  // (Requires OpenCode SDK patching to merge this partial { permission } object with the built-in defaults)
   const builtInAgents = ['build', 'plan'];
   const configAgentObj = opencodeConfig.agent as Record<string, any>;
   if (configAgentObj) {

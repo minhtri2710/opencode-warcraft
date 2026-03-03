@@ -16,13 +16,7 @@ import {
   TaskService,
   WorktreeService,
 } from 'warcraft-core';
-import {
-  COMPLETION_GATES,
-  hasCompletionGateEvidence,
-  isPathInside,
-  validateTaskStatus,
-  WORKFLOW_GATES_MODE,
-} from './guards.js';
+import { COMPLETION_GATES, hasCompletionGateEvidence, isPathInside, validateTaskStatus } from './guards.js';
 import { createBuiltinMcps } from './mcp/index.js';
 import { getFilteredSkills } from './skills/builtin.js';
 import {
@@ -112,17 +106,13 @@ export function createWarcraftContainer(directory: string, configService: Config
       }
     };
 
-    const resolveByIdentity = (identity: string): string | null => {
-      return identity;
-    };
-
     if (explicit) {
-      return resolveByIdentity(explicit);
+      return explicit;
     }
 
     const context = detectContext(directory);
     if (context.feature) {
-      return resolveByIdentity(context.feature);
+      return context.feature;
     }
 
     const features = listFeaturesSafe();
@@ -249,13 +239,13 @@ To unblock: Remove ${blockedPath}`;
     planService,
     captureSession,
     updateFeatureMetadata,
-    workflowGatesMode: WORKFLOW_GATES_MODE,
+    workflowGatesMode: configService.getWorkflowGatesMode(),
   });
   const taskTools = new TaskTools({
     featureService,
     planService,
     taskService,
-    workflowGatesMode: WORKFLOW_GATES_MODE,
+    workflowGatesMode: configService.getWorkflowGatesMode(),
     validateTaskStatus,
   });
   const worktreeTools = new WorktreeTools({
@@ -269,6 +259,8 @@ To unblock: Remove ${blockedPath}`;
     checkDependencies,
     hasCompletionGateEvidence,
     completionGates: COMPLETION_GATES,
+    workflowGatesMode: configService.getWorkflowGatesMode(),
+    verificationModel: configService.getVerificationModel(),
   });
   const batchTools = new BatchTools({
     featureService,

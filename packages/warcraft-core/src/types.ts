@@ -202,4 +202,10 @@ export interface WarcraftConfig {
   beadsMode?: BeadsMode | boolean;
   /** Parallel worker dispatch controls for batch execution. */
   parallelExecution?: ParallelExecutionConfig;
+  /** Hook cadence overrides: e.g. { 'experimental.chat.system.transform': 3 } means fire every 3rd turn */
+  hook_cadence?: Record<string, number>;
+  /** Verification model: 'tdd' (default) runs full build+test before commit; 'best-effort' uses lightweight checks. */
+  verificationModel?: 'tdd' | 'best-effort';
+  /** Workflow gates mode: 'enforce' blocks commit without gate evidence; 'warn' (default) proceeds with a note. */
+  workflowGatesMode?: 'enforce' | 'warn';
 }

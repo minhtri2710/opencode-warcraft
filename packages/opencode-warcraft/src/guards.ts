@@ -18,9 +18,6 @@ const VALID_TASK_STATUSES = new Set<string>([
 
 export const COMPLETION_GATES = ['build', 'test', 'lint'] as const;
 
-export const WORKFLOW_GATES_MODE =
-  (process.env.WARCRAFT_WORKFLOW_GATES_MODE || 'warn').toLowerCase() === 'enforce' ? 'enforce' : 'warn';
-
 export const COMPLETION_PASS_SIGNAL =
   /\b(exit(?:\s+code)?\s*0|pass(?:ed|es)?|success(?:ful|fully)?|succeed(?:ed|s)?|ok)\b/i;
 

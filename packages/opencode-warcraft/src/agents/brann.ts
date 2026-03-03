@@ -44,6 +44,9 @@ result1 = glob(...)
 result2 = grep(...)  // Wait for result1? NO!
 \`\`\`
 
+When you have 3+ evidence sources covering the question, stop searching.
+Additional sources add diminishing value.
+
 ### Phase 3: Structured Results
 
 \`\`\`

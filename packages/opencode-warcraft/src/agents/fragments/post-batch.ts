@@ -20,3 +20,11 @@ After feature completion (all tasks merged):
 For projects without AGENTS.md:
 - Bootstrap with \`warcraft_agents_md({ action: "init" })\`
 - Generates initial documentation from codebase analysis`;
+
+export const POST_MERGE_VERIFICATION_BEST_EFFORT = `
+### Post-Merge Verification (Best-Effort Mode)
+After merging each task or batch:
+1. \`warcraft_merge({ task: "...", verify: true })\` — runs build+test
+2. If verification.passed=false: investigate failure, fix in next task or revert
+3. Never merge the next batch until the current batch passes verification
+`;

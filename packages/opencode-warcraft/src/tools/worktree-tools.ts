@@ -1,10 +1,14 @@
 import { type ToolDefinition, tool } from '@opencode-ai/plugin';
+import { exec as execCb } from 'child_process';
+import { promisify } from 'util';
 import type { FeatureService, PlanService, TaskService, TaskStatusType, WorktreeService } from 'warcraft-core';
 import type { BlockedResult } from '../types.js';
 import { toolError, toolSuccess } from '../types.js';
 import { calculatePayloadMeta, calculatePromptMeta, checkWarnings } from '../utils/prompt-observability.js';
 import { DEFAULT_BUDGET, prepareTaskDispatch } from './task-dispatch.js';
 import { resolveFeatureInput, validateTaskInput } from './tool-input.js';
+
+const execAsync = promisify(execCb);
 
 type CompletionGate = 'build' | 'test' | 'lint';
 
@@ -21,6 +25,8 @@ export interface WorktreeToolsDependencies {
   checkDependencies: (feature: string, taskFolder: string) => { allowed: boolean; error?: string };
   hasCompletionGateEvidence: (summary: string, gate: CompletionGate) => boolean;
   completionGates: readonly CompletionGate[];
+  verificationModel: 'tdd' | 'best-effort';
+  workflowGatesMode: 'enforce' | 'warn';
 }
 
 /**
@@ -233,6 +239,8 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
       validateTaskStatus,
       hasCompletionGateEvidence,
       completionGates,
+      workflowGatesMode,
+      verificationModel,
     } = this.deps;
     return tool({
       description:
@@ -257,6 +265,7 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
         feature: tool.schema.string().optional().describe('Feature name (defaults to detection or single feature)'),
       },
       async execute({ task, summary, status = 'completed', blocker, feature: explicitFeature }) {
+        let missingGatesForWarn: string[] = [];
         validateTaskInput(task);
         const resolution = resolveFeatureInput(resolveFeature, explicitFeature);
         if (!resolution.ok) return toolError(resolution.error);
@@ -269,12 +278,26 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
 
         // GATE: Check for explicit build/test/lint pass evidence when completing
         if (status === 'completed') {
-          const missingGates = completionGates.filter((gate) => !hasCompletionGateEvidence(summary, gate));
+          // In best-effort mode, skip gate checks entirely — verification deferred to orchestrator
+          if (verificationModel === 'best-effort') {
+            // Continue to commit — gates are deferred
+          } else {
+            const missingGates = completionGates.filter((gate) => !hasCompletionGateEvidence(summary, gate));
 
-          if (missingGates.length > 0) {
-            return toolError(
-              `Missing explicit verification evidence for ${missingGates.join(', ')}. Before claiming completion, run build, test, and lint gates. Include one pass signal per gate in summary (e.g. "build: exit 0"). Re-run with updated summary showing verification results.`,
-            );
+            if (missingGates.length > 0) {
+              if (workflowGatesMode === 'enforce') {
+                return toolSuccess({
+                  ok: false,
+                  terminal: false,
+                  status: 'needs_verification',
+                  nextAction:
+                    'Run build, test, and lint gates. Include pass signals in summary (e.g. "build: exit 0"). Then re-run warcraft_worktree_commit.',
+                  missingGates,
+                });
+              }
+              // warn mode: proceed but note missing evidence
+              missingGatesForWarn = [...missingGates];
+            }
           }
         }
 
@@ -287,6 +310,8 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
 
           const worktree = await worktreeService.get(feature, task);
           return toolSuccess({
+            ok: true,
+            terminal: true,
             status: 'blocked',
             task,
             summary,
@@ -363,9 +388,27 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
         });
 
         const worktree = await worktreeService.get(feature, task);
-        return toolSuccess({
+        const terminalResult: Record<string, unknown> = {
+          ok: true,
+          terminal: true,
+          status: finalStatus === 'done' ? 'completed' : status,
+          task,
           message: `Task "${task}" ${status}. Changes committed to branch ${worktree?.branch || 'unknown'}.\nUse warcraft_merge to integrate changes. Worktree preserved at ${worktree?.path || 'unknown'}.`,
-        });
+        };
+
+        if (status === 'completed' && verificationModel === 'best-effort') {
+          terminalResult.verificationDeferred = true;
+          terminalResult.deferredTo = 'orchestrator';
+        }
+
+        if (status === 'completed' && missingGatesForWarn.length > 0) {
+          return toolSuccess({
+            ...terminalResult,
+            verificationNote: `Missing evidence for: ${missingGatesForWarn.join(', ')}. Verification recommended.`,
+          });
+        }
+
+        return toolSuccess(terminalResult);
       },
     });
   }
@@ -411,8 +454,13 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
           .optional()
           .describe('Merge strategy (default: merge)'),
         feature: tool.schema.string().optional().describe('Feature name (defaults to active)'),
+        verify: tool.schema
+          .boolean()
+          .optional()
+          .default(false)
+          .describe('Run build+test after merge to verify integration'),
       },
-      async execute({ task, strategy = 'merge', feature: explicitFeature }) {
+      async execute({ task, strategy = 'merge', feature: explicitFeature, verify = false }) {
         validateTaskInput(task);
         const resolution = resolveFeatureInput(resolveFeature, explicitFeature);
         if (!resolution.ok) return toolError(resolution.error);
@@ -434,9 +482,33 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
           return toolError(`Merge failed: ${result.error}`);
         }
 
-        return toolSuccess({
+        const mergeResult = {
           message: `Task "${task}" merged successfully using ${strategy} strategy.\nCommit: ${result.sha}\nFiles changed: ${result.filesChanged?.length || 0}`,
-        });
+        };
+
+        if (verify) {
+          const execOpts = { cwd: process.cwd(), timeout: 300_000 };
+          try {
+            await execAsync('bun run build', execOpts);
+            await execAsync('bun run test', execOpts);
+            return toolSuccess({
+              ...mergeResult,
+              verification: { passed: true },
+            });
+          } catch (err: unknown) {
+            const execErr = err as { stdout?: string; stderr?: string; message?: string };
+            const output = [execErr.stdout, execErr.stderr].filter(Boolean).join('\n');
+            return toolSuccess({
+              ...mergeResult,
+              verification: {
+                passed: false,
+                output: output || execErr.message || 'Verification failed',
+              },
+            });
+          }
+        }
+
+        return toolSuccess(mergeResult);
       },
     });
   }

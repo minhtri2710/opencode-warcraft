@@ -3,10 +3,10 @@ import { readFileSync } from 'fs';
 import * as path from 'path';
 import { ALGALON_PROMPT } from './algalon';
 import { BRANN_PROMPT } from './brann';
-import { KHADGAR_PROMPT } from './khadgar';
-import { MEKKATORQUE_PROMPT } from './mekkatorque';
+import { buildKhadgarPrompt, KHADGAR_PROMPT } from './khadgar';
+import { buildMekkatorquePrompt, MEKKATORQUE_PROMPT } from './mekkatorque';
 import { MIMIRON_PROMPT } from './mimiron';
-import { SAURFANG_PROMPT } from './saurfang';
+import { buildSaurfangPrompt, SAURFANG_PROMPT } from './saurfang';
 
 describe('Khadgar (Hybrid) prompt', () => {
   describe('delegation planning alignment', () => {
@@ -73,6 +73,10 @@ describe('Khadgar (Hybrid) prompt', () => {
 
   it('contains agents-md-mastery skill reference', () => {
     expect(KHADGAR_PROMPT).toContain('agents-md-mastery');
+  });
+
+  it('contains in_progress invariant for delegated tasks', () => {
+    expect(KHADGAR_PROMPT).toContain('Invariant: delegated task MUST transition out of');
   });
 });
 
@@ -166,6 +170,10 @@ describe('Saurfang (Orchestrator) prompt', () => {
   it('contains verification checklist', () => {
     expect(SAURFANG_PROMPT).toContain('After Delegation - VERIFY');
   });
+
+  it('contains in_progress invariant for delegated tasks', () => {
+    expect(SAURFANG_PROMPT).toContain('Invariant: delegated task MUST transition out of');
+  });
 });
 
 describe('Mekkatorque (Worker/Coder) prompt', () => {
@@ -206,6 +214,20 @@ describe('Mekkatorque (Worker/Coder) prompt', () => {
   it('contains docker-mastery skill reference', () => {
     expect(MEKKATORQUE_PROMPT).toContain('docker-mastery');
   });
+
+  it('contains terminal commit contract', () => {
+    expect(MEKKATORQUE_PROMPT).toContain('ok=true');
+    expect(MEKKATORQUE_PROMPT).toContain('terminal=true');
+    expect(MEKKATORQUE_PROMPT).toContain('Stop only on terminal commit result');
+  });
+
+  it('does not tell worker to STOP IMMEDIATELY unconditionally', () => {
+    expect(MEKKATORQUE_PROMPT).not.toContain('STOP IMMEDIATELY');
+  });
+
+  it('contains intent verbalization before coding', () => {
+    expect(MEKKATORQUE_PROMPT).toContain('state in one sentence what you will do');
+  });
 });
 
 describe('Brann (Explorer/Researcher) prompt', () => {
@@ -216,6 +238,10 @@ describe('Brann (Explorer/Researcher) prompt', () => {
 
   it('mentions year awareness', () => {
     expect(BRANN_PROMPT).toContain('current year');
+  });
+
+  it('contains conditional search stop', () => {
+    expect(BRANN_PROMPT).toContain('3+ evidence sources');
   });
 });
 
@@ -284,5 +310,91 @@ describe('AGENTS.md tool guidance', () => {
     it('contains agents-md-mastery skill reference', () => {
       expect(SAURFANG_PROMPT).toContain('agents-md-mastery');
     });
+  });
+});
+
+describe('AGENTS.md architecture principles', () => {
+  const AGENTS_MD_PATH = path.resolve(import.meta.dir, '..', '..', '..', '..', 'AGENTS.md');
+  const agentsMdContent = readFileSync(AGENTS_MD_PATH, 'utf-8');
+
+  it('contains Cross-Model Prompts principle', () => {
+    expect(agentsMdContent).toContain('Cross-Model Prompts');
+  });
+});
+
+describe('Mekkatorque verification model conditional prompt', () => {
+  it('tdd mode contains TDD-specific content', () => {
+    const prompt = buildMekkatorquePrompt({ verificationModel: 'tdd' });
+    expect(prompt).toContain('TDD');
+    expect(prompt).toContain('first failing test');
+    expect(prompt).toContain('Plan the minimum change to reach green');
+    expect(prompt).toContain('Tests pass');
+    expect(prompt).toContain('Build succeeds');
+  });
+
+  it('best-effort mode contains lightweight checks', () => {
+    const prompt = buildMekkatorquePrompt({ verificationModel: 'best-effort' });
+    expect(prompt).toContain('lsp_diagnostics');
+    expect(prompt).toContain('ast-grep');
+    expect(prompt).toContain('lightweight');
+    expect(prompt).toContain('post-merge by orchestrator');
+  });
+
+  it('best-effort mode does NOT contain TDD-specific content', () => {
+    const prompt = buildMekkatorquePrompt({ verificationModel: 'best-effort' });
+    expect(prompt).not.toContain('first failing test');
+    expect(prompt).not.toContain('Plan the minimum change to reach green');
+  });
+
+  it('backward-compatible MEKKATORQUE_PROMPT equals tdd mode', () => {
+    const tddPrompt = buildMekkatorquePrompt({ verificationModel: 'tdd' });
+    expect(MEKKATORQUE_PROMPT).toBe(tddPrompt);
+  });
+});
+
+describe('Khadgar verification model conditional prompt', () => {
+  it('tdd mode does not contain post-merge verification block', () => {
+    const prompt = buildKhadgarPrompt({ verificationModel: 'tdd' });
+    expect(prompt).not.toContain('Post-Merge Verification (Best-Effort Mode)');
+  });
+
+  it('best-effort mode contains post-merge verification instructions', () => {
+    const prompt = buildKhadgarPrompt({ verificationModel: 'best-effort' });
+    expect(prompt).toContain('Post-Merge Verification (Best-Effort Mode)');
+    expect(prompt).toContain('verify: true');
+    expect(prompt).toContain('verification.passed=false');
+  });
+
+  it('backward-compatible KHADGAR_PROMPT equals tdd mode', () => {
+    const tddPrompt = buildKhadgarPrompt({ verificationModel: 'tdd' });
+    expect(KHADGAR_PROMPT).toBe(tddPrompt);
+  });
+});
+
+describe('Saurfang verification model conditional prompt', () => {
+  it('tdd mode does not contain post-merge verification block', () => {
+    const prompt = buildSaurfangPrompt({ verificationModel: 'tdd' });
+    expect(prompt).not.toContain('Post-Merge Verification (Best-Effort Mode)');
+  });
+
+  it('best-effort mode contains post-merge verification instructions', () => {
+    const prompt = buildSaurfangPrompt({ verificationModel: 'best-effort' });
+    expect(prompt).toContain('Post-Merge Verification (Best-Effort Mode)');
+    expect(prompt).toContain('verify: true');
+  });
+
+  it('backward-compatible SAURFANG_PROMPT equals tdd mode', () => {
+    const tddPrompt = buildSaurfangPrompt({ verificationModel: 'tdd' });
+    expect(SAURFANG_PROMPT).toBe(tddPrompt);
+  });
+});
+
+describe('AGENTS.md best-effort verification', () => {
+  const AGENTS_MD_PATH = path.resolve(import.meta.dir, '..', '..', '..', '..', 'AGENTS.md');
+  const agentsMdContent = readFileSync(AGENTS_MD_PATH, 'utf-8');
+
+  it('principle #6 mentions best-effort', () => {
+    expect(agentsMdContent).toContain('best-effort');
+    expect(agentsMdContent).toContain('verificationModel');
   });
 });
