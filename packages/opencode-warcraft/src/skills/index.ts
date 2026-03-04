@@ -8,7 +8,6 @@ export {
   BUILTIN_SKILLS,
   type BuiltinSkillName,
   getBuiltinSkills,
-  getBuiltinSkillsXml,
   getFilteredSkills,
   loadBuiltinSkill,
 } from './builtin.js';

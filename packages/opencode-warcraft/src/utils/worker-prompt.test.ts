@@ -188,6 +188,58 @@ describe('buildWorkerPrompt continuation', () => {
 });
 
 // ============================================================================
+// Verification model mode tests
+// ============================================================================
+
+describe('buildWorkerPrompt verificationModel', () => {
+  it('includes TDD content when verificationModel is "tdd"', () => {
+    const params = createTestParams({ verificationModel: 'tdd' });
+    const prompt = buildWorkerPrompt(params);
+
+    // Should contain TDD-related strings
+    expect(prompt).toContain('TDD');
+    expect(prompt).toContain('## TDD Protocol (Required)');
+    expect(prompt).toContain('The first failing test to write is clear (TDD).');
+    expect(prompt).toContain('The minimal change needed to reach green is planned.');
+  });
+
+  it('includes TDD content when verificationModel is undefined (default)', () => {
+    const params = createTestParams({ verificationModel: undefined });
+    const prompt = buildWorkerPrompt(params);
+
+    // Should contain TDD-related strings (default behavior)
+    expect(prompt).toContain('TDD');
+    expect(prompt).toContain('## TDD Protocol (Required)');
+    expect(prompt).toContain('The first failing test to write is clear (TDD).');
+    expect(prompt).toContain('The minimal change needed to reach green is planned.');
+  });
+
+  it('excludes TDD content when verificationModel is "best-effort"', () => {
+    const params = createTestParams({ verificationModel: 'best-effort' });
+    const prompt = buildWorkerPrompt(params);
+
+    // Should NOT contain TDD-related strings
+    expect(prompt).not.toContain('TDD');
+    expect(prompt).not.toContain('## TDD Protocol (Required)');
+    expect(prompt).not.toContain('The first failing test to write is clear (TDD).');
+    expect(prompt).not.toContain('The minimal change needed to reach green is planned.');
+  });
+
+  it('preserves other sections in best-effort mode', () => {
+    const params = createTestParams({ verificationModel: 'best-effort' });
+    const prompt = buildWorkerPrompt(params);
+
+    // Must keep these critical sections
+    expect(prompt).toContain('## Blocker Protocol');
+    expect(prompt).toContain('## Completion Protocol');
+    expect(prompt).toContain('## Assignment Details');
+    expect(prompt).toContain('## Debugging Protocol (When stuck)');
+    expect(prompt).toContain('CRITICAL');
+    expect(prompt).toContain('warcraft_worktree_commit');
+  });
+});
+
+// ============================================================================
 // Edge cases
 // ============================================================================
 

@@ -1559,6 +1559,7 @@ Align documentation wording.
       setupTask(featureName, '01-test-task', { beadId: 'bd-task-1' });
 
       // Create a new service with beadsMode off
+      // In off mode, FilesystemTaskStore does not receive BeadsRepository
       const offRepo = createRepository('off');
       const offStores = createStores(PROJECT_ROOT, 'off', offRepo);
       const offModeService = new TaskService(PROJECT_ROOT, offStores.taskStore, 'off');
@@ -1573,7 +1574,8 @@ Align documentation wording.
       const result = offModeService.readTaskBeadArtifact(featureName, '01-test-task', 'spec');
 
       expect(importSpy).not.toHaveBeenCalled();
-      expect(readArtifactSpy).toHaveBeenCalledWith('bd-task-1', 'spec');
+      // In off mode, the store has no repository reference, so readTaskArtifact is NOT called
+      expect(readArtifactSpy).not.toHaveBeenCalled();
       expect(result).toBeNull();
 
       importSpy.mockRestore();
@@ -1656,6 +1658,7 @@ Align documentation wording.
       setupTask(featureName, '01-test-task', { beadId: 'bd-task-1' });
 
       // Create a new service with beadsMode off
+      // In off mode, FilesystemTaskStore does not receive BeadsRepository
       const offRepo = createRepository('off');
       const offStores = createStores(PROJECT_ROOT, 'off', offRepo);
       const offModeService = new TaskService(PROJECT_ROOT, offStores.taskStore, 'off');
@@ -1669,9 +1672,11 @@ Align documentation wording.
 
       const result = offModeService.writeSpec(featureName, '01-test-task', 'spec content');
 
-      expect(upsertSpy).toHaveBeenCalledWith('bd-task-1', 'spec', 'spec content');
+      // In off mode, the store has no repository reference, so upsertTaskArtifact is NOT called
+      expect(upsertSpy).not.toHaveBeenCalled();
       expect(flushSpy).not.toHaveBeenCalled();
-      expect(result).toBe('bd-task-1');
+      // Returns folder name as fallback identifier when repository is absent
+      expect(result).toBe('01-test-task');
 
       flushSpy.mockRestore();
       upsertSpy.mockRestore();
@@ -1969,6 +1974,286 @@ Align documentation wording.
       expect(result.completed[0].beadId).toBe('bd-3');
 
       listSpy.mockRestore();
+    });
+  });
+
+  describe('slug collision detection', () => {
+    it('sync() throws when two plan tasks produce the same slug from different names', () => {
+      const featureName = 'test-feature';
+      const featurePath = path.join(TEST_DIR, '.beads/artifacts', featureName);
+      fs.mkdirSync(featurePath, { recursive: true });
+
+      fs.writeFileSync(
+        path.join(featurePath, 'feature.json'),
+        JSON.stringify({
+          name: featureName,
+          epicBeadId: 'bd-epic-test',
+          status: 'executing',
+          createdAt: new Date().toISOString(),
+        }),
+      );
+
+      // "My Task" (slug: my-task) and "my-task" (slug: my-task) collide
+      const planContent = `# Plan
+
+### 1. My Task
+
+**Depends on**: none
+
+First task.
+
+### 2. my-task
+
+**Depends on**: none
+
+Second task with colliding slug.
+`;
+      fs.writeFileSync(path.join(featurePath, 'plan.md'), planContent);
+
+      expect(() => service.sync(featureName)).toThrow(
+        /Task name 'my-task' collides with existing task after slugification \(folder: my-task\)\. Please rename the task\./,
+      );
+    });
+
+    it('sync() throws when task names differ only by extra whitespace', () => {
+      const featureName = 'test-feature';
+      const featurePath = path.join(TEST_DIR, '.beads/artifacts', featureName);
+      fs.mkdirSync(featurePath, { recursive: true });
+
+      fs.writeFileSync(
+        path.join(featurePath, 'feature.json'),
+        JSON.stringify({
+          name: featureName,
+          epicBeadId: 'bd-epic-test',
+          status: 'executing',
+          createdAt: new Date().toISOString(),
+        }),
+      );
+
+      // "My Task" and "My  Task" (double space) both slugify to "my-task"
+      const planContent = `# Plan
+
+### 1. My Task
+
+**Depends on**: none
+
+First task.
+
+### 2. My  Task
+
+**Depends on**: none
+
+Second task with extra whitespace.
+`;
+      fs.writeFileSync(path.join(featurePath, 'plan.md'), planContent);
+
+      expect(() => service.sync(featureName)).toThrow(/collides with existing task after slugification/);
+    });
+
+    it('sync() does not throw when tasks have genuinely different slugs', () => {
+      const featureName = 'test-feature';
+      const featurePath = path.join(TEST_DIR, '.beads/artifacts', featureName);
+      fs.mkdirSync(featurePath, { recursive: true });
+
+      fs.writeFileSync(
+        path.join(featurePath, 'feature.json'),
+        JSON.stringify({
+          name: featureName,
+          epicBeadId: 'bd-epic-test',
+          status: 'executing',
+          createdAt: new Date().toISOString(),
+        }),
+      );
+
+      const planContent = `# Plan
+
+### 1. Setup API
+
+**Depends on**: none
+
+First task.
+
+### 2. Build UI
+
+**Depends on**: 1
+
+Second task.
+`;
+      fs.writeFileSync(path.join(featurePath, 'plan.md'), planContent);
+
+      // Use off-mode to avoid beadId issues
+      const offStores = createStores(PROJECT_ROOT, 'off', createRepository('off'));
+      const offModeService = new TaskService(PROJECT_ROOT, offStores.taskStore, 'off');
+
+      // Should NOT throw
+      const result = offModeService.sync(featureName);
+      expect(result.created).toContain('01-setup-api');
+      expect(result.created).toContain('02-build-ui');
+    });
+
+    it('create() throws when slug collides with existing task from a different name', () => {
+      const featureName = 'test-feature';
+      setupFeature(featureName);
+
+      // Use off-mode so we can verify local filesystem state
+      const offStores = createStores(PROJECT_ROOT, 'off', createRepository('off'));
+      const offModeService = new TaskService(PROJECT_ROOT, offStores.taskStore, 'off');
+
+      // Create "My Task" first
+      offModeService.create(featureName, 'My Task', 1, 3);
+
+      // "my-task" slugifies to the same slug as "My Task"
+      expect(() => offModeService.create(featureName, 'my-task', 2, 3)).toThrow(
+        /Task name 'my-task' collides with existing task after slugification \(folder: my-task\)\. Please rename the task\./,
+      );
+    });
+
+    it('create() does not throw when slug is unique', () => {
+      const featureName = 'test-feature';
+      setupFeature(featureName);
+
+      // Use off-mode
+      const offStores = createStores(PROJECT_ROOT, 'off', createRepository('off'));
+      const offModeService = new TaskService(PROJECT_ROOT, offStores.taskStore, 'off');
+
+      offModeService.create(featureName, 'Setup API', 1, 3);
+      // Different slug, should not throw
+      const folder = offModeService.create(featureName, 'Build UI', 2, 3);
+      expect(folder).toBe('02-build-ui');
+    });
+  });
+
+  describe('previewSync and sync produce identical classification', () => {
+    it('both methods agree on created/removed/kept/manual for the same input (off-mode)', () => {
+      const featureName = 'test-feature';
+      const featurePath = path.join(TEST_DIR, '.beads/artifacts', featureName);
+      fs.mkdirSync(featurePath, { recursive: true });
+
+      fs.writeFileSync(
+        path.join(featurePath, 'feature.json'),
+        JSON.stringify({
+          name: featureName,
+          epicBeadId: 'bd-epic-test',
+          status: 'executing',
+          createdAt: new Date().toISOString(),
+        }),
+      );
+
+      const planContent = `# Plan
+
+### 1. Keep This
+
+**Depends on**: none
+
+Task to keep.
+
+### 2. New Task
+
+**Depends on**: 1
+
+Brand new task.
+`;
+      fs.writeFileSync(path.join(featurePath, 'plan.md'), planContent);
+
+      // Setup existing tasks: one matching plan, one removed, one manual, one done
+      const offStores1 = createStores(PROJECT_ROOT, 'off', createRepository('off'));
+      const previewService = new TaskService(PROJECT_ROOT, offStores1.taskStore, 'off');
+
+      // Manually create existing task state on filesystem
+      const tasksDir = path.join(featurePath, 'tasks');
+      // 01-keep-this: pending, in plan → kept
+      const keepDir = path.join(tasksDir, '01-keep-this');
+      fs.mkdirSync(keepDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(keepDir, 'status.json'),
+        JSON.stringify({ status: 'pending', origin: 'plan', planTitle: 'Keep This' }),
+      );
+      // 03-old-task: pending, NOT in plan → removed
+      const oldDir = path.join(tasksDir, '03-old-task');
+      fs.mkdirSync(oldDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(oldDir, 'status.json'),
+        JSON.stringify({ status: 'pending', origin: 'plan', planTitle: 'Old Task' }),
+      );
+      // 04-manual-task: manual origin → manual
+      const manualDir = path.join(tasksDir, '04-manual-task');
+      fs.mkdirSync(manualDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(manualDir, 'status.json'),
+        JSON.stringify({ status: 'pending', origin: 'manual', planTitle: 'Manual Task' }),
+      );
+      // 05-done-task: done → kept regardless of plan
+      const doneDir = path.join(tasksDir, '05-done-task');
+      fs.mkdirSync(doneDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(doneDir, 'status.json'),
+        JSON.stringify({ status: 'done', origin: 'plan', planTitle: 'Done Task' }),
+      );
+
+      const preview = previewService.previewSync(featureName);
+
+      // Now create a fresh service for sync with the same initial state
+      // Recreate the filesystem state since previewSync doesn't mutate
+      const offStores2 = createStores(PROJECT_ROOT, 'off', createRepository('off'));
+      const syncService = new TaskService(PROJECT_ROOT, offStores2.taskStore, 'off');
+
+      const syncResult = syncService.sync(featureName);
+
+      // Classification must be identical
+      expect(preview.created.sort()).toEqual(syncResult.created.sort());
+      expect(preview.removed.sort()).toEqual(syncResult.removed.sort());
+      expect(preview.kept.sort()).toEqual(syncResult.kept.sort());
+      expect(preview.manual.sort()).toEqual(syncResult.manual.sort());
+    });
+
+    it('previewSync does not mutate store state (off-mode)', () => {
+      const featureName = 'test-feature';
+      const featurePath = path.join(TEST_DIR, '.beads/artifacts', featureName);
+      fs.mkdirSync(featurePath, { recursive: true });
+
+      fs.writeFileSync(
+        path.join(featurePath, 'feature.json'),
+        JSON.stringify({
+          name: featureName,
+          epicBeadId: 'bd-epic-test',
+          status: 'executing',
+          createdAt: new Date().toISOString(),
+        }),
+      );
+
+      const planContent = `# Plan
+
+### 1. New Task
+
+**Depends on**: none
+
+New task to create.
+`;
+      fs.writeFileSync(path.join(featurePath, 'plan.md'), planContent);
+
+      // Setup a task that will be "removed" by sync
+      const tasksDir = path.join(featurePath, 'tasks');
+      const oldDir = path.join(tasksDir, '99-old-task');
+      fs.mkdirSync(oldDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(oldDir, 'status.json'),
+        JSON.stringify({ status: 'pending', origin: 'plan', planTitle: 'Old Task' }),
+      );
+
+      const offStores = createStores(PROJECT_ROOT, 'off', createRepository('off'));
+      const svc = new TaskService(PROJECT_ROOT, offStores.taskStore, 'off');
+
+      const tasksBefore = svc.list(featureName);
+      const preview = svc.previewSync(featureName);
+      const tasksAfter = svc.list(featureName);
+
+      // previewSync should report removal but NOT actually delete
+      expect(preview.removed).toContain('99-old-task');
+      expect(preview.created).toContain('01-new-task');
+
+      // Store state unchanged
+      expect(tasksBefore.length).toBe(tasksAfter.length);
+      expect(tasksBefore.map((t) => t.folder).sort()).toEqual(tasksAfter.map((t) => t.folder).sort());
     });
   });
 

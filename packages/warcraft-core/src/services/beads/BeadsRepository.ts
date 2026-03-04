@@ -33,7 +33,7 @@ import {
   taskStateToTaskStatus,
 } from './artifactSchemas.js';
 import { BeadGateway, BeadGatewayError } from './BeadGateway.js';
-import type { BeadArtifactKind } from './BeadGateway.types.js';
+import type { AuditEntry, AuditRecordParams, BeadArtifactKind, BeadComment } from './BeadGateway.types.js';
 import type { RobotPlanResult } from './BeadsViewerGateway.js';
 import { BeadsViewerGateway } from './BeadsViewerGateway.js';
 import type { BvHealth } from './bv-runner.js';
@@ -679,6 +679,124 @@ export class BeadsRepository {
         success: false,
         error: this.normalizeError(error),
       };
+    }
+  }
+
+  /**
+   * Get comments from a bead (stored as bead comments).
+   *
+   * @param beadId - Bead ID
+   * @returns Array of bead comments
+   */
+  getComments(beadId: string): Result<BeadComment[]> {
+    try {
+      this.beforeRead();
+
+      const comments = this.gateway.listComments(beadId);
+      return { success: true, value: comments };
+    } catch (error) {
+      return {
+        success: false,
+        error: this.normalizeError(error),
+      };
+    }
+  }
+
+  /**
+   * Append a comment to a bead (stored as bead comment).
+   *
+   * Comments are append-only timeline events.
+   *
+   * @param beadId - Bead ID
+   * @param body - Comment body to append
+   */
+  appendComment(beadId: string, body: string): Result<void> {
+    try {
+      this.gateway.addComment(beadId, body);
+      this.afterWrite();
+
+      return { success: true, value: undefined };
+    } catch (error) {
+      return {
+        success: false,
+        error: this.normalizeError(error),
+      };
+    }
+  }
+
+  // ==========================================================================
+  // Audit Operations (sidecar — must NEVER block callers)
+  // ==========================================================================
+
+  /**
+   * Record an audit event for agent interaction logging.
+   *
+   * This is a sidecar operation: failures are logged but never propagated
+   * to callers. All call sites MUST use this method (not gateway.auditRecord
+   * directly) to ensure the non-blocking guarantee.
+   *
+   * @param beadId - Bead ID the event relates to
+   * @param event - Audit event parameters
+   */
+  recordAuditEvent(beadId: string, event: AuditRecordParams): void {
+    try {
+      this.gateway.auditRecord({ ...event, issueId: beadId });
+    } catch (error) {
+      console.warn(
+        `[BeadsRepository] Audit record failed (non-blocking): ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  /**
+   * Retrieve the audit log for a bead.
+   *
+   * This is a sidecar operation: failures return an empty array and are
+   * logged but never propagated to callers.
+   *
+   * @param beadId - Bead ID to retrieve audit log for
+   * @returns Array of audit entries, or empty array on failure
+   */
+  getAuditLog(beadId: string): AuditEntry[] {
+    try {
+      return this.gateway.auditLog(beadId);
+    } catch (error) {
+      console.warn(
+        `[BeadsRepository] Audit log retrieval failed (non-blocking): ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return [];
+    }
+  }
+
+  // ==========================================================================
+  // Bead Display Operations
+  // ==========================================================================
+
+  /**
+   * Get bead in toon format (token-optimized, LLM-friendly).
+   *
+   * Returns the raw toon-format string without parsing.
+   * On failure, falls back to existing JSON `show()` with a warning.
+   *
+   * @param beadId - Bead ID to show
+   * @returns Raw toon-format string, or JSON stringified show() fallback
+   */
+  getBeadToon(beadId: string): Result<string> {
+    try {
+      this.beforeRead();
+      const toonOutput = this.gateway.showToon(beadId);
+      return { success: true, value: toonOutput };
+    } catch {
+      console.warn(`[BeadsRepository] toon format failed for bead '${beadId}', falling back to JSON show()`);
+      try {
+        const jsonOutput = this.gateway.show(beadId);
+        return { success: true, value: JSON.stringify(jsonOutput) };
+      } catch (fallbackError) {
+        return {
+          success: false,
+          error: this.normalizeError(fallbackError),
+        };
+      }
     }
   }
 

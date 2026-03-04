@@ -1,41 +1,126 @@
-# Agent Guidelines for opencode-warcraft
+# Repository Guidelines
 
-## Overview
+## Project Overview
 
-**opencode-warcraft** is a context-driven development system for AI coding assistants. It implements a plan-first workflow: Plan → Approve → Execute.
+**opencode-warcraft** is a feature development system built as an OpenCode plugin. It implements a plan-first workflow (Plan → Approve → Execute) using a character-based agent model with specialized roles.
 
-Project Warcraft uses **beads-core** for canonical task tracking (stored in `.beads/artifacts/`).
+**Key Concept**: Features are tracked through "beads" (task management entities) with human-shaped plans and agent-built implementations.
 
-## Build & Test Commands
+## Architecture & Data Flow
+
+### Monorepo Structure
+
+```
+packages/
+├── warcraft-core/           # Shared domain logic
+│   └── src/
+│       ├── services/        # FeatureService, TaskService, PlanService, stores
+│       ├── utils/           # fs, paths, detection utilities
+│       └── types.ts         # Core type definitions
+└── opencode-warcraft/       # OpenCode plugin integration
+    └── src/
+        ├── agents/          # Agent definitions (Khadgar, Mimiron, Saurfang, etc.)
+        ├── tools/           # Warcraft tool implementations (17 tools)
+        ├── mcp/             # MCP integration (websearch, grep-app, context7)
+        ├── hooks/           # Event hooks (variant, compaction)
+        ├── skills/          # Skill definitions and generated registry
+        ├── e2e/             # End-to-end tests
+        └── container.ts     # Dependency injection root
+```
+
+### Architecture Patterns
+
+**Service Layer Architecture**: Class-based services with dependency injection
+- `FeatureService` - Feature lifecycle management
+- `TaskService` - Task CRUD with dependency resolution and validation
+- `PlanService` - Plan storage and retrieval
+- `BeadGateway` - CLI interface to beads_rust (`br` commands)
+- Stores: `FeatureStore`, `TaskStore`, `PlanStore` (pluggable: beads vs filesystem)
+
+**Storage Abstraction**: Two modes controlled by `beadsMode` config
+- **`"on"`** (default): Beads-native - beads are canonical, local files are cache
+- **`"off"`**: Legacy local files mode - `.beads/artifacts/` files are authoritative
+
+**Agent Model**: Six specialized agents with distinct roles
+- **Khadgar** (Hybrid): Plans + orchestrates, detects phase, loads skills on-demand
+- **Mimiron** (Planner): Plans features, interviews, writes plans. NEVER executes
+- **Saurfang** (Orchestrator): Orchestrates execution, delegates, spawns workers, verifies
+- **Brann** (Explorer): Researches codebase + external docs/data
+- **Mekkatorque** (Worker): Executes tasks directly in isolated worktrees. Never delegates
+- **Algalon** (Consultant): Reviews plan/code quality. OKAY/REJECT verdict
+
+**Dependency Injection**: Container pattern in `container.ts` composes all services and tool modules
+
+**Tool Domains** (17 tools total): Feature, Plan, Task, Worktree, Merge, Batch, Context, AGENTS.md, Status, Skill
+
+### Data Flow
+
+1. User creates feature via `warcraft_feature_create(name)`
+2. Human writes plan via `warcraft_plan_write(content)`
+3. User approves plan via `warcraft_plan_approve()` (stores SHA-256 hash for integrity)
+4. `warcraft_tasks_sync()` generates tasks from plan
+5. `warcraft_worktree_create(task)` creates isolated worktree per task
+6. Worker executes in worktree → `warcraft_worktree_commit(task, summary)` commits to task branch
+7. `warcraft_merge(task)` merges task branch into main
+
+## Key Directories
+
+| Directory | Purpose |
+|-----------|---------|
+| `packages/warcraft-core/src/services/` | Core business logic services |
+| `packages/warcraft-core/src/services/beads/` | Beads_rust CLI integration |
+| `packages/warcraft-core/src/services/state/` | Storage abstraction layer |
+| `packages/opencode-warcraft/src/agents/` | Agent system prompts and definitions |
+| `packages/opencode-warcraft/src/tools/` | Tool implementations (7 domain modules) |
+| `packages/opencode-warcraft/src/skills/` | Skill definitions (SKILL.md files) |
+| `packages/opencode-warcraft/src/hooks/` | Event hooks (variant injection, compaction) |
+| `packages/opencode-warcraft/src/mcp/` | MCP server integration |
+| `packages/opencode-warcraft/src/e2e/` | End-to-end integration tests |
+| `.beads/artifacts/` | Feature/task state (beadsMode on) |
+
+## Development Commands
+
+### Build & Test (from root)
 
 ```bash
 # Build all packages
 bun run build
 
-# Development mode (all packages)
-bun run dev
+# Run all tests
+bun run test
 
-# Run tests (from package directories)
-bun run test              # Run all tests
-bun run test -- <file>    # Run specific test
+# Type checking
+bun run lint
 
-# Run static checks
-bun run lint              # Run workspace type checks
+# Format code
+bun run format
 
-# Release preparation
-bun run release:check     # Install, build, and test all packages
+# Full release check
+bun run release:check
 ```
 
-Worktree dependency note: worktrees are isolated checkouts and do not share the root `node_modules`. If you run tests or builds inside a worktree, run `bun install` there first (or run tests from the repo root that already has dependencies installed).
-
-## Troubleshooting
-
-### Worktree Dependencies (Module Not Found)
-
-If tests or builds fail with "module not found" errors inside a worktree:
+### Package-Specific Commands
 
 ```bash
-# Option 1: Install dependencies in the worktree
+# From packages/warcraft-core/
+bun run build             # Build core library
+bun run test              # Run tests
+bun run typecheck         # Type check without emit
+
+# From packages/opencode-warcraft/
+bun run generate-skills   # Generate skills registry from SKILL.md files
+bun run build             # Build plugin (includes skill generation)
+bun run dev               # Watch mode for development
+bun run test              # Run tests
+bun run typecheck         # Type check without emit
+```
+
+### Worktree Dependency Note
+
+Worktrees are isolated checkouts without shared `node_modules`. If tests fail in worktrees:
+
+```bash
+# Option 1: Install in worktree
 cd .beads/artifacts/.worktrees/<feature>/<task>
 bun install
 bun run test
@@ -45,448 +130,382 @@ cd /path/to/repo/root
 bun run test --filter warcraft-core
 ```
 
-### Package-Specific Commands
+## Code Conventions & Common Patterns
 
-```bash
-# From packages/warcraft-core/
-bun run build             # Build warcraft-core
-bun run test              # Run warcraft-core tests
+### TypeScript Configuration
 
-# From packages/opencode-warcraft/
-bun run build             # Build opencode-warcraft plugin
-bun run dev               # Watch mode
+- **Target**: ES2022 with ESNext modules
+- **Mode**: Strict mode enabled
+- **Modules**: ESM with `.js` extension required for local imports
+- **Resolution**: `bundler` mode for modern module resolution
 
-```
+### Naming Conventions
 
-## Code Style
+| Category | Convention | Example |
+|----------|------------|---------|
+| Types/Interfaces | `PascalCase` | `FeatureInfo`, `TaskInput` |
+| Classes | `PascalCase` | `FeatureService`, `BeadGateway` |
+| Functions/Variables | `camelCase` | `readFeatureJson`, `ensureFeatureDir` |
+| Constants | `UPPER_SNAKE_CASE` | `COMPLETION_GATES`, `MAX_TASKS` |
+| Files | `kebab-case.ts` | `config-service.ts`, `task-tools.ts` |
+| Test files | `*.test.ts` | `featureService.test.ts` |
 
-### General
-
-- **TypeScript ES2022** with ESM modules
-- **Semicolons**: Yes, use semicolons
-- **Quotes**: Single quotes for strings
-- **Imports**: Use `.js` extension for local imports (ESM requirement)
-- **Type imports**: Separate with `import type { X }` syntax
-- **Naming**:
-  - `camelCase` for variables, functions
-  - `PascalCase` for types, interfaces, classes
-  - Descriptive function names (`readFeatureJson`, `ensureFeatureDir`)
-
-### TypeScript Patterns
+### Import/Export Patterns
 
 ```typescript
-// Explicit type annotations
-interface FeatureInfo {
-  name: string;
-  path: string;
-  status: 'active' | 'completed';
-}
+// Type imports - separate with `import type`
+import type { Feature, Task } from './types.js';
 
-// Classes for services
+// Value imports
+import { FeatureService, TaskService } from './services/index.js';
+
+// Local imports MUST use .js extension (ESM requirement)
+import { readJson } from './utils/fs.js';
+```
+
+### Service Class Pattern
+
+```typescript
 export class FeatureService {
-  constructor(private readonly rootDir: string) {}
-  
-  async createFeature(name: string): Promise<FeatureInfo> {
-    // ...
+  constructor(
+    private readonly config: Config,
+    private readonly store: FeatureStore
+  ) {}
+
+  async createFeature(name: string): Promise<Feature> {
+    // Explicit error handling
+    try {
+      const feature = await this.store.create(name);
+      return feature;
+    } catch (error) {
+      throw new FeatureServiceError(
+        'feature_create_failed',
+        `Failed to create feature: ${error.message}`,
+        { featureName: name }
+      );
+    }
+  }
+}
+```
+
+### Async/Await Patterns
+
+- **Prefer async/await** over raw promise chaining
+- **Always specify return types** for public functions: `Promise<T>`
+- **Use explicit error types** with error codes
+
+```typescript
+// Good: Explicit types, error handling
+async function loadConfig(path: string): Promise<Config> {
+  try {
+    const data = await fs.readFile(path, 'utf-8');
+    return JSON.parse(data);
+  } catch (error) {
+    throw new ConfigError('config_load_failed', `Failed: ${error.message}`);
+  }
+}
+```
+
+### Error Handling Patterns
+
+**Custom Error Classes**:
+```typescript
+export class BeadGatewayError extends Error {
+  constructor(
+    public readonly code: string,
+    message: string,
+    public readonly details?: Record<string, unknown>
+  ) {
+    super(message);
+    this.name = 'BeadGatewayError';
   }
 }
 
-// Async/await over raw promises
-async function loadConfig(): Promise<Config> {
-  const data = await fs.readFile(path, 'utf-8');
-  return JSON.parse(data);
-}
+// Usage
+throw new BeadGatewayError(
+  'br_not_found',
+  'br CLI not found or not usable',
+  { command: 'br', exitCode: error.exitCode }
+);
 ```
 
-### File Organization
-
-```
-packages/
-├── warcraft-core/           # Shared logic (services, types, utils)
-│   └── src/
-│       ├── services/    # FeatureService, TaskService, PlanService, etc.
-│       ├── utils/       # paths.ts, detection.ts
-│       └── types.ts     # Shared type definitions
-├── opencode-warcraft/       # OpenCode plugin (current)
-│   └── src/
-│       ├── agents/      # brann, saurfang, khadgar, mimiron, mekkatorque, algalon
-│       ├── mcp/         # websearch, grep-app, context7
-│       ├── tools/       # Warcraft tool implementations
-│       ├── hooks/       # Event hooks
-│       └── skills/      # Skill definitions
-└── (future packages)       # Additional workspace packages as needed
-```
-
-### Package-Level Agent Maps
-
-For folder ownership and workflow details, read these first:
-
-- `packages/README.md`
-- `packages/warcraft-core/AGENTS.md`
-- `packages/opencode-warcraft/AGENTS.md`
-
-### Tests
-
-- Test files use `.test.ts` suffix
-- Place tests next to source files or in `__tests__/` directories
-- Use descriptive test names
-
-## Commit Messages
-
-Use **Conventional Commits**:
-
-```
-feat: add parallel task execution
-fix: handle missing worktree gracefully
-docs: update skill documentation
-chore: upgrade dependencies
-refactor: extract worktree logic to service
-test: add feature service unit tests
-perf: cache resolved paths
-```
-
-Breaking changes use `!`:
-```
-feat!: change plan format to support subtasks
-```
-
-## Architecture Principles
-
-### Core Philosophy
-
-1. **Context Persists** - Beads (`.beads/artifacts/`) are canonical; memory is ephemeral
-2. **Plan → Approve → Execute** - No code without approved plan
-3. **Human Shapes, Agent Builds** - Humans decide direction, agents implement
-4. **Good Enough Wins** - Ship working code, iterate later
-5. **Batched Parallelism** - Delegate independent tasks to workers
-6. **Tests Define Done** - Default: TDD subtasks (test → implement → verify). Opt-in: best-effort worker verification + orchestrator post-merge testing (`verificationModel: "best-effort"`)
-7. **Iron Laws + Hard Gates** - Non-negotiable constraints per agent
-8. **Cross-Model Prompts** — Agent prompts must work across all supported LLM providers. Use conditional triggers ("when X, do Y") instead of absolute mandates ("always do Y").
-
-### Agent Roles
-
-| Agent | Role |
-|-------|------|
-| Khadgar (Hybrid) | Plans + orchestrates. Detects phase, loads skills on-demand |
-| Mimiron (Planner) | Plans features, interviews, writes plans. NEVER executes |
-| Saurfang (Orchestrator) | Orchestrates execution. Delegates, spawns workers, verifies, merges |
-| Brann (Explorer) | Researches codebase + external docs/data |
-| Mekkatorque (Worker) | Executes tasks directly in isolated worktrees. Never delegates |
-| Algalon (Consultant) | Reviews plan/code quality. OKAY/REJECT verdict |
-
-### Data Model
-
-Features stored in `.beads/artifacts/<name>/` (beadsMode `on`) or `docs/<name>/` (beadsMode `off`):
-```
-.beads/artifacts/my-feature/
-├── feature.json       # Feature metadata (bead state cache in on mode)
-├── plan.md            # Implementation plan
-├── context/            # Persistent context files
-│   ├── research.md
-│   └── decisions.md
-└── tasks/              # Task folders (beadsMode off only; cache in on mode)
-    └── 01-sample-task/
-        ├── status.json
-        ├── spec.md
-        ├── worker-prompt.md
-        └── report.md
-```
-
-In beadsMode `on`, the `tasks/` directory is **not** created at feature creation. Task state lives canonically in bead artifacts. Local `tasks/` folders appear only as cache when tasks are synced.
-
-In beadsMode `off`, the `tasks/` directory is created at feature creation and is the canonical source of task state.
-
-Legacy nested feature paths (`.beads/artifacts/features/<feature>/`) are no longer supported.
-
-## Development Workflow
-
-### Adding a New Tool
-
-1. Create tool in `packages/opencode-warcraft/src/tools/`
-2. Register in tool index
-3. Add to agent system prompt if needed
-4. Test with actual agent invocation
-
-### Adding a New Skill
-
-1. Create directory in `packages/opencode-warcraft/skills/<name>/`
-2. Add `SKILL.md` with skill instructions
-3. Register in skill loader
-4. Document triggers in skill description
-
-### Adding a Service
-
-1. Create in `packages/warcraft-core/src/services/`
-2. Export from `services/index.ts`
-3. Add types to `types.ts`
-4. Write unit tests
-
-## Important Patterns
-
-### File System Operations
-
-Use the utility functions from warcraft-core:
-
+**Structured Tool Responses**:
 ```typescript
-import { readJson, writeJson, fileExists, ensureDir } from './utils/fs.js';
+// Success
+return toolSuccess({ featureId, path });
 
-// Not: fs.readFileSync + JSON.parse
-const data = await readJson<Config>(path);
-
-// Not: fs.mkdirSync
-await ensureDir(dirPath);
+// Error with hints
+return toolError(
+  'Feature not found',
+  ['Check that the feature exists with `warcraft_status`']
+);
 ```
 
-### Error Handling
+### Dependency Injection Pattern
 
+Services are composed in `container.ts`:
 ```typescript
-// Prefer explicit error handling
-try {
-  const feature = await featureService.load(name);
-  return { success: true, feature };
-} catch (error) {
-  return { 
-    error: `Failed to load feature: ${error.message}`,
-    hint: 'Check that the feature exists'
+export function createContainer(config: Config) {
+  const store = new BeadFeatureStore(config);
+  const featureService = new FeatureService(config, store);
+  const taskService = new TaskService(config, store);
+
+  return {
+    featureService,
+    taskService,
+    // ... wire up tool modules with services
   };
 }
 ```
 
-### Path Resolution
+### Validation Patterns
+
+**Pure validation functions** in `guards.ts`:
+```typescript
+export const VALID_TASK_STATUSES = new Set<TaskStatusType>([
+  'pending',
+  'in_progress',
+  'completed',
+  'abandoned',
+]);
+
+export function validateTaskStatus(status: string): TaskStatusType {
+  if (!VALID_TASK_STATUSES.has(status)) {
+    throw new Error(`Invalid task status: "${status}"`);
+  }
+  return status as TaskStatusType;
+}
+```
+
+### Tool Implementation Pattern
 
 ```typescript
-import { getWarcraftDir, getFeatureDir } from './utils/paths.js';
+export const warcraftFeatureCreate: Tool = {
+  name: 'warcraft_feature_create',
+  description: 'Create a new feature',
+  parameters: z.object({
+    name: z.string().min(1),
+    priority: z.number().min(1).max(5).default(3),
+  }),
+  executor: async (params, context) => {
+    // Validate inputs
+    const validated = validateFeatureName(params.name);
 
-// Use path utilities, not string concatenation
-const warcraftPath = getWarcraftDir(rootDir);
-const featurePath = getFeatureDir(rootDir, featureName);
+    // Execute business logic
+    const feature = await context.services.feature.create(validated, params.priority);
+
+    // Return structured response
+    return toolSuccess({ feature });
+  },
+};
 ```
 
-## Monorepo Structure
+## Important Files
 
-This is a **bun workspaces** monorepo:
+| File | Purpose |
+|------|---------|
+| `packages/warcraft-core/src/index.ts` | Core package entry point |
+| `packages/opencode-warcraft/src/index.ts` | Plugin entry point with system prompt, hooks, MCP |
+| `packages/opencode-warcraft/src/container.ts` | Dependency injection root |
+| `packages/warcraft-core/src/types.ts` | Core type definitions (150 lines) |
+| `packages/warcraft-core/src/services/state/types.ts` | Storage port interfaces |
+| `packages/opencode-warcraft/src/guards.ts` | Validation functions and constants |
+| `packages/opencode-warcraft/src/utils/prompt-budgeting.ts` | Task budgeting logic |
+| `packages/opencode-warcraft/scripts/generate-skills.ts` | Code generation for skills registry |
 
-```json
-{
-  "workspaces": ["packages/*"]
-}
+## Runtime/Tooling Preferences
+
+### Runtime
+- **Required**: Bun 1.3.9+
+- **Package Manager**: Bun (not npm/yarn/pnpm)
+- **Reasoning**: Built-in test runner, fast bundling, workspace support
+
+### Build Tooling
+- **Bundler**: Bun's built-in bundler (`bun build`)
+- **TypeScript**: `tsc` for declaration emission only (`--emitDeclarationOnly`)
+- **Linting/Formatting**: Biome (unified replacement for ESLint + Prettier)
+
+### Biome Configuration
+- 2-space indentation
+- Single quotes for strings
+- Semicolons required
+- Trailing commas in objects/arrays
+- 120 character line width
+- VCS integration for optimized checks
+
+## Testing & QA
+
+### Test Framework
+- **Bun Test** (`bun test`) - Built-in test runner with `describe`, `it`, `expect`
+
+### Test Organization
+
+**Co-located tests**: Test files next to source files
+```
+packages/warcraft-core/src/
+├── services/
+│   ├── featureService.ts
+│   └── featureService.test.ts
 ```
 
-- Dependencies are hoisted to root `node_modules/`
-- Each package has its own `package.json`
-- Run package scripts from the package directory (for example, `packages/opencode-warcraft/` → `bun run build`)
-
-## Warcraft Feature Development System
-
-Plan-first development: Write plan → User reviews → Approve → Execute tasks
-
-### Tools (17 total)
-
-| Domain | Tools |
-|--------|-------|
-| Feature | warcraft_feature_create, warcraft_feature_complete |
-| Plan | warcraft_plan_write, warcraft_plan_read, warcraft_plan_approve |
-| Task | warcraft_tasks_sync, warcraft_task_create, warcraft_task_update |
-| Worktree | warcraft_worktree_create, warcraft_worktree_commit, warcraft_worktree_discard |
-| Merge | warcraft_merge |
-| Batch | warcraft_batch_execute |
-| Context | warcraft_context_write |
-| AGENTS.md | warcraft_agents_md |
-| Status | warcraft_status |
-| Skill | warcraft_skill |
-
-### Workflow
-
-1. `warcraft_feature_create(name)` - Create feature
-2. `warcraft_plan_write(content)` - Write plan.md
-3. User adds comments in `plan.md` → `warcraft_plan_read` to see them
-4. Revise plan → User approves
-5. `warcraft_tasks_sync()` - Generate tasks from plan
-6. `warcraft_worktree_create(task)` → work in worktree → `warcraft_worktree_commit(task, summary)`
-7. `warcraft_merge(task)` - Merge task branch into main (when ready)
-
-**Important:** `warcraft_worktree_commit` commits changes to task branch but does NOT merge.
-Use `warcraft_merge` to explicitly integrate changes. Worktrees persist until manually removed.
-
-### Workflow Guardrails
-
-- **Standard path**: use full discovery and normal multi-task planning.
-- **Lightweight path**: add `Workflow Path: lightweight`, keep 1-2 tasks, include mini-record entries (`Impact`, `Safety`, `Verify`, `Rollback`).
-- Plan approval validates `## Plan Review Checklist`; it blocks only in enforce mode and warns in default warn mode.
-- PRs should include references to `plan.md`, task `report.md`, and verification command results.
-- CI should enforce `.beads/artifacts` sync (`br sync --flush-only` drift check) and PR evidence structure.
-
-### Sandbox Configuration
-
-**Docker sandbox** provides isolated test environments for workers:
-
-- **Config location**: `~/.config/opencode/opencode_warcraft.json`
-- **Fields**:
-  - `sandbox: 'none' | 'docker'` — Isolation mode (default: 'none')
-  - `dockerImage?: string` — Custom Docker image (optional, auto-detects if omitted)
-- **Auto-detection**: Detects runtime from project files:
-  - `package.json` → `node:22-slim`
-  - `requirements.txt` / `pyproject.toml` → `python:3.12-slim`
-  - `go.mod` → `golang:1.22-slim`
-  - `Cargo.toml` → `rust:1.77-slim`
-  - `Dockerfile` → builds from project Dockerfile
-  - Fallback → `ubuntu:24.04`
-**Example config**:
-```json
-{
-  "sandbox": "docker",
-  "dockerImage": "node:22-slim",
-  "beadsMode": "on"
-}
+**E2E tests**: Separate directory
+```
+packages/opencode-warcraft/src/e2e/
+├── helpers/
+│   └── test-env.ts          # Temp dir setup, git project setup, cleanup
+└── plugin-smoke.test.ts     # Full plugin testing
 ```
 
-Workers are unaware of sandboxing — bash commands are transparently intercepted and wrapped with `docker run`.
+### Test Patterns
 
-### Agent Mode
+**Unit Test**:
+```typescript
+import { describe, expect, it } from 'bun:test';
 
-`agentMode` controls which agents are registered:
-
-- **`"unified"`** (default): Khadgar (hybrid), Brann, Mekkatorque, Algalon. Default agent: Khadgar.
-- **`"dedicated"`**: Mimiron (planner), Saurfang (orchestrator), Brann, Mekkatorque, Algalon. Default agent: Mimiron.
-
-Configured in `~/.config/opencode/opencode_warcraft.json`:
-```json
-{
-	"agentMode": "dedicated"
-}
+describe('FeatureService', () => {
+  it('should create feature with valid name', async () => {
+    const service = new FeatureService(mockConfig, mockStore);
+    const feature = await service.createFeature('test-feature');
+    expect(feature.name).toBe('test-feature');
+  });
+});
 ```
 
-### Parallel Execution
+**Service Test with Mocking**:
+```typescript
+// Use spyOn for child_process mocking
+const execSpy = spyOn(BeadGateway.prototype, 'execBrCommand')
+  .mockResolvedValueOnce({ stdout: 'mock output', stderr: '' });
 
-`parallelExecution` controls batch task dispatch:
-
-- `strategy`: `"unbounded"` (default) or `"bounded"`
-- `maxConcurrency`: Max parallel workers when bounded (default: 4)
-
-```json
-{
-	"parallelExecution": {
-		"strategy": "bounded",
-		"maxConcurrency": 4
-	}
-}
+await expect(gateway.createTask(featureId, taskData)).resolves.toBe(expected);
 ```
 
-### Beads Mode (beads_rust Workflow)
+**E2E Test with Setup/Teardown**:
+```typescript
+describe('plugin smoke test', () => {
+  let tempDir: string;
 
-`beadsMode` controls integration with the **beads_rust (`br`)** CLI:
+  beforeEach(async () => {
+    tempDir = await setupTempGitProject();
+  });
 
-- **`"on"`** (default): Beads-native state — beads are the canonical source of truth
-  - Feature state stored in bead epics (via `br create -t epic`)
-  - Local cache files are still written under `.beads/artifacts/<feature>/`; task status files are not pre-created at feature creation time
-  - Plan approval stored in bead artifacts with content hash for integrity
-  - Local `.beads/artifacts/` files serve as read-through cache, not source of truth
-  - At workflow start: warcraft tools run `br sync --import-only` to load current bead state
-  - At workflow end: warcraft tools run `br sync --flush-only` to persist bead state
-  - Warcraft tools do NOT perform any CLI-driven git actions
-  - Manual git operations are required for `.beads/` artifacts (see below)
-- **`"off"`**: Legacy local artifacts behavior
-  - Local `docs/<feature>/` files remain authoritative
-  - Feature state stored in local `docs/<feature>/feature.json`
-  - Plan approval stored in local `docs/<feature>/feature.json` (`status`, `approvedAt`, `planApprovalHash`)
-  - No bead integration; `br` CLI commands are not invoked
-  - Use this for projects without beads_rust installed or when bead workflow is not desired
+  afterEach(async () => {
+    await cleanupTempDir(tempDir);
+  });
 
-**Configuration values**:
-- `"on"` or `true`: Enable beads-native mode (default)
-- `"off"` or `false`: Disable bead interactions (legacy mode)
+  it('should handle full workflow', async () => {
+    // Test full feature creation, planning, task execution
+  });
+});
+```
 
-**Legacy migration note**: Values `"dual-write"` and `"beads-primary"` are no longer supported. Use `"on"` or `"off"` instead.
-
-**Important**: When `beadsMode` is `"on"`, you must manually stage and commit `.beads/` changes:
+### Running Tests
 
 ```bash
-git add .beads/artifacts/
-git commit -m "beads: update artifact state"
+# All tests
+bun test
+
+# Specific test file
+bun test packages/warcraft-core/src/services/featureService.test.ts
+
+# With filter (from root)
+bun run test --filter warcraft-core
 ```
+
+### Coverage Expectations
+- Unit tests for all service methods
+- Integration tests for tool workflows
+- E2E tests for critical user paths
+- Prompt content validation tests for agent system prompts
+
+### Common Test Utilities
+
+**E2E Helper** (`packages/opencode-warcraft/src/e2e/helpers/test-env.ts`):
+- `setupTempDir()` - Creates temporary directory
+- `setupGitProject()` - Initializes git repo with commits
+- `cleanupTempDir()` - Removes temp directories
+- `checkHostPrerequisites()` - Conditional test skipping
+
+## Special Considerations
+
+### Beads Mode (beads_rust Integration)
+
+When `beadsMode: "on"` (default):
+- Beads are canonical source of truth
+- Local `.beads/artifacts/` files are read-through cache
+- Must manually git commit `.beads/` changes:
+  ```bash
+  git add .beads/artifacts/
+  git commit -m "beads: update artifact state"
+  ```
+
+### Worktree Persistence
+
+Worktrees persist until manually removed:
+- `warcraft_worktree_commit` commits to task branch but does NOT merge
+- Use `warcraft_merge` to integrate changes
+- Clean up worktrees manually when done
 
 ### Priority System
 
-Features and tasks require a numeric **priority** (1–5) that determines urgency:
+Features and tasks require priority (1-5):
+- 1 = Critical (blockers, production incidents)
+- 2 = High (important features, near-term deadlines)
+- 3 = Medium (standard work, default)
+- 4 = Low (nice-to-have improvements)
+- 5 = Trivial (documentation tweaks, minor refactors)
 
-| Priority | Level | Use Case |
-|----------|-------|----------|
-| 1 | Critical | Blockers, production incidents |
-| 2 | High | Important features, near-term deadlines |
-| 3 | Medium | Standard work (default) |
-| 4 | Low | Nice-to-have improvements |
-| 5 | Trivial | Documentation tweaks, minor refactors |
+### Plan Approval Hash Verification
 
-**Requirements**:
-- Must be an integer between 1 and 5 (inclusive)
-- Defaults to 3 when not specified
-- Mapped to br priority when executing CLI commands (`1->0, 2->1, 3->2, 4->3, 5->4`)
-- Used when creating epic beads (`br create -t epic -p <mapped-priority>`)
-- Used when creating task beads (`br create -t task -p <mapped-priority>`)
+Plan approval uses SHA-256 content hashing to detect changes:
+- Approval record stores: hash, timestamp, approving session ID
+- If plan content changes, approval is automatically invalidated
 
-**Examples**:
-```bash
-# Create high-priority feature (Warcraft priority 2 -> br priority 1)
-br create "Fix critical bug" -t epic -p 1
+### Agent Mode Configuration
 
-# Create medium-priority task (Warcraft priority 3 -> br priority 2, default)
-br create "Implement API endpoint" -t task --parent $EPIC_ID -p 2
-```
+`agentMode` in `~/.config/opencode/opencode_warcraft.json`:
+- `"unified"` (default): Khadgar (hybrid), Brann, Mekkatorque, Algalon
+- `"dedicated"`: Mimiron (planner), Saurfang (orchestrator), Brann, Mekkatorque, Algalon
 
-### Plan Approval and Hash Verification
+### Sandbox Configuration
 
-Plan approval uses **SHA-256 content hashing** to detect plan changes:
-
-**Approval flow**:
-1. When `warcraft_plan_approve()` is called, the system computes a SHA-256 hash of `plan.md` content
-2. Approval record stores: hash, timestamp, and approving session ID
-3. If plan content changes later, the approval is automatically invalidated (hash mismatch)
-
-**Storage by mode**:
-- **`beadsMode: on`**: Approval stored in bead artifact (`plan_approval` kind) with full plan snapshot (`approved_plan` kind)
-- **`beadsMode: off`**: Approval stored in local `docs/<feature>/feature.json` (`status`, `approvedAt`, `planApprovalHash`)
-
-**Example approval record**:
+Optional Docker sandbox for isolated test environments:
 ```json
 {
-  "hash": "a3f5c8e2d1b4f6...",
-  "approvedAt": "2026-02-23T10:30:00.000Z",
-  "approvedBySession": "session-abc123"
+  "sandbox": "docker",
+  "dockerImage": "node:22-slim"
 }
 ```
 
-### Beads Command Reference
+Auto-detects runtime from project files (`package.json`, `requirements.txt`, `go.mod`, `Cargo.toml`).
 
-Core `br` commands for bead lifecycle management:
+### Cross-Model Prompts
 
-```bash
-# Create beads
-br create "Epic Title" -t epic                              # Create epic
-br create "Task title" -t task --parent $EPIC_ID -d "..."  # Create child task
+Agent prompts are designed to work across different LLM providers. Each agent can be backed by a different model:
+- **Khadgar** → OpenAI
+- **Brann** → Google
+- **Mekkatorque** → Kimi
+- **Algalon** → zai-coding-plan
 
-# Update beads
-br update $BEAD_ID --claim          # Claim bead for work
-br update $BEAD_ID --assignee '' -s open  # Release claim (no --unclaim flag in br)
-br update $BEAD_ID -s deferred      # Mark deferred/blocked
-br update $BEAD_ID --status open    # Explicit status update
-br update $BEAD_ID --add-label parallel   # Add label
-br update $BEAD_ID --add-label blocked
-br update $BEAD_ID --priority 2     # br priority (0-4)
-br update $BEAD_ID --description "## Plan\n- Markdown content"   # Update description with markdown
+Prompts avoid provider-specific features and use plain-text instructions that any capable LLM can follow.
 
-# Comments
-br comments add $BEAD_ID "text"     # Add comment
+### Verification Model
 
-# Close beads
-br close $BEAD_ID                   # Close completed bead
+The `verificationModel` config option (`'tdd' | 'best-effort'`) controls how workers verify their changes:
+- **`tdd`** (default): Workers follow strict TDD — write a failing test first, implement the minimum change, confirm tests pass.
+- **`best-effort`**: Workers use lightweight checks (LSP diagnostics, ast-grep) instead of full test suites. Full verification is deferred to post-merge by the orchestrator.
 
-# Sync artifacts
-br sync --import-only               # Import bead state from disk
-br sync --flush-only                # Flush bead state to disk (does NOT git commit)
+## Code Style Checklist
 
-# Manual git operations for .beads/
-git add .beads/artifacts/           # Stage bead artifacts
-git commit -m "beads: update artifact state"   # Commit artifacts
-```
-
-Note: `br sync --flush-only` persists bead state to `.beads/artifacts/` but does not create git commits. Warcraft tools never perform git operations via CLI. Always manually `git add` and `git commit` `.beads/` changes to version control.
+- [ ] Single quotes for strings
+- [ ] Semicolons required
+- [ ] 2-space indentation
+- [ ] Trailing commas in multi-line objects/arrays
+- [ ] Explicit return types on public functions
+- [ ] `import type` for type-only imports
+- [ ] `.js` extension on local imports (ESM)
+- [ ] PascalCase for types/classes, camelCase for functions/variables
+- [ ] UPPER_SNAKE_CASE for constants
+- [ ] Structured error responses with codes
+- [ ] Async/await over promise chaining
+- [ ] Dependency injection for services

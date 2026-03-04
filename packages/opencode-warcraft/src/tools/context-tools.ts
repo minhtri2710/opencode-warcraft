@@ -8,7 +8,6 @@ import type {
   TaskService,
   WorktreeService,
 } from 'warcraft-core';
-import { buildEffectiveDependencies, computeRunnableAndBlocked, type TaskWithDeps } from 'warcraft-core';
 import type { BlockedResult } from '../types.js';
 import { toolError, toolSuccess } from '../types.js';
 import { resolveFeatureInput, validatePathSegment } from './tool-input.js';
@@ -78,19 +77,21 @@ export class ContextTools {
           return toolError(`Feature '${feature}' not found`);
         }
 
-        const blockedResult = checkBlocked(feature);
+        const featureName = featureData.name;
+
+        const blockedResult = checkBlocked(featureName);
         if (blockedResult.blocked) {
           return toolError(blockedResult.message || 'Feature is blocked');
         }
 
-        const plan = planService.read(feature);
-        const tasks = taskService.list(feature);
-        const contextFiles = contextService.list(feature);
+        const plan = planService.read(featureName);
+        const tasks = taskService.list(featureName);
+        const contextFiles = contextService.list(featureName);
 
         const tasksSummary = await Promise.all(
           tasks.map(async (t: { folder: string; name: string; status: string; origin?: string }) => {
-            const rawStatus = taskService.getRawStatus(feature, t.folder);
-            const worktree = await worktreeService.get(feature, t.folder);
+            const rawStatus = taskService.getRawStatus(featureName, t.folder);
+            const worktree = await worktreeService.get(featureName, t.folder);
             const hasChanges = worktree
               ? await worktreeService.hasUncommittedChanges(worktree.feature, worktree.step)
               : null;
@@ -121,19 +122,7 @@ export class ContextTools {
         const inProgressTasks = tasksSummary.filter((t: { status: string }) => t.status === 'in_progress');
         const doneTasks = tasksSummary.filter((t: { status: string }) => t.status === 'done');
 
-        const tasksWithDeps: TaskWithDeps[] = tasksSummary.map(
-          (t: { folder: string; status: string; dependsOn?: string[] | null }) => ({
-            folder: t.folder,
-            status: t.status as import('warcraft-core').TaskStatusType,
-            dependsOn: t.dependsOn ?? undefined,
-          }),
-        );
-        const effectiveDeps = buildEffectiveDependencies(tasksWithDeps);
-        const normalizedTasks = tasksWithDeps.map((task) => ({
-          ...task,
-          dependsOn: effectiveDeps.get(task.folder),
-        }));
-        const { runnable, blocked: blockedBy } = computeRunnableAndBlocked(normalizedTasks);
+        const { runnable, blocked: blockedBy } = taskService.computeRunnableStatus(featureName);
         const triageByTask: Record<string, { summary: string; source: string }> = {};
         const triageDetailsByTask: Record<
           string,
@@ -212,7 +201,7 @@ export class ContextTools {
 
         return toolSuccess({
           feature: {
-            name: feature,
+            name: featureName,
             status: featureData.status,
             ticket: featureData.ticket || null,
             createdAt: featureData.createdAt,

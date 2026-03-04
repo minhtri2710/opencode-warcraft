@@ -1,27 +1,11 @@
 import type { Plugin } from '@opencode-ai/plugin';
-import * as path from 'path';
-import { ConfigService, DockerSandboxService, getWarcraftPath } from 'warcraft-core';
+import { ConfigService } from 'warcraft-core';
 import { createWarcraftContainer } from './container.js';
-import { isPathInside } from './guards.js';
 import { buildCompactionPrompt } from './hooks/compaction-hook.js';
-import { shouldExecuteHook } from './hooks/hook-cadence.js';
+import { resetHookCounters, shouldExecuteHook } from './hooks/hook-cadence.js';
+import { applySandboxHook } from './hooks/sandbox-hook.js';
 import { createVariantHook, isWarcraftAgent } from './hooks/variant-hook.js';
 import { applyWarcraftConfig } from './plugin-config.js';
-
-// ============================================================================
-// Shell quoting helpers (used by sandbox hook)
-// ============================================================================
-
-function shellQuoteArg(arg: string): string {
-  if (/^[A-Za-z0-9_./:=+-]+$/.test(arg)) {
-    return arg;
-  }
-  return `'${arg.replace(/'/g, "'\"'\"'")}'`;
-}
-
-function structuredToCommandString(command: string, args: string[]): string {
-  return [command, ...args.map(shellQuoteArg)].join(' ');
-}
 
 // ============================================================================
 // System prompt (static, agent-agnostic)
@@ -129,6 +113,9 @@ const plugin: Plugin = async (ctx) => {
   const configService = new ConfigService();
   const container = createWarcraftContainer(directory, configService);
 
+  // Reset hook cadence counters on plugin init to ensure clean state
+  resetHookCounters();
+
   return {
     'experimental.chat.system.transform': async (
       _input: { agent?: string } | unknown,
@@ -165,24 +152,7 @@ const plugin: Plugin = async (ctx) => {
     'chat.message': createVariantHook(configService),
 
     'tool.execute.before': async (input, output) => {
-      if (input.tool !== 'bash') return;
-
-      const sandboxConfig = configService.getSandboxConfig();
-      if (sandboxConfig.mode === 'none') return;
-
-      const command = output.args?.command?.trim();
-      if (!command) return;
-
-      const workdir = output.args?.workdir;
-      if (!workdir) return;
-
-      const warcraftWorktreeBase = path.join(getWarcraftPath(directory, configService.getBeadsMode()), '.worktrees');
-      if (!isPathInside(workdir, warcraftWorktreeBase)) return;
-
-      const wrapped = DockerSandboxService.wrapCommand(workdir, command, sandboxConfig);
-      output.args.command =
-        typeof wrapped === 'string' ? wrapped : structuredToCommandString(wrapped.command, wrapped.args);
-      output.args.workdir = undefined;
+      applySandboxHook(input, output, configService.getSandboxConfig(), directory, configService.getBeadsMode());
     },
 
     'experimental.session.compacting': async (

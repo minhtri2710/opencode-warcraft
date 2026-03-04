@@ -24,6 +24,7 @@ export interface TaskDispatchServices {
   planService: PlanService;
   taskService: TaskService;
   contextService: { list: (feature: string) => Array<{ name: string; content: string }> };
+  verificationModel: 'tdd' | 'best-effort';
 }
 
 /**
@@ -164,6 +165,7 @@ export function prepareTaskDispatch(
     spec: specContent,
     previousTasks,
     continueFrom,
+    verificationModel: services.verificationModel,
   });
 
   taskService.writeWorkerPrompt(feature, task, workerPrompt);

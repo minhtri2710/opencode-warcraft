@@ -1,7 +1,14 @@
 export type { ApplyResult as AgentsMdApplyResult, InitResult, SyncResult } from './agentsMdService.js';
 export { AgentsMdService } from './agentsMdService.js';
 export { BeadGateway } from './beads/BeadGateway.js';
-export type { BeadArtifactKind, BeadGatewayErrorCode, TaskBeadArtifacts } from './beads/BeadGateway.types.js';
+export type {
+  AuditEntry,
+  AuditRecordParams,
+  BeadArtifactKind,
+  BeadComment,
+  BeadGatewayErrorCode,
+  TaskBeadArtifacts,
+} from './beads/BeadGateway.types.js';
 export type { RepositoryError, RepositoryErrorCode, Result, SyncPolicy } from './beads/BeadsRepository.js';
 export { BeadsRepository } from './beads/BeadsRepository.js';
 export type { ExecutionTrack, RobotPlanResult, RobotPlanSummary } from './beads/BeadsViewerGateway.js';
@@ -18,6 +25,8 @@ export { DockerSandboxService } from './dockerSandboxService.js';
 export { FeatureService } from './featureService.js';
 export * from './planGates/index.js';
 export { PlanService } from './planService.js';
+export type { GitClient, GitClientFactory } from './ports/git-client.js';
+export { SimpleGitClient } from './ports/simple-git-client.js';
 export { formatSpecContent } from './specFormatter.js';
 export type {
   CreateFeatureInput,

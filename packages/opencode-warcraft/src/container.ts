@@ -271,6 +271,7 @@ To unblock: Remove ${blockedPath}`;
     checkBlocked,
     checkDependencies,
     parallelExecution,
+    verificationModel: configService.getVerificationModel(),
   });
   const contextTools = new ContextTools({
     featureService,

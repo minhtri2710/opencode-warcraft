@@ -13,6 +13,26 @@ import type { BackgroundPatchFields, RunnableTask, RunnableTasksResult } from '.
 import { TASK_STATUS_SCHEMA_VERSION } from '../taskService.js';
 import type { TaskArtifactKind, TaskSaveOptions, TaskStore } from './types.js';
 
+// ============================================================================
+// Audit Trail Types
+// ============================================================================
+
+/**
+ * Represents a task state transition event for audit logging.
+ */
+export interface TransitionEvent {
+  /** Task bead ID */
+  beadId: string;
+  /** Previous status */
+  from: string;
+  /** New status */
+  to: string;
+  /** ISO timestamp of transition */
+  timestamp: string;
+  /** Optional summary/reason for transition */
+  summary?: string;
+}
+
 /**
  * TaskStore implementation for beadsMode='on'.
  *
@@ -20,10 +40,35 @@ import type { TaskArtifactKind, TaskSaveOptions, TaskStore } from './types.js';
  * Local filesystem is used only for delete (cleanup) and as fallback reads.
  */
 export class BeadsTaskStore implements TaskStore {
+  /**
+   * In-memory cache: featureId → folder → TaskInfo
+   * Populated by list(), used by get() for O(1) lookups.
+   * Invalidated on mutations (createTask, save, delete, patchBackground, syncDependencies).
+   */
+  private taskIndex = new Map<string, Map<string, TaskInfo>>();
+
+  /**
+   * In-memory cache: featureId → folder → beadId
+   * Populated by list(), used by getRawStatus() to find beadId without O(n) search.
+   * Invalidated on mutations (createTask, save, delete, patchBackground, syncDependencies).
+   */
+  private beadIdIndex = new Map<string, Map<string, string>>();
+
+  private pendingTransitions: TransitionEvent[] = [];
+
   constructor(
     private readonly projectRoot: string,
     private readonly repository: BeadsRepository,
   ) {}
+
+  /**
+   * Explicitly refresh the index for a feature.
+   * Called when external state may have changed or for manual invalidation.
+   */
+  refreshIndex(featureName: string): void {
+    this.taskIndex.delete(featureName);
+    this.beadIdIndex.delete(featureName);
+  }
 
   createTask(featureName: string, folder: string, title: string, status: TaskStatus, priority: number): TaskStatus {
     const epicResult = this.repository.getEpicByFeatureName(featureName, true);
@@ -41,38 +86,104 @@ export class BeadsTaskStore implements TaskStore {
       throw new Error(`Failed to persist task state for '${beadId}': ${setTaskStateResult.error.message}`);
     }
 
+    let featureBeadIdIndex = this.beadIdIndex.get(featureName);
+    if (!featureBeadIdIndex) {
+      featureBeadIdIndex = new Map<string, string>();
+      this.beadIdIndex.set(featureName, featureBeadIdIndex);
+    }
+    featureBeadIdIndex.set(folder, beadId);
+
+    const featureTaskIndex = this.taskIndex.get(featureName);
+    if (featureTaskIndex) {
+      featureTaskIndex.set(folder, {
+        folder,
+        name: folder.replace(/^\d+-/, ''),
+        beadId,
+        status: statusWithBead.status,
+        origin: statusWithBead.origin,
+        planTitle: statusWithBead.planTitle,
+        summary: statusWithBead.summary,
+      });
+    }
+
     return statusWithBead;
   }
 
   get(featureName: string, folder: string): TaskInfo | null {
+    // Check cache first for O(1) lookup
+    const featureTaskIndex = this.taskIndex.get(featureName);
+    if (featureTaskIndex) {
+      const cachedTask = featureTaskIndex.get(folder);
+      if (cachedTask) {
+        return cachedTask;
+      }
+      // Folder exists in cache but not found, return null
+      return null;
+    }
+
+    // Cache miss: populate index via list()
     const tasks = this.list(featureName);
     return tasks.find((t) => t.folder === folder) ?? null;
   }
 
   getRawStatus(featureName: string, folder: string): TaskStatus | null {
-    // Try beads path first: find task to get beadId, then read state
-    const beadsTask = this.findTaskByFolder(featureName, folder);
-    if (beadsTask?.beadId) {
-      const taskState = this.readTaskState(beadsTask.beadId);
+    // Check beadId cache for O(1) lookup
+    const featureBeadIdIndex = this.beadIdIndex.get(featureName);
+    let beadId: string | undefined;
+
+    if (featureBeadIdIndex) {
+      beadId = featureBeadIdIndex.get(folder);
+      if (!beadId) {
+        const task = this.findTaskByFolder(featureName, folder);
+        beadId = task?.beadId;
+      }
+    } else {
+      // Cache miss: find task via list() to populate cache
+      const task = this.findTaskByFolder(featureName, folder);
+      beadId = task?.beadId;
+    }
+
+    if (beadId) {
+      const taskState = this.readTaskState(beadId);
       if (taskState) {
-        return taskState;
+        return {
+          ...taskState,
+          beadId,
+          folder: (taskState as TaskStatus & { folder?: string }).folder ?? folder,
+        };
       }
 
       // Minimal fallback from bead info
-      return {
-        status: beadsTask.status,
-        origin: beadsTask.origin,
-        planTitle: beadsTask.planTitle ?? beadsTask.name,
-        beadId: beadsTask.beadId,
-      };
+      const beadsTask = this.findTaskByFolder(featureName, folder);
+      if (beadsTask) {
+        return {
+          status: beadsTask.status,
+          origin: beadsTask.origin,
+          planTitle: beadsTask.planTitle ?? beadsTask.name,
+          beadId: beadsTask.beadId,
+        };
+      }
     }
 
     // Filesystem fallback
-    return readJson<TaskStatus>(getTaskStatusPath(this.projectRoot, featureName, folder));
+    const status = readJson<TaskStatus>(getTaskStatusPath(this.projectRoot, featureName, folder));
+    if (!status) {
+      return null;
+    }
+    return {
+      ...status,
+      folder: (status as TaskStatus & { folder?: string }).folder ?? folder,
+    };
   }
 
   list(featureName: string): TaskInfo[] {
     try {
+      // Return cached data if available (avoids O(n) listTaskBeadsForEpic call)
+      const featureTaskIndex = this.taskIndex.get(featureName);
+      if (featureTaskIndex) {
+        return Array.from(featureTaskIndex.values());
+      }
+
       const epicResult = this.repository.getEpicByFeatureName(featureName, true);
       if (epicResult.success === false) {
         throw epicResult.error;
@@ -118,11 +229,27 @@ export class BeadsTaskStore implements TaskStore {
         };
       });
 
-      return tasks.sort((a, b) => {
+      const sortedTasks = tasks.sort((a, b) => {
         const aOrder = parseInt(a.folder.split('-')[0], 10);
         const bOrder = parseInt(b.folder.split('-')[0], 10);
         return aOrder - bOrder;
       });
+
+      // Populate indexes after sorting
+      const newFeatureTaskIndex = new Map<string, TaskInfo>();
+      const newFeatureBeadIdIndex = new Map<string, string>();
+
+      for (const task of sortedTasks) {
+        newFeatureTaskIndex.set(task.folder, task);
+        if (task.beadId) {
+          newFeatureBeadIdIndex.set(task.folder, task.beadId);
+        }
+      }
+
+      this.taskIndex.set(featureName, newFeatureTaskIndex);
+      this.beadIdIndex.set(featureName, newFeatureBeadIdIndex);
+
+      return sortedTasks;
     } catch (error) {
       this.throwIfInitFailure(error, `Failed to list tasks for feature '${featureName}'`);
       return [];
@@ -138,12 +265,25 @@ export class BeadsTaskStore implements TaskStore {
     return Math.max(...orders, 0) + 1;
   }
 
-  save(_featureName: string, folder: string, status: TaskStatus, options?: TaskSaveOptions): void {
+  save(featureName: string, folder: string, status: TaskStatus, options?: TaskSaveOptions): void {
     if (!status.beadId) {
       throw new Error(`Cannot save task '${folder}' without beadId in beads mode`);
     }
 
+    // Get previous status for audit trail
+    const prevStatus = this.readTaskState(status.beadId)?.status ?? 'pending';
+
     this.repository.setTaskState(status.beadId, { ...status, folder } as TaskStatus);
+
+    // Invalidate cache entry for the modified task
+    const featureTaskIndex = this.taskIndex.get(featureName);
+    if (featureTaskIndex) {
+      featureTaskIndex.delete(folder);
+    }
+    const featureBeadIdIndex = this.beadIdIndex.get(featureName);
+    if (featureBeadIdIndex) {
+      featureBeadIdIndex.delete(folder);
+    }
 
     if (options?.syncBeadStatus && status.status) {
       try {
@@ -160,6 +300,9 @@ export class BeadsTaskStore implements TaskStore {
           `[warcraft] Failed to flush artifacts after syncing bead status for '${status.beadId}'`,
         );
       }
+
+      // Append transition comment for audit trail
+      this.appendTransitionComment(status.beadId, prevStatus, status.status, status.summary);
     }
   }
 
@@ -197,6 +340,16 @@ export class BeadsTaskStore implements TaskStore {
       this.repository.getGateway().upsertArtifact(status.beadId, 'task_state', encoded);
     }
 
+    // Invalidate cache entry for the patched task
+    const featureTaskIndex = this.taskIndex.get(featureName);
+    if (featureTaskIndex) {
+      featureTaskIndex.delete(folder);
+    }
+    const featureBeadIdIndex = this.beadIdIndex.get(featureName);
+    if (featureBeadIdIndex) {
+      featureBeadIdIndex.delete(folder);
+    }
+
     return updated;
   }
 
@@ -204,6 +357,16 @@ export class BeadsTaskStore implements TaskStore {
     const taskPath = getTaskPath(this.projectRoot, featureName, folder);
     if (fileExists(taskPath)) {
       fs.rmSync(taskPath, { recursive: true });
+    }
+
+    // Invalidate cache entry for the deleted task
+    const featureTaskIndex = this.taskIndex.get(featureName);
+    if (featureTaskIndex) {
+      featureTaskIndex.delete(folder);
+    }
+    const featureBeadIdIndex = this.beadIdIndex.get(featureName);
+    if (featureBeadIdIndex) {
+      featureBeadIdIndex.delete(folder);
     }
   }
 
@@ -487,6 +650,19 @@ export class BeadsTaskStore implements TaskStore {
 
   private findTaskByFolder(featureName: string, folder: string): TaskInfo | null {
     try {
+      // Use cache first for O(1) lookup
+      const featureTaskIndex = this.taskIndex.get(featureName);
+      if (featureTaskIndex) {
+        const cachedTask = featureTaskIndex.get(folder);
+        if (cachedTask) {
+          return cachedTask;
+        }
+        // Cache may be stale after external mutations; refresh and retry once
+        this.refreshIndex(featureName);
+        return this.list(featureName).find((t) => t.folder === folder) ?? null;
+      }
+
+      // Cache miss: populate index via list()
       return this.list(featureName).find((t) => t.folder === folder) ?? null;
     } catch {
       return null;
@@ -511,5 +687,54 @@ export class BeadsTaskStore implements TaskStore {
     }
     const reason = error instanceof Error ? error.message : String(error);
     throw new Error(`${context}: ${reason}`);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Audit Trail Methods
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Append a transition comment to track state changes.
+   * Wrapped in try/catch to ensure audit failures never block status changes.
+   */
+  private appendTransitionComment(beadId: string, from: string, to: string, summary?: string): void {
+    const transition: TransitionEvent = {
+      beadId,
+      from,
+      to,
+      timestamp: new Date().toISOString(),
+      summary,
+    };
+
+    // For single operations, flush immediately
+    this.flushSingleTransition(transition);
+  }
+
+  /**
+   * Flush a single transition comment to the bead.
+   * Swallows errors to ensure audit failures never block operations.
+   */
+  private flushSingleTransition(transition: TransitionEvent): void {
+    try {
+      const commentBody = `[warcraft:transition] ${transition.from} → ${transition.to} | ${transition.timestamp} | ${transition.summary ?? ''}`;
+      this.repository.appendComment(transition.beadId, commentBody.trim());
+    } catch (error) {
+      // Audit failures must never block status changes
+      const reason = error instanceof Error ? error.message : String(error);
+      console.warn(`[warcraft] Failed to append transition comment for '${transition.beadId}': ${reason}`);
+    }
+  }
+
+  /**
+   * Flush all pending transition audits.
+   * Called after batch operations to ensure all transitions are recorded.
+   */
+  flushTransitionAudit(): void {
+    // Process each pending transition
+    for (const transition of this.pendingTransitions) {
+      this.flushSingleTransition(transition);
+    }
+    // Clear pending transitions after flushing
+    this.pendingTransitions = [];
   }
 }

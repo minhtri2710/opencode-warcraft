@@ -34,6 +34,51 @@ export interface TaskBeadArtifacts {
   task_state?: string;
 }
 
+export interface BeadComment {
+  id: string;
+  body: string;
+  author?: string;
+  timestamp?: string;
+  prompt?: string;
+  response?: string;
+}
+
+/**
+ * Parameters for recording an audit event via `br audit record`.
+ *
+ * SECURITY: Do NOT add prompt or response fields — these may contain
+ * API keys, PII, or proprietary code. Only metadata about the interaction
+ * (model name, tool name, exit code, error message) is permitted.
+ */
+export interface AuditRecordParams {
+  /** Kind of audit event */
+  kind: 'llm_call' | 'tool_call' | 'label';
+  /** Bead ID the event relates to */
+  issueId: string;
+  /** LLM model identifier (e.g. 'claude-opus-4') */
+  model?: string;
+  /** Tool name that was called */
+  toolName?: string;
+  /** Process/tool exit code */
+  exitCode?: number;
+  /** Error message (sanitized — no prompts/responses) */
+  error?: string;
+}
+
+/**
+ * A single entry from the audit log as returned by `br audit log`.
+ */
+export interface AuditEntry {
+  id: string;
+  kind: string;
+  issueId: string;
+  model?: string;
+  toolName?: string;
+  exitCode?: number;
+  error?: string;
+  timestamp?: string;
+}
+
 export type BeadGatewayErrorCode =
   | 'br_not_found'
   | 'command_error'

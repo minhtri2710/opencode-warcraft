@@ -4,6 +4,10 @@ import * as os from 'os';
 import * as path from 'path';
 import { WorktreeService } from './worktreeService';
 
+// ============================================================================
+// Test Helpers
+// ============================================================================
+
 let testRoot = '';
 
 beforeEach(() => {
@@ -20,6 +24,57 @@ function createService(mode: 'on' | 'off'): WorktreeService {
     warcraftDir: mode === 'off' ? path.join(testRoot, 'docs') : path.join(testRoot, '.beads', 'artifacts'),
   });
 }
+
+/**
+ * Create a mock git object that records calls and returns canned responses.
+ * Mirrors the GitClient port interface methods used by WorktreeService.
+ */
+function createMockGit(overrides: Record<string, (...args: any[]) => any> = {}): Record<string, any> {
+  return {
+    raw: overrides.raw ?? (async () => ''),
+    revparse: overrides.revparse ?? (async () => 'abc123def'),
+    status: overrides.status ??
+      (async () => ({
+        staged: [],
+        modified: [],
+        not_added: [],
+        deleted: [],
+        created: [],
+      })),
+    add: overrides.add ?? (async () => {}),
+    commit: overrides.commit ?? (async () => ({ commit: 'def456' })),
+    diff: overrides.diff ?? (async () => ''),
+    branch: overrides.branch ??
+      (async () => ({
+        current: 'main',
+        all: ['main'],
+      })),
+    deleteLocalBranch: overrides.deleteLocalBranch ?? (async () => {}),
+    merge: overrides.merge ??
+      (async () => ({
+        failed: false,
+        conflicts: [],
+      })),
+    log: overrides.log ??
+      (async () => ({
+        all: [],
+      })),
+    applyPatch: overrides.applyPatch ?? (async () => {}),
+  };
+}
+
+/**
+ * Setup a worktree directory so fs.access checks pass in the service.
+ */
+function setupWorktreeDir(service: WorktreeService, feature: string, step: string): string {
+  const wtPath = (service as any).getWorktreePath(feature, step);
+  fs.mkdirSync(wtPath, { recursive: true });
+  return wtPath;
+}
+
+// ============================================================================
+// Helper / Private Method Tests (preserved from original)
+// ============================================================================
 
 describe('WorktreeService helpers', () => {
   it('returns canonical tasks status path only', async () => {
@@ -67,7 +122,23 @@ describe('WorktreeService helpers', () => {
 
     expect(conflicts).toEqual(['src/a.ts', 'src/b.ts']);
   });
+
+  it('parseConflictsFromError returns empty array for non-conflict errors', () => {
+    const service = createService('off');
+    const conflicts = (service as any).parseConflictsFromError('fatal: not a git repository');
+    expect(conflicts).toEqual([]);
+  });
+
+  it('getBranchName produces expected format', () => {
+    const service = createService('off');
+    const branch = (service as any).getBranchName('my-feature', '01-setup');
+    expect(branch).toBe('warcraft/my-feature/01-setup');
+  });
 });
+
+// ============================================================================
+// Path Sanitization Tests (preserved from original)
+// ============================================================================
 
 describe('WorktreeService path sanitization', () => {
   it('rejects path traversal in feature name', () => {
@@ -99,32 +170,1254 @@ describe('WorktreeService path sanitization', () => {
   });
 });
 
-describe('WorktreeService commitChanges staging', () => {
-  it('uses pathspec to exclude .patch files from staging', async () => {
+// ============================================================================
+// create() Tests
+// ============================================================================
+
+describe('WorktreeService.create', () => {
+  it('creates a worktree and returns WorktreeInfo on happy path', async () => {
+    const service = createService('off');
+    const rawCalls: string[][] = [];
+
+    const mockGit = createMockGit({
+      revparse: async () => 'base-sha-123',
+      raw: async (...args: any[]) => {
+        rawCalls.push(args.flat());
+        return '';
+      },
+    });
+    (service as any).getGit = () => mockGit;
+
+    // Ensure lock parent dir exists
+    const worktreesDir = (service as any).getWorktreesDir();
+    fs.mkdirSync(worktreesDir, { recursive: true });
+
+    const result = await service.create('my-feature', '01-setup');
+
+    expect(result.feature).toBe('my-feature');
+    expect(result.step).toBe('01-setup');
+    expect(result.branch).toBe('warcraft/my-feature/01-setup');
+    expect(result.commit).toBe('base-sha-123');
+    expect(result.path).toContain('my-feature');
+    expect(result.path).toContain('01-setup');
+
+    // Should have called worktree add
+    const worktreeAddCall = rawCalls.find((c) => c.includes('worktree') && c.includes('add'));
+    expect(worktreeAddCall).toBeDefined();
+  });
+
+  it('returns existing worktree if it already exists', async () => {
+    const service = createService('off');
+    const mockGit = createMockGit({
+      revparse: async () => 'existing-sha-456',
+    });
+    (service as any).getGit = () => mockGit;
+
+    // Create the worktree directory so get() finds it
+    const wtPath = setupWorktreeDir(service, 'my-feature', '01-setup');
+
+    // Ensure lock parent dir exists
+    const worktreesDir = (service as any).getWorktreesDir();
+    fs.mkdirSync(worktreesDir, { recursive: true });
+
+    const result = await service.create('my-feature', '01-setup');
+
+    expect(result.path).toBe(wtPath);
+    expect(result.commit).toBe('existing-sha-456');
+    expect(result.branch).toBe('warcraft/my-feature/01-setup');
+  });
+
+  it('retries with existing branch when initial create fails', async () => {
+    const service = createService('off');
+    const rawCalls: string[][] = [];
+    let callCount = 0;
+
+    const mockGit = createMockGit({
+      revparse: async () => 'retry-sha-789',
+      raw: async (...args: any[]) => {
+        callCount++;
+        const flatArgs = args.flat();
+        rawCalls.push(flatArgs);
+        // First worktree add fails, second succeeds
+        if (callCount === 1 && flatArgs.includes('-b')) {
+          throw new Error('branch already exists');
+        }
+        return '';
+      },
+    });
+    (service as any).getGit = () => mockGit;
+
+    const worktreesDir = (service as any).getWorktreesDir();
+    fs.mkdirSync(worktreesDir, { recursive: true });
+
+    const result = await service.create('my-feature', '02-impl');
+
+    expect(result.feature).toBe('my-feature');
+    expect(result.step).toBe('02-impl');
+    // Should have tried twice: first with -b, then without
+    const worktreeCalls = rawCalls.filter((c) => c.includes('worktree'));
+    expect(worktreeCalls.length).toBe(2);
+    expect(worktreeCalls[0]).toContain('-b');
+    expect(worktreeCalls[1]).not.toContain('-b');
+  });
+
+  it('throws when both create attempts fail', async () => {
+    const service = createService('off');
+
+    const mockGit = createMockGit({
+      revparse: async () => 'fail-sha',
+      raw: async () => {
+        throw new Error('worktree add failed');
+      },
+    });
+    (service as any).getGit = () => mockGit;
+
+    const worktreesDir = (service as any).getWorktreesDir();
+    fs.mkdirSync(worktreesDir, { recursive: true });
+
+    await expect(service.create('my-feature', '03-fail')).rejects.toThrow('Failed to create worktree');
+  });
+
+  it('uses provided baseBranch when given', async () => {
+    const service = createService('off');
+    const rawCalls: string[][] = [];
+
+    const mockGit = createMockGit({
+      revparse: async () => 'custom-base-sha',
+      raw: async (...args: any[]) => {
+        rawCalls.push(args.flat());
+        return '';
+      },
+    });
+    (service as any).getGit = () => mockGit;
+
+    const worktreesDir = (service as any).getWorktreesDir();
+    fs.mkdirSync(worktreesDir, { recursive: true });
+
+    await service.create('my-feature', '04-custom', 'develop');
+
+    const addCall = rawCalls.find((c) => c.includes('worktree') && c.includes('add'));
+    expect(addCall).toBeDefined();
+    // baseBranch 'develop' should be the last arg in: worktree add -b <branch> <path> <base>
+    expect(addCall).toContain('develop');
+  });
+});
+
+// ============================================================================
+// get() Tests
+// ============================================================================
+
+describe('WorktreeService.get', () => {
+  it('returns WorktreeInfo when worktree exists', async () => {
+    const service = createService('off');
+    const mockGit = createMockGit({
+      revparse: async () => 'get-sha-abc',
+    });
+    (service as any).getGit = () => mockGit;
+
+    setupWorktreeDir(service, 'feat', '01-step');
+
+    const result = await service.get('feat', '01-step');
+
+    expect(result).not.toBeNull();
+    expect(result!.feature).toBe('feat');
+    expect(result!.step).toBe('01-step');
+    expect(result!.branch).toBe('warcraft/feat/01-step');
+    expect(result!.commit).toBe('get-sha-abc');
+  });
+
+  it('returns null when worktree does not exist', async () => {
+    const service = createService('off');
+    const result = await service.get('nonexistent', 'step');
+    expect(result).toBeNull();
+  });
+});
+
+// ============================================================================
+// merge() Tests
+// ============================================================================
+
+describe('WorktreeService.merge', () => {
+  it('performs merge strategy and returns success result', async () => {
+    const service = createService('off');
+
+    const mockGit = createMockGit({
+      branch: async () => ({
+        current: 'main',
+        all: ['main', 'warcraft/feat/01-step'],
+      }),
+      diff: async () => ' src/a.ts | 5 +++--\n 1 file changed\n',
+      merge: async () => ({
+        failed: false,
+        conflicts: [],
+      }),
+      revparse: async () => 'merge-sha-111',
+    });
+    (service as any).getGit = () => mockGit;
+
+    const result = await service.merge('feat', '01-step', 'merge');
+
+    expect(result.success).toBe(true);
+    expect(result.merged).toBe(true);
+    expect(result.sha).toBe('merge-sha-111');
+  });
+
+  it('performs squash merge strategy', async () => {
+    const service = createService('off');
+    const rawCalls: string[][] = [];
+
+    const mockGit = createMockGit({
+      branch: async () => ({
+        current: 'main',
+        all: ['main', 'warcraft/feat/02-squash'],
+      }),
+      diff: async () => ' src/b.ts | 3 +++\n 1 file changed\n',
+      raw: async (...args: any[]) => {
+        rawCalls.push(args.flat());
+        return '';
+      },
+      commit: async () => ({ commit: 'squash-sha-222' }),
+      revparse: async () => 'squash-sha-222',
+    });
+    (service as any).getGit = () => mockGit;
+
+    const result = await service.merge('feat', '02-squash', 'squash');
+
+    expect(result.success).toBe(true);
+    expect(result.merged).toBe(true);
+    expect(result.sha).toBe('squash-sha-222');
+
+    const squashCall = rawCalls.find((c) => c.includes('--squash'));
+    expect(squashCall).toBeDefined();
+  });
+
+  it('performs rebase strategy via cherry-pick', async () => {
+    const service = createService('off');
+    const rawCalls: string[][] = [];
+
+    const mockGit = createMockGit({
+      branch: async () => ({
+        current: 'main',
+        all: ['main', 'warcraft/feat/03-rebase'],
+      }),
+      diff: async () => ' src/c.ts | 2 +-\n 1 file changed\n',
+      log: async () => ({
+        all: [{ hash: 'commit-a' }, { hash: 'commit-b' }],
+      }),
+      raw: async (...args: any[]) => {
+        rawCalls.push(args.flat());
+        return '';
+      },
+      revparse: async () => 'rebase-sha-333',
+    });
+    (service as any).getGit = () => mockGit;
+
+    const result = await service.merge('feat', '03-rebase', 'rebase');
+
+    expect(result.success).toBe(true);
+    expect(result.merged).toBe(true);
+    expect(result.sha).toBe('rebase-sha-333');
+
+    // Should cherry-pick in reverse order (oldest first)
+    const cherryPicks = rawCalls.filter((c) => c.includes('cherry-pick'));
+    expect(cherryPicks.length).toBe(2);
+    expect(cherryPicks[0]).toContain('commit-b');
+    expect(cherryPicks[1]).toContain('commit-a');
+  });
+
+  it('returns error when branch does not exist', async () => {
+    const service = createService('off');
+
+    const mockGit = createMockGit({
+      branch: async () => ({
+        current: 'main',
+        all: ['main'],
+      }),
+    });
+    (service as any).getGit = () => mockGit;
+
+    const result = await service.merge('feat', 'nonexistent');
+
+    expect(result.success).toBe(false);
+    expect(result.merged).toBe(false);
+    expect(result.error).toContain('not found');
+  });
+
+  it('handles merge conflict by aborting and returning conflict info', async () => {
+    const service = createService('off');
+
+    const mockGit = createMockGit({
+      branch: async () => ({
+        current: 'main',
+        all: ['main', 'warcraft/feat/04-conflict'],
+      }),
+      diff: async () => ' src/conflict.ts | 5 +++--\n 1 file changed\n',
+      merge: async () => {
+        throw new Error(
+          'CONFLICT (content): Merge conflict in src/conflict.ts\nAutomatic merge failed; fix conflicts and then commit the result.',
+        );
+      },
+      raw: async () => '', // For abort calls
+    });
+    (service as any).getGit = () => mockGit;
+
+    const result = await service.merge('feat', '04-conflict');
+
+    expect(result.success).toBe(false);
+    expect(result.merged).toBe(false);
+    expect(result.error).toContain('conflict');
+    expect(result.conflicts).toBeDefined();
+    expect(result.conflicts!).toContain('src/conflict.ts');
+  });
+
+  it('handles non-conflict merge errors gracefully', async () => {
+    const service = createService('off');
+
+    const mockGit = createMockGit({
+      branch: async () => ({
+        current: 'main',
+        all: ['main', 'warcraft/feat/05-error'],
+      }),
+      diff: async () => {
+        throw new Error('fatal: repository corrupted');
+      },
+    });
+    (service as any).getGit = () => mockGit;
+
+    const result = await service.merge('feat', '05-error');
+
+    expect(result.success).toBe(false);
+    expect(result.merged).toBe(false);
+    expect(result.error).toBeDefined();
+  });
+});
+
+// ============================================================================
+// remove() Tests
+// ============================================================================
+
+describe('WorktreeService.remove', () => {
+  it('removes worktree and prunes', async () => {
+    const service = createService('off');
+    const rawCalls: string[][] = [];
+
+    const mockGit = createMockGit({
+      raw: async (...args: any[]) => {
+        rawCalls.push(args.flat());
+        return '';
+      },
+    });
+    (service as any).getGit = () => mockGit;
+
+    const worktreesDir = (service as any).getWorktreesDir();
+    fs.mkdirSync(worktreesDir, { recursive: true });
+
+    await service.remove('feat', '01-step');
+
+    const removeCall = rawCalls.find((c) => c.includes('worktree') && c.includes('remove'));
+    expect(removeCall).toBeDefined();
+
+    const pruneCall = rawCalls.find((c) => c.includes('worktree') && c.includes('prune'));
+    expect(pruneCall).toBeDefined();
+  });
+
+  it('deletes branch when deleteBranch flag is true', async () => {
+    const service = createService('off');
+    let deletedBranch = '';
+
+    const mockGit = createMockGit({
+      raw: async () => '',
+      deleteLocalBranch: async (name: string) => {
+        deletedBranch = name;
+      },
+    });
+    (service as any).getGit = () => mockGit;
+
+    const worktreesDir = (service as any).getWorktreesDir();
+    fs.mkdirSync(worktreesDir, { recursive: true });
+
+    await service.remove('feat', '01-step', true);
+
+    expect(deletedBranch).toBe('warcraft/feat/01-step');
+  });
+
+  it('does not delete branch when deleteBranch flag is false', async () => {
+    const service = createService('off');
+    let deleteCalled = false;
+
+    const mockGit = createMockGit({
+      raw: async () => '',
+      deleteLocalBranch: async () => {
+        deleteCalled = true;
+      },
+    });
+    (service as any).getGit = () => mockGit;
+
+    const worktreesDir = (service as any).getWorktreesDir();
+    fs.mkdirSync(worktreesDir, { recursive: true });
+
+    await service.remove('feat', '01-step', false);
+
+    expect(deleteCalled).toBe(false);
+  });
+
+  it('falls back to fs.rm when git worktree remove fails', async () => {
+    const service = createService('off');
+    const rawCalls: string[][] = [];
+
+    const wtPath = setupWorktreeDir(service, 'feat', '01-step');
+    // Place a file inside so we can verify cleanup
+    fs.writeFileSync(path.join(wtPath, 'file.txt'), 'content');
+
+    const mockGit = createMockGit({
+      raw: async (...args: any[]) => {
+        const flatArgs = args.flat();
+        rawCalls.push(flatArgs);
+        if (flatArgs.includes('remove')) {
+          throw new Error('worktree remove failed');
+        }
+        return '';
+      },
+    });
+    (service as any).getGit = () => mockGit;
+
+    const worktreesDir = (service as any).getWorktreesDir();
+    fs.mkdirSync(worktreesDir, { recursive: true });
+
+    await service.remove('feat', '01-step');
+
+    // Directory should be cleaned up via fs.rm fallback
+    expect(fs.existsSync(wtPath)).toBe(false);
+  });
+});
+
+// ============================================================================
+// commitChanges() Tests
+// ============================================================================
+
+describe('WorktreeService.commitChanges', () => {
+  it('stages, commits, and returns sha on happy path', async () => {
     const service = createService('off');
     const addCalls: any[][] = [];
-    const mockGit = {
+
+    const mockGit = createMockGit({
       add: async (...args: any[]) => {
         addCalls.push(args);
       },
-      status: async () => ({ staged: ['file.ts'], modified: [], not_added: [] }),
-      revparse: async () => 'abc123',
-      commit: async (_msg: string) => ({ commit: 'def456' }),
-    };
-
-    // Override getGit to return mock
+      status: async () => ({
+        staged: ['file.ts'],
+        modified: [],
+        not_added: [],
+        deleted: [],
+        created: [],
+      }),
+      commit: async () => ({ commit: 'commit-sha-999' }),
+      revparse: async () => 'commit-sha-999',
+    });
     (service as any).getGit = () => mockGit;
 
-    // Set up worktree directory at the correct off-mode path (docs/.worktrees)
-    const wtDir = path.join(testRoot, 'docs', '.worktrees', 'feat', '01-step');
-    fs.mkdirSync(wtDir, { recursive: true });
+    setupWorktreeDir(service, 'feat', '01-step');
 
-    // Call commitChanges
-    const _result = await service.commitChanges('feat', '01-step', 'test commit');
+    const result = await service.commitChanges('feat', '01-step', 'test commit msg');
 
-    // Verify add was called with pathspec exclusion
+    expect(result.committed).toBe(true);
+    expect(result.sha).toBe('commit-sha-999');
+    expect(result.message).toBe('test commit msg');
     expect(addCalls.length).toBeGreaterThanOrEqual(1);
-    const addArgs = addCalls[0][0];
-    expect(addArgs).toEqual(['.', '--', ':!*.patch']);
+    expect(addCalls[0][0]).toEqual(['.', '--', ':!*.patch']);
   });
+
+  it('returns committed=false when there are no changes', async () => {
+    const service = createService('off');
+
+    const mockGit = createMockGit({
+      add: async () => {},
+      status: async () => ({
+        staged: [],
+        modified: [],
+        not_added: [],
+        deleted: [],
+        created: [],
+      }),
+      revparse: async () => 'no-change-sha',
+    });
+    (service as any).getGit = () => mockGit;
+
+    setupWorktreeDir(service, 'feat', '01-step');
+
+    const result = await service.commitChanges('feat', '01-step', 'nothing to commit');
+
+    expect(result.committed).toBe(false);
+    expect(result.sha).toBe('no-change-sha');
+    expect(result.message).toBe('No changes to commit');
+  });
+
+  it('returns committed=false when worktree directory does not exist', async () => {
+    const service = createService('off');
+
+    const result = await service.commitChanges('nonexistent', 'step');
+
+    expect(result.committed).toBe(false);
+    expect(result.sha).toBe('');
+    expect(result.message).toBe('Worktree not found');
+  });
+
+  it('uses default commit message when none provided', async () => {
+    const service = createService('off');
+    let committedMessage = '';
+
+    const mockGit = createMockGit({
+      add: async () => {},
+      status: async () => ({
+        staged: ['file.ts'],
+        modified: [],
+        not_added: [],
+      }),
+      commit: async (msg: string) => {
+        committedMessage = msg;
+        return { commit: 'default-msg-sha' };
+      },
+      revparse: async () => 'default-msg-sha',
+    });
+    (service as any).getGit = () => mockGit;
+
+    setupWorktreeDir(service, 'feat', '01-step');
+
+    const result = await service.commitChanges('feat', '01-step');
+
+    expect(result.committed).toBe(true);
+    expect(committedMessage).toBe('warcraft(01-step): task changes');
+  });
+
+  it('handles commit failure gracefully', async () => {
+    const service = createService('off');
+
+    const mockGit = createMockGit({
+      add: async () => {},
+      status: async () => ({
+        staged: ['file.ts'],
+        modified: [],
+        not_added: [],
+      }),
+      commit: async () => {
+        throw new Error('commit failed: permission denied');
+      },
+      revparse: async () => 'fallback-sha',
+    });
+    (service as any).getGit = () => mockGit;
+
+    setupWorktreeDir(service, 'feat', '01-step');
+
+    const result = await service.commitChanges('feat', '01-step', 'will fail');
+
+    expect(result.committed).toBe(false);
+    expect(result.message).toContain('commit failed');
+  });
+});
+
+// ============================================================================
+// getDiff() Tests
+// ============================================================================
+
+describe('WorktreeService.getDiff', () => {
+  it('returns diff with file stats for staged changes', async () => {
+    const service = createService('off');
+
+    const mockGit = createMockGit({
+      status: async () => ({
+        staged: ['src/a.ts'],
+        modified: [],
+        not_added: [],
+        deleted: [],
+        created: [],
+      }),
+      diff: async (args: string[]) => {
+        if (args.includes('--cached') && args.includes('--stat')) {
+          return ' src/a.ts | 5 +++--\n 1 file changed, 3 insertions(+), 2 deletions(-)\n';
+        }
+        if (args.includes('--cached')) {
+          return 'diff --git a/src/a.ts b/src/a.ts\n+added line\n';
+        }
+        return '';
+      },
+    });
+    (service as any).getGit = () => mockGit;
+
+    setupWorktreeDir(service, 'feat', '01-step');
+
+    const result = await service.getDiff('feat', '01-step', 'HEAD');
+
+    expect(result.hasDiff).toBe(true);
+    expect(result.diffContent).toContain('added line');
+    expect(result.filesChanged).toContain('src/a.ts');
+    expect(result.insertions).toBe(3);
+    expect(result.deletions).toBe(2);
+    expect(result.error).toBeUndefined();
+  });
+
+  it('returns diff between base and HEAD for unstaged changes', async () => {
+    const service = createService('off');
+
+    const mockGit = createMockGit({
+      status: async () => ({
+        staged: [],
+        modified: ['src/b.ts'],
+        not_added: [],
+        deleted: [],
+        created: [],
+      }),
+      diff: async (args: string[]) => {
+        if (args.some((a: string) => a.includes('..HEAD')) && args.includes('--stat')) {
+          return ' src/b.ts | 10 ++++++++++\n 1 file changed, 10 insertions(+)\n';
+        }
+        if (args.some((a: string) => a.includes('..HEAD'))) {
+          return 'diff --git a/src/b.ts b/src/b.ts\n+new content\n';
+        }
+        return '';
+      },
+    });
+    (service as any).getGit = () => mockGit;
+
+    setupWorktreeDir(service, 'feat', '02-step');
+
+    const result = await service.getDiff('feat', '02-step', 'abc123');
+
+    expect(result.hasDiff).toBe(true);
+    expect(result.diffContent).toContain('new content');
+    expect(result.insertions).toBe(10);
+    expect(result.deletions).toBe(0);
+  });
+
+  it('returns empty diff when no changes exist', async () => {
+    const service = createService('off');
+
+    const mockGit = createMockGit({
+      status: async () => ({
+        staged: [],
+        modified: [],
+        not_added: [],
+        deleted: [],
+        created: [],
+      }),
+      diff: async () => '',
+    });
+    (service as any).getGit = () => mockGit;
+
+    setupWorktreeDir(service, 'feat', '03-step');
+
+    const result = await service.getDiff('feat', '03-step', 'HEAD');
+
+    expect(result.hasDiff).toBe(false);
+    expect(result.diffContent).toBe('');
+    expect(result.filesChanged).toEqual([]);
+    expect(result.insertions).toBe(0);
+    expect(result.deletions).toBe(0);
+  });
+
+  it('returns error result when git operations fail', async () => {
+    const service = createService('off');
+
+    const mockGit = createMockGit({
+      status: async () => {
+        throw new Error('git status failed');
+      },
+    });
+    (service as any).getGit = () => mockGit;
+
+    setupWorktreeDir(service, 'feat', '04-step');
+
+    const result = await service.getDiff('feat', '04-step', 'HEAD');
+
+    expect(result.hasDiff).toBe(false);
+    expect(result.error).toContain('getDiff failed');
+    expect(result.error).toContain('git status failed');
+  });
+
+  it('reads baseCommit from status.json when not provided', async () => {
+    const service = createService('off');
+
+    // Write a status.json with baseCommit
+    const statusPath = (service as any).getStepStatusPath('feat', '05-step');
+    fs.mkdirSync(path.dirname(statusPath), { recursive: true });
+    fs.writeFileSync(statusPath, JSON.stringify({ baseCommit: 'status-base-sha' }));
+
+    let capturedBase = '';
+    const mockGit = createMockGit({
+      status: async () => ({
+        staged: [],
+        modified: [],
+        not_added: [],
+        deleted: [],
+        created: [],
+      }),
+      diff: async (args: string[]) => {
+        const refArg = args.find((a: string) => a.includes('..HEAD'));
+        if (refArg) capturedBase = refArg;
+        return '';
+      },
+    });
+    (service as any).getGit = () => mockGit;
+
+    setupWorktreeDir(service, 'feat', '05-step');
+
+    await service.getDiff('feat', '05-step');
+
+    expect(capturedBase).toBe('status-base-sha..HEAD');
+  });
+});
+
+// ============================================================================
+// hasUncommittedChanges() Tests
+// ============================================================================
+
+describe('WorktreeService.hasUncommittedChanges', () => {
+  it('returns true when worktree has modified files', async () => {
+    const service = createService('off');
+
+    const mockGit = createMockGit({
+      status: async () => ({
+        modified: ['src/a.ts'],
+        not_added: [],
+        staged: [],
+        deleted: [],
+        created: [],
+      }),
+    });
+    (service as any).getGit = () => mockGit;
+
+    setupWorktreeDir(service, 'feat', '01-step');
+
+    expect(await service.hasUncommittedChanges('feat', '01-step')).toBe(true);
+  });
+
+  it('returns true when worktree has untracked files', async () => {
+    const service = createService('off');
+
+    const mockGit = createMockGit({
+      status: async () => ({
+        modified: [],
+        not_added: ['new-file.ts'],
+        staged: [],
+        deleted: [],
+        created: [],
+      }),
+    });
+    (service as any).getGit = () => mockGit;
+
+    setupWorktreeDir(service, 'feat', '02-step');
+
+    expect(await service.hasUncommittedChanges('feat', '02-step')).toBe(true);
+  });
+
+  it('returns true when worktree has staged files', async () => {
+    const service = createService('off');
+
+    const mockGit = createMockGit({
+      status: async () => ({
+        modified: [],
+        not_added: [],
+        staged: ['staged.ts'],
+        deleted: [],
+        created: [],
+      }),
+    });
+    (service as any).getGit = () => mockGit;
+
+    setupWorktreeDir(service, 'feat', '03-step');
+
+    expect(await service.hasUncommittedChanges('feat', '03-step')).toBe(true);
+  });
+
+  it('returns true when worktree has deleted files', async () => {
+    const service = createService('off');
+
+    const mockGit = createMockGit({
+      status: async () => ({
+        modified: [],
+        not_added: [],
+        staged: [],
+        deleted: ['removed.ts'],
+        created: [],
+      }),
+    });
+    (service as any).getGit = () => mockGit;
+
+    setupWorktreeDir(service, 'feat', '04-step');
+
+    expect(await service.hasUncommittedChanges('feat', '04-step')).toBe(true);
+  });
+
+  it('returns false when worktree is clean', async () => {
+    const service = createService('off');
+
+    const mockGit = createMockGit({
+      status: async () => ({
+        modified: [],
+        not_added: [],
+        staged: [],
+        deleted: [],
+        created: [],
+      }),
+    });
+    (service as any).getGit = () => mockGit;
+
+    setupWorktreeDir(service, 'feat', '05-step');
+
+    expect(await service.hasUncommittedChanges('feat', '05-step')).toBe(false);
+  });
+
+  it('returns false when worktree does not exist (error case)', async () => {
+    const service = createService('off');
+
+    // No worktree dir created, getGit will fail when accessing status
+    expect(await service.hasUncommittedChanges('nonexistent', 'step')).toBe(false);
+  });
+});
+
+// ============================================================================
+// list() Tests
+// ============================================================================
+
+describe('WorktreeService.list', () => {
+  it('lists all worktrees when no feature filter is provided', async () => {
+    const service = createService('off');
+    const mockGit = createMockGit({
+      revparse: async () => 'list-sha',
+    });
+    (service as any).getGit = () => mockGit;
+
+    // Set up multiple worktree directories
+    setupWorktreeDir(service, 'feat-a', '01-step');
+    setupWorktreeDir(service, 'feat-b', '02-step');
+
+    const results = await service.list();
+
+    expect(results.length).toBe(2);
+    const features = results.map((r) => r.feature).sort();
+    expect(features).toEqual(['feat-a', 'feat-b']);
+  });
+
+  it('lists only worktrees for specific feature when filter is provided', async () => {
+    const service = createService('off');
+    const mockGit = createMockGit({
+      revparse: async () => 'filtered-sha',
+    });
+    (service as any).getGit = () => mockGit;
+
+    setupWorktreeDir(service, 'feat-a', '01-step');
+    setupWorktreeDir(service, 'feat-a', '02-step');
+    setupWorktreeDir(service, 'feat-b', '03-step');
+
+    const results = await service.list('feat-a');
+
+    expect(results.length).toBe(2);
+    expect(results.every((r) => r.feature === 'feat-a')).toBe(true);
+  });
+
+  it('returns empty array when no worktrees exist', async () => {
+    const service = createService('off');
+    const results = await service.list();
+    expect(results).toEqual([]);
+  });
+});
+
+// ============================================================================
+// checkConflicts() Tests
+// ============================================================================
+
+describe('WorktreeService.checkConflicts', () => {
+  it('returns empty array when no conflicts exist', async () => {
+    const service = createService('off');
+
+    const mockGit = createMockGit({
+      status: async () => ({
+        staged: ['src/a.ts'],
+        modified: [],
+        not_added: [],
+        deleted: [],
+        created: [],
+      }),
+      diff: async (args: string[]) => {
+        if (args.includes('--cached')) {
+          return 'diff --git a/src/a.ts b/src/a.ts\n+clean\n';
+        }
+        return '';
+      },
+      applyPatch: async () => {},
+    });
+    (service as any).getGit = () => mockGit;
+
+    setupWorktreeDir(service, 'feat', '01-step');
+
+    const conflicts = await service.checkConflicts('feat', '01-step');
+    expect(conflicts).toEqual([]);
+  });
+
+  it('returns conflicting file names when patch check fails', async () => {
+    const service = createService('off');
+
+    const mockGit = createMockGit({
+      status: async () => ({
+        staged: ['src/conflict.ts'],
+        modified: [],
+        not_added: [],
+        deleted: [],
+        created: [],
+      }),
+      diff: async (args: string[]) => {
+        if (args.includes('--cached')) {
+          return 'diff --git a/src/conflict.ts b/src/conflict.ts\n+conflict\n';
+        }
+        return '';
+      },
+      applyPatch: async () => {
+        throw new Error('error: patch failed: src/conflict.ts:5\nerror: src/conflict.ts: patch does not apply');
+      },
+    });
+    (service as any).getGit = () => mockGit;
+
+    setupWorktreeDir(service, 'feat', '02-step');
+
+    const conflicts = await service.checkConflicts('feat', '02-step');
+    expect(conflicts).toContain('src/conflict.ts');
+  });
+
+  it('returns empty array when there is no diff', async () => {
+    const service = createService('off');
+
+    const mockGit = createMockGit({
+      status: async () => ({
+        staged: [],
+        modified: [],
+        not_added: [],
+        deleted: [],
+        created: [],
+      }),
+      diff: async () => '',
+    });
+    (service as any).getGit = () => mockGit;
+
+    setupWorktreeDir(service, 'feat', '03-step');
+
+    const conflicts = await service.checkConflicts('feat', '03-step');
+    expect(conflicts).toEqual([]);
+  });
+});
+
+// ============================================================================
+// exportPatch() Tests
+// ============================================================================
+
+describe('WorktreeService.exportPatch', () => {
+  it('writes diff to patch file and returns path', async () => {
+    const service = createService('off');
+
+    const mockGit = createMockGit({
+      diff: async () => 'diff --git a/file.ts b/file.ts\n+added\n',
+    });
+    (service as any).getGit = () => mockGit;
+
+    const wtPath = setupWorktreeDir(service, 'feat', '01-step');
+
+    const patchPath = await service.exportPatch('feat', '01-step');
+
+    expect(patchPath).toContain('01-step.patch');
+    expect(fs.existsSync(patchPath)).toBe(true);
+    expect(fs.readFileSync(patchPath, 'utf-8')).toContain('added');
+  });
+});
+
+// ============================================================================
+// applyDiff() Tests
+// ============================================================================
+
+describe('WorktreeService.applyDiff', () => {
+  it('applies diff patch to base repo', async () => {
+    const service = createService('off');
+    let patchApplied = false;
+
+    const mockGit = createMockGit({
+      status: async () => ({
+        staged: ['src/a.ts'],
+        modified: [],
+        not_added: [],
+        deleted: [],
+        created: [],
+      }),
+      diff: async (args: string[]) => {
+        if (args.includes('--cached') && args.includes('--stat')) {
+          return ' src/a.ts | 1 +\n 1 file changed, 1 insertion(+)\n';
+        }
+        if (args.includes('--cached')) {
+          return 'diff --git a/src/a.ts b/src/a.ts\n+line\n';
+        }
+        return '';
+      },
+      applyPatch: async () => {
+        patchApplied = true;
+      },
+    });
+    (service as any).getGit = () => mockGit;
+
+    // Create the worktrees dir so the patch file can be written
+    const worktreesDir = (service as any).getWorktreesDir();
+    fs.mkdirSync(path.join(worktreesDir, 'feat'), { recursive: true });
+    setupWorktreeDir(service, 'feat', '01-step');
+
+    const result = await service.applyDiff('feat', '01-step');
+
+    expect(result.success).toBe(true);
+    expect(patchApplied).toBe(true);
+    expect(result.filesAffected).toContain('src/a.ts');
+  });
+
+  it('returns success with empty filesAffected when no diff exists', async () => {
+    const service = createService('off');
+
+    const mockGit = createMockGit({
+      status: async () => ({
+        staged: [],
+        modified: [],
+        not_added: [],
+        deleted: [],
+        created: [],
+      }),
+      diff: async () => '',
+    });
+    (service as any).getGit = () => mockGit;
+
+    setupWorktreeDir(service, 'feat', '01-step');
+
+    const result = await service.applyDiff('feat', '01-step');
+
+    expect(result.success).toBe(true);
+    expect(result.filesAffected).toEqual([]);
+  });
+
+  it('returns error when patch apply fails', async () => {
+    const service = createService('off');
+
+    const mockGit = createMockGit({
+      status: async () => ({
+        staged: ['src/a.ts'],
+        modified: [],
+        not_added: [],
+        deleted: [],
+        created: [],
+      }),
+      diff: async (args: string[]) => {
+        if (args.includes('--cached') && args.includes('--stat')) {
+          return ' src/a.ts | 1 +\n 1 file changed, 1 insertion(+)\n';
+        }
+        if (args.includes('--cached')) {
+          return 'diff --git a/src/a.ts b/src/a.ts\n+line\n';
+        }
+        return '';
+      },
+      applyPatch: async () => {
+        throw new Error('patch apply failed');
+      },
+    });
+    (service as any).getGit = () => mockGit;
+
+    const worktreesDir = (service as any).getWorktreesDir();
+    fs.mkdirSync(path.join(worktreesDir, 'feat'), { recursive: true });
+    setupWorktreeDir(service, 'feat', '01-step');
+
+    const result = await service.applyDiff('feat', '01-step');
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('patch apply failed');
+  });
+});
+
+// ============================================================================
+// cleanup() Tests
+// ============================================================================
+
+describe('WorktreeService.cleanup', () => {
+  it('removes stale worktrees that fail HEAD check', async () => {
+    const service = createService('off');
+    let pruned = false;
+    const rawCalls: string[][] = [];
+
+    // worktree exists but git fails (stale)
+    let callCount = 0;
+    const mockGit = createMockGit({
+      revparse: async () => {
+        callCount++;
+        if (callCount <= 1) {
+          // First call: stale worktree fails
+          throw new Error('not a git repository');
+        }
+        return 'valid-sha';
+      },
+      raw: async (...args: any[]) => {
+        const flatArgs = args.flat();
+        rawCalls.push(flatArgs);
+        if (flatArgs.includes('prune')) pruned = true;
+        return '';
+      },
+      deleteLocalBranch: async () => {},
+    });
+    (service as any).getGit = () => mockGit;
+
+    setupWorktreeDir(service, 'feat', 'stale-step');
+
+    const result = await service.cleanup();
+
+    expect(pruned).toBe(true);
+    expect(result.pruned).toBe(true);
+    expect(result.removed.length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+// ============================================================================
+// Integration Test: create → commit → merge flow (real git)
+// ============================================================================
+
+describe('WorktreeService integration', () => {
+  it('create → commit → merge flow in temp git repo', async () => {
+    const { execSync } = await import('child_process');
+
+    // Initialize a real git repo in testRoot
+    execSync('git init', { cwd: testRoot, stdio: 'pipe' });
+    execSync('git config user.email "test@test.com"', { cwd: testRoot, stdio: 'pipe' });
+    execSync('git config user.name "Test"', { cwd: testRoot, stdio: 'pipe' });
+
+    // Create initial commit on main
+    fs.writeFileSync(path.join(testRoot, 'README.md'), '# Test\n');
+    execSync('git add .', { cwd: testRoot, stdio: 'pipe' });
+    execSync('git commit -m "initial commit"', { cwd: testRoot, stdio: 'pipe' });
+
+    // Rename default branch to 'main' for consistency
+    execSync('git branch -M main', { cwd: testRoot, stdio: 'pipe' });
+
+    // Create a real WorktreeService pointing at this repo
+    const warcraftDir = path.join(testRoot, '.beads', 'artifacts');
+    fs.mkdirSync(warcraftDir, { recursive: true });
+
+    const service = new WorktreeService({
+      baseDir: testRoot,
+      warcraftDir,
+    });
+
+    // Step 1: Create worktree
+    const info = await service.create('int-test', '01-task');
+
+    expect(info.feature).toBe('int-test');
+    expect(info.step).toBe('01-task');
+    expect(info.branch).toBe('warcraft/int-test/01-task');
+    expect(fs.existsSync(info.path)).toBe(true);
+
+    // Step 2: Make changes in the worktree
+    const newFile = path.join(info.path, 'new-file.ts');
+    fs.writeFileSync(newFile, 'export const hello = "world";\n');
+
+    // Step 3: Commit changes
+    const commitResult = await service.commitChanges('int-test', '01-task', 'feat: add new file');
+
+    expect(commitResult.committed).toBe(true);
+    expect(commitResult.sha).toBeTruthy();
+    expect(commitResult.message).toBe('feat: add new file');
+
+    // Step 4: Verify diff exists (relative to initial commit on main)
+    // Get the base commit (the commit the worktree was created from)
+    const baseCommit = execSync('git rev-parse main', { cwd: testRoot, encoding: 'utf-8' }).trim();
+    const diff = await service.getDiff('int-test', '01-task', baseCommit);
+    expect(diff.hasDiff).toBe(true);
+    expect(diff.filesChanged).toContain('new-file.ts');
+
+    // Step 5: Merge back to main
+    const mergeResult = await service.merge('int-test', '01-task', 'merge');
+
+    expect(mergeResult.success).toBe(true);
+    expect(mergeResult.merged).toBe(true);
+
+    // Step 6: Verify file exists on main branch
+    const mainFile = path.join(testRoot, 'new-file.ts');
+    expect(fs.existsSync(mainFile)).toBe(true);
+    expect(fs.readFileSync(mainFile, 'utf-8')).toBe('export const hello = "world";\n');
+
+    // Step 7: Clean up worktree
+    await service.remove('int-test', '01-task', true);
+    expect(fs.existsSync(info.path)).toBe(false);
+  }, 30000);
+
+  it('merge returns conflict info when branches diverge', async () => {
+    const { execSync } = await import('child_process');
+
+    // Initialize repo
+    execSync('git init', { cwd: testRoot, stdio: 'pipe' });
+    execSync('git config user.email "test@test.com"', { cwd: testRoot, stdio: 'pipe' });
+    execSync('git config user.name "Test"', { cwd: testRoot, stdio: 'pipe' });
+
+    fs.writeFileSync(path.join(testRoot, 'shared.ts'), 'line 1\nline 2\nline 3\n');
+    execSync('git add .', { cwd: testRoot, stdio: 'pipe' });
+    execSync('git commit -m "initial"', { cwd: testRoot, stdio: 'pipe' });
+    execSync('git branch -M main', { cwd: testRoot, stdio: 'pipe' });
+
+    const warcraftDir = path.join(testRoot, '.beads', 'artifacts');
+    fs.mkdirSync(warcraftDir, { recursive: true });
+
+    const service = new WorktreeService({
+      baseDir: testRoot,
+      warcraftDir,
+    });
+
+    // Create worktree and modify shared.ts
+    const info = await service.create('conflict-test', '01-conflict');
+    fs.writeFileSync(path.join(info.path, 'shared.ts'), 'branch line 1\nline 2\nline 3\n');
+    await service.commitChanges('conflict-test', '01-conflict', 'branch change');
+
+    // Modify same file on main to create conflict
+    fs.writeFileSync(path.join(testRoot, 'shared.ts'), 'main line 1\nline 2\nline 3\n');
+    execSync('git add .', { cwd: testRoot, stdio: 'pipe' });
+    execSync('git commit -m "main change"', { cwd: testRoot, stdio: 'pipe' });
+
+    // Attempt merge — should detect conflict
+    const mergeResult = await service.merge('conflict-test', '01-conflict');
+
+    expect(mergeResult.success).toBe(false);
+    expect(mergeResult.merged).toBe(false);
+    expect(mergeResult.error).toBeDefined();
+
+    // Clean up
+    await service.remove('conflict-test', '01-conflict', true);
+  }, 30000);
+
+  it('hasUncommittedChanges returns true for dirty worktree', async () => {
+    const { execSync } = await import('child_process');
+
+    execSync('git init', { cwd: testRoot, stdio: 'pipe' });
+    execSync('git config user.email "test@test.com"', { cwd: testRoot, stdio: 'pipe' });
+    execSync('git config user.name "Test"', { cwd: testRoot, stdio: 'pipe' });
+
+    fs.writeFileSync(path.join(testRoot, 'file.ts'), 'original\n');
+    execSync('git add .', { cwd: testRoot, stdio: 'pipe' });
+    execSync('git commit -m "init"', { cwd: testRoot, stdio: 'pipe' });
+    execSync('git branch -M main', { cwd: testRoot, stdio: 'pipe' });
+
+    const warcraftDir = path.join(testRoot, '.beads', 'artifacts');
+    fs.mkdirSync(warcraftDir, { recursive: true });
+
+    const service = new WorktreeService({
+      baseDir: testRoot,
+      warcraftDir,
+    });
+
+    const info = await service.create('dirty-test', '01-dirty');
+
+    // Worktree starts clean
+    expect(await service.hasUncommittedChanges('dirty-test', '01-dirty')).toBe(false);
+
+    // Add an uncommitted file
+    fs.writeFileSync(path.join(info.path, 'dirty.ts'), 'uncommitted\n');
+
+    // Now it should be dirty
+    expect(await service.hasUncommittedChanges('dirty-test', '01-dirty')).toBe(true);
+
+    // Clean up
+    await service.remove('dirty-test', '01-dirty', true);
+  }, 30000);
 });

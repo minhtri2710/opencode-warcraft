@@ -5,7 +5,7 @@
     "": {
       "name": "@minhtri2710/opencode-warcraft",
       "devDependencies": {
-        "@biomejs/biome": "^2.4.4",
+        "@biomejs/biome": "^2.4.5",
       },
     },
     "packages/opencode-warcraft": {

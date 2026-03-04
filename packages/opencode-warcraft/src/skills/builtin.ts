@@ -69,15 +69,4 @@ export function getFilteredSkills(disabledSkills: string[] = [], agentSkills?: s
   return filtered;
 }
 
-/**
- * Get skill metadata for tool description (XML format).
- * Uses (warcraft - Skill) prefix for consistency with formatSkillsXml in index.ts.
- */
-export function getBuiltinSkillsXml(): string {
-  const skillsXml = BUILTIN_SKILLS.map(
-    (s) =>
-      `  <skill>\n    <name>${s.name}</name>\n    <description>(warcraft - Skill) ${s.description}</description>\n  </skill>`,
-  ).join('\n');
 
-  return `<available_skills>\n${skillsXml}\n</available_skills>`;
-}

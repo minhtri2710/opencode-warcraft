@@ -13,8 +13,8 @@ import { getPlanPath, sanitizeName } from '../utils/paths.js';
 import { deriveTaskFolder, slugifyTaskName } from '../utils/slug.js';
 import { formatSpecContent } from './specFormatter.js';
 import type { TaskStore } from './state/types.js';
-import type { TaskWithDeps } from './taskDependencyGraph.js';
-import { computeRunnableAndBlocked } from './taskDependencyGraph.js';
+import type { RunnableBlockedResult, TaskWithDeps } from './taskDependencyGraph.js';
+import { buildEffectiveDependencies, computeRunnableAndBlocked } from './taskDependencyGraph.js';
 
 /** Current schema version for TaskStatus */
 export const TASK_STATUS_SCHEMA_VERSION = 1;
@@ -61,6 +61,18 @@ export interface RunnableTasksResult {
   source: 'beads' | 'filesystem';
 }
 
+/** Internal result from computing the sync delta between plan and existing tasks. */
+interface SyncDelta {
+  planTasks: ParsedTask[];
+  existingTasks: TaskInfo[];
+  existingByFolder: Map<string, TaskInfo>;
+  planContent: string;
+  kept: string[];
+  removed: string[];
+  created: string[];
+  manual: string[];
+}
+
 export class TaskService {
   constructor(
     private projectRoot: string,
@@ -68,60 +80,33 @@ export class TaskService {
     private readonly beadsMode: BeadsMode = 'on',
   ) {}
 
-  sync(featureName: string): TasksSyncResult {
-    const planPath = getPlanPath(this.projectRoot, featureName, this.beadsMode);
-    const planContent = readText(planPath);
-
-    if (!planContent) {
-      throw new Error(`No plan.md found for feature '${featureName}'`);
-    }
-
-    const planTasks = this.parseTasksFromPlan(planContent);
-
-    // Validate dependency graph before proceeding
-    this.validateDependencyGraph(planTasks);
-
-    const existingTasks = this.store.list(featureName);
-
-    const result: TasksSyncResult = {
-      created: [],
-      removed: [],
-      kept: [],
-      manual: [],
+  /**
+   * Preview what tasks_sync would create/remove without making changes.
+   * Useful for dry-run validation before committing to sync.
+   */
+  previewSync(featureName: string): TasksSyncResult {
+    const delta = this._computeSyncDelta(featureName);
+    return {
+      created: delta.created,
+      removed: delta.removed,
+      kept: delta.kept,
+      manual: delta.manual,
     };
+  }
 
-    const existingByName = new Map(existingTasks.map((t) => [t.folder, t]));
+  sync(featureName: string): TasksSyncResult {
+    const delta = this._computeSyncDelta(featureName);
 
-    for (const existing of existingTasks) {
-      if (existing.origin === 'manual') {
-        result.manual.push(existing.folder);
-        continue;
-      }
-
-      if (existing.status === 'done' || existing.status === 'in_progress') {
-        result.kept.push(existing.folder);
-        continue;
-      }
-
-      if (existing.status === 'cancelled') {
-        this.store.delete(featureName, existing.folder);
-        result.removed.push(existing.folder);
-        continue;
-      }
-
-      const stillInPlan = planTasks.some((p) => p.folder === existing.folder);
-      if (!stillInPlan) {
-        this.store.delete(featureName, existing.folder);
-        result.removed.push(existing.folder);
-      } else {
-        result.kept.push(existing.folder);
-      }
+    // Apply removals
+    for (const folder of delta.removed) {
+      this.store.delete(featureName, folder);
     }
 
-    for (const planTask of planTasks) {
-      if (!existingByName.has(planTask.folder)) {
+    // Apply creations
+    for (const planTask of delta.planTasks) {
+      if (!delta.existingByFolder.has(planTask.folder)) {
         // Resolve dependencies: numbers -> folder names
-        const dependsOn = this.resolveDependencies(planTask, planTasks);
+        const dependsOn = this.resolveDependencies(planTask, delta.planTasks);
 
         const status: TaskStatus = {
           status: 'pending',
@@ -138,13 +123,11 @@ export class TaskService {
           featureName,
           task: planTask,
           dependsOn,
-          allTasks: planTasks,
-          planContent,
+          allTasks: delta.planTasks,
+          planContent: delta.planContent,
         });
         const specContent = formatSpecContent(specData);
         this.store.writeArtifact(featureName, planTask.folder, 'spec', specContent);
-
-        result.created.push(planTask.folder);
       }
     }
 
@@ -155,7 +138,82 @@ export class TaskService {
       this.store.syncDependencies(featureName);
     }
 
-    return result;
+    return {
+      created: delta.created,
+      removed: delta.removed,
+      kept: delta.kept,
+      manual: delta.manual,
+    };
+  }
+
+  /**
+   * Compute the sync delta between plan tasks and existing tasks.
+   * Shared by previewSync() and sync() to ensure identical classification.
+   */
+  private _computeSyncDelta(featureName: string): SyncDelta {
+    const planPath = getPlanPath(this.projectRoot, featureName, this.beadsMode);
+    const planContent = readText(planPath);
+
+    if (!planContent) {
+      throw new Error(`No plan.md found for feature '${featureName}'`);
+    }
+
+    const planTasks = this.parseTasksFromPlan(planContent);
+
+    // Validate dependency graph before proceeding
+    this.validateDependencyGraph(planTasks);
+
+    // Detect slug collisions among plan tasks
+    this.detectSlugCollisions(planTasks);
+
+    const existingTasks = this.store.list(featureName);
+    const existingByFolder = new Map(existingTasks.map((t) => [t.folder, t]));
+
+    const kept: string[] = [];
+    const removed: string[] = [];
+    const created: string[] = [];
+    const manual: string[] = [];
+
+    for (const existing of existingTasks) {
+      if (existing.origin === 'manual') {
+        manual.push(existing.folder);
+        continue;
+      }
+
+      if (existing.status === 'done' || existing.status === 'in_progress') {
+        kept.push(existing.folder);
+        continue;
+      }
+
+      if (existing.status === 'cancelled') {
+        removed.push(existing.folder);
+        continue;
+      }
+
+      const stillInPlan = planTasks.some((p) => p.folder === existing.folder);
+      if (!stillInPlan) {
+        removed.push(existing.folder);
+      } else {
+        kept.push(existing.folder);
+      }
+    }
+
+    for (const planTask of planTasks) {
+      if (!existingByFolder.has(planTask.folder)) {
+        created.push(planTask.folder);
+      }
+    }
+
+    return {
+      planTasks,
+      existingTasks,
+      existingByFolder,
+      planContent,
+      kept,
+      removed,
+      created,
+      manual,
+    };
   }
 
   /**
@@ -173,6 +231,19 @@ export class TaskService {
 
     const nextOrder = order ?? this.store.getNextOrder(featureName);
     const folder = deriveTaskFolder(nextOrder, name);
+    const slug = slugifyTaskName(name);
+
+    // Check for slug collision with existing tasks
+    const existingTasks = this.store.list(featureName);
+    for (const existing of existingTasks) {
+      // Extract slug portion from existing folder (strip "NN-" prefix)
+      const existingSlug = existing.folder.replace(/^\d+-/, '');
+      if (existingSlug === slug && existing.planTitle !== name) {
+        throw new Error(
+          `Task name '${name}' collides with existing task after slugification (folder: ${slug}). Please rename the task.`,
+        );
+      }
+    }
 
     const status: TaskStatus = {
       status: 'pending',
@@ -375,6 +446,28 @@ export class TaskService {
   }
 
   /**
+   * Detect slug collisions among parsed plan tasks.
+   * Two tasks with different names that produce the same slug after slugification
+   * would map to the same folder, causing confusion. Fail fast with a clear error.
+   */
+  private detectSlugCollisions(tasks: ParsedTask[]): void {
+    const slugToName = new Map<string, string>();
+
+    for (const task of tasks) {
+      const slug = slugifyTaskName(task.name);
+      const existingName = slugToName.get(slug);
+
+      if (existingName !== undefined && existingName !== task.name) {
+        throw new Error(
+          `Task name '${task.name}' collides with existing task after slugification (folder: ${slug}). Please rename the task.`,
+        );
+      }
+
+      slugToName.set(slug, task.name);
+    }
+  }
+
+  /**
    * Validate the dependency graph for errors before creating tasks.
    * Throws descriptive errors pointing the operator to fix plan.md.
    *
@@ -486,6 +579,32 @@ export class TaskService {
         dfs(task.order);
       }
     }
+  }
+
+  /**
+   * Compute runnable and blocked tasks for a feature using the canonical dependency engine.
+   * Centralizes the repeated pattern of building TaskWithDeps, computing effective dependencies,
+   * and determining runnable/blocked status.
+   */
+  computeRunnableStatus(featureName: string): RunnableBlockedResult {
+    const allTasks = this.store.list(featureName);
+
+    const tasksWithDeps: TaskWithDeps[] = allTasks.map((task) => {
+      const rawStatus = this.store.getRawStatus(featureName, task.folder);
+      return {
+        folder: task.folder,
+        status: task.status,
+        dependsOn: rawStatus?.dependsOn,
+      };
+    });
+
+    const effectiveDeps = buildEffectiveDependencies(tasksWithDeps);
+    const normalizedTasks = tasksWithDeps.map((task) => ({
+      ...task,
+      dependsOn: effectiveDeps.get(task.folder),
+    }));
+
+    return computeRunnableAndBlocked(normalizedTasks);
   }
 
   /**

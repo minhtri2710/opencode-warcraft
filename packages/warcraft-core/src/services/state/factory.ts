@@ -18,10 +18,13 @@ import type { StoreSet } from './types.js';
  *
  * @param projectRoot - Project root directory
  * @param beadsMode - Current beads mode ('on' or 'off')
- * @param repository - BeadsRepository instance (used by beads stores and filesystem task store for bead ID generation)
+ * @param repository - BeadsRepository instance (required for 'on' mode; optional for 'off' mode)
  */
-export function createStores(projectRoot: string, beadsMode: BeadsMode, repository: BeadsRepository): StoreSet {
+export function createStores(projectRoot: string, beadsMode: BeadsMode, repository?: BeadsRepository): StoreSet {
   if (beadsMode === 'on') {
+    if (!repository) {
+      throw new Error('BeadsRepository is required when beadsMode is "on"');
+    }
     return {
       featureStore: new BeadsFeatureStore(projectRoot, repository),
       taskStore: new BeadsTaskStore(projectRoot, repository),
@@ -31,7 +34,7 @@ export function createStores(projectRoot: string, beadsMode: BeadsMode, reposito
 
   return {
     featureStore: new FilesystemFeatureStore(projectRoot),
-    taskStore: new FilesystemTaskStore(projectRoot, repository),
+    taskStore: new FilesystemTaskStore(projectRoot),
     planStore: new FilesystemPlanStore(projectRoot),
   };
 }

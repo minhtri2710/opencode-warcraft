@@ -1,3 +1,4 @@
+import * as crypto from 'crypto';
 import * as fs from 'fs';
 import type { TaskInfo, TaskStatus } from '../../types.js';
 import { ensureDir, fileExists, readJson, writeJson, writeText } from '../../utils/fs.js';
@@ -13,31 +14,33 @@ import type { TaskArtifactKind, TaskSaveOptions, TaskStore } from './types.js';
  * TaskStore implementation for beadsMode='off'.
  *
  * Task state lives in local filesystem (`tasks/<folder>/status.json`).
- * Still uses BeadsRepository for bead creation when available (task identification).
+ * When a BeadsRepository is provided, uses it for bead creation (task identification).
+ * When absent (pure off mode), generates local UUIDs instead.
  */
 export class FilesystemTaskStore implements TaskStore {
   constructor(
     private readonly projectRoot: string,
-    private readonly repository: BeadsRepository,
+    private readonly repository?: BeadsRepository,
   ) {}
 
   createTask(featureName: string, folder: string, title: string, status: TaskStatus, priority: number): TaskStatus {
     let beadId = '';
 
-    // Attempt bead creation for task identification, but don't fail if unavailable
-    try {
-      const epicResult = this.repository.getEpicByFeatureName(featureName, true);
-      if (epicResult.success !== false) {
-        const epicBeadId = epicResult.value!;
-        beadId = this.repository.getGateway().createTask(title, epicBeadId, priority);
+    if (this.repository) {
+      // Attempt bead creation for task identification, but don't fail if unavailable
+      try {
+        const epicResult = this.repository.getEpicByFeatureName(featureName, true);
+        if (epicResult.success !== false) {
+          const epicBeadId = epicResult.value!;
+          beadId = this.repository.getGateway().createTask(title, epicBeadId, priority);
+        }
+      } catch {
+        // Beads unavailable — fall through to local ID generation
       }
-    } catch {
-      // Beads unavailable in off mode - generate a local identifier
-      beadId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     }
 
     if (!beadId) {
-      beadId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      beadId = crypto.randomUUID();
     }
 
     const statusWithBead: TaskStatus = { ...status, beadId };
@@ -137,7 +140,7 @@ export class FilesystemTaskStore implements TaskStore {
     const status = this.getRawStatus(featureName, folder);
     const beadId = status?.beadId;
 
-    if (beadId) {
+    if (beadId && this.repository) {
       try {
         this.repository.upsertTaskArtifact(beadId, kind, content);
         return beadId;
@@ -153,7 +156,7 @@ export class FilesystemTaskStore implements TaskStore {
     const status = this.getRawStatus(featureName, folder);
     const beadId = status?.beadId;
 
-    if (beadId) {
+    if (beadId && this.repository) {
       try {
         const readResult = this.repository.readTaskArtifact(beadId, kind);
         return readResult.success ? readResult.value : null;

@@ -40,7 +40,7 @@ export class WorktreeTools {
    */
   createWorktreeTool(resolveFeature: (name?: string) => string | null): ToolDefinition {
     // Capture deps in closure to avoid 'this' binding issues
-    const { checkBlocked, checkDependencies, taskService, planService, contextService, worktreeService } = this.deps;
+    const { checkBlocked, checkDependencies, taskService, planService, contextService, worktreeService, verificationModel } = this.deps;
     return tool({
       description: 'Create worktree and begin work on task. Spawns Mekkatorque worker automatically.',
       args: {
@@ -111,7 +111,7 @@ export class WorktreeTools {
                   }
                 : undefined,
           },
-          { planService, taskService, contextService },
+          { planService, taskService, contextService, verificationModel },
         );
 
         const {

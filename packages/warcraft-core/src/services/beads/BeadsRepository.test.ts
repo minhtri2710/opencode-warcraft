@@ -2,8 +2,9 @@
  * Tests for BeadsRepository module.
  */
 
-import { beforeEach, describe, expect, it } from 'bun:test';
+import { beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import type { FeatureJson, PlanComment, TaskStatus } from '../../types.js';
+import type { AuditEntry, AuditRecordParams } from './BeadGateway.types.js';
 import { BeadGatewayError } from './BeadGateway.types.js';
 import { BeadsRepository } from './BeadsRepository.js';
 
@@ -14,6 +15,8 @@ class MockBeadGateway {
   public comments: string[] = [];
   public labels = new Map<string, string[]>();
   public throwOn: string | null = null;
+  public auditRecords: AuditRecordParams[] = [];
+  public auditLogEntries: AuditEntry[] = [];
 
   checkAvailable(): string {
     if (this.throwOn === 'checkAvailable') {
@@ -83,6 +86,13 @@ class MockBeadGateway {
     return { id: beadId, title: 'Test Bead', description: this.descriptions.get(beadId) || '' };
   }
 
+  showToon(beadId: string): string {
+    if (this.throwOn === 'showToon') {
+      throw new Error('Failed to show toon format');
+    }
+    return `${beadId} | Test Bead | open | priority:2`;
+  }
+
   readDescription(beadId: string): string | null {
     if (this.throwOn === 'readDescription') {
       throw new Error('Failed to read description');
@@ -134,6 +144,20 @@ class MockBeadGateway {
     }
     const beadArtifacts = this.artifacts.get(beadId);
     return beadArtifacts?.[kind] || null;
+  }
+
+  auditRecord(params: AuditRecordParams): void {
+    if (this.throwOn === 'auditRecord') {
+      throw new Error('Failed to record audit event');
+    }
+    this.auditRecords.push(params);
+  }
+
+  auditLog(_beadId: string): AuditEntry[] {
+    if (this.throwOn === 'auditLog') {
+      throw new Error('Failed to retrieve audit log');
+    }
+    return this.auditLogEntries;
   }
 }
 
@@ -575,6 +599,100 @@ describe('BeadsRepository', () => {
     it('should provide access to underlying viewer gateway', () => {
       const viewer = repository.getViewerGateway();
       expect(viewer).toBeDefined();
+    });
+  });
+
+  describe('Audit Operations', () => {
+    it('should record audit event via gateway', () => {
+      repository.recordAuditEvent('bd-1', {
+        kind: 'llm_call',
+        issueId: 'will-be-overridden',
+        model: 'claude-opus-4',
+      });
+
+      expect(mockGateway.auditRecords).toHaveLength(1);
+      expect(mockGateway.auditRecords[0].kind).toBe('llm_call');
+      expect(mockGateway.auditRecords[0].issueId).toBe('bd-1');
+      expect(mockGateway.auditRecords[0].model).toBe('claude-opus-4');
+    });
+
+    it('should swallow audit record errors (non-blocking sidecar)', () => {
+      mockGateway.throwOn = 'auditRecord';
+
+      // Must NOT throw — sidecar policy
+      expect(() => {
+        repository.recordAuditEvent('bd-1', { kind: 'tool_call', issueId: 'bd-1' });
+      }).not.toThrow();
+    });
+
+    it('should retrieve audit log entries', () => {
+      mockGateway.auditLogEntries = [
+        { id: 'audit-1', kind: 'llm_call', issueId: 'bd-1', model: 'claude-opus-4' },
+        { id: 'audit-2', kind: 'tool_call', issueId: 'bd-1', toolName: 'warcraft_status' },
+      ];
+
+      const entries = repository.getAuditLog('bd-1');
+
+      expect(entries).toHaveLength(2);
+      expect(entries[0].id).toBe('audit-1');
+      expect(entries[1].toolName).toBe('warcraft_status');
+    });
+
+    it('should return empty array on audit log failure (non-blocking sidecar)', () => {
+      mockGateway.throwOn = 'auditLog';
+
+      // Must NOT throw — sidecar policy
+      const entries = repository.getAuditLog('bd-1');
+      expect(entries).toEqual([]);
+    });
+  });
+
+  describe('getBeadToon', () => {
+    it('should return raw toon output from gateway', () => {
+      const result = repository.getBeadToon('bd-1');
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.value).toBe('bd-1 | Test Bead | open | priority:2');
+      }
+    });
+
+    it('should fall back to JSON show on toon failure and log warning', () => {
+      mockGateway.throwOn = 'showToon';
+      const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+
+      const result = repository.getBeadToon('bd-1');
+
+      expect(result.success).toBe(true);
+      if (result.success) {
+        // Falls back to JSON show() result
+        expect(result.value).toBeDefined();
+        expect(typeof result.value).toBe('string');
+      }
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(warnSpy.mock.calls[0][0]).toContain('[BeadsRepository]');
+      expect(warnSpy.mock.calls[0][0]).toContain('toon');
+
+      warnSpy.mockRestore();
+    });
+
+    it('should return error when both toon and JSON show fail', () => {
+      mockGateway.throwOn = 'showToon';
+      // Also make show() fail
+      const originalShow = mockGateway.show.bind(mockGateway);
+      mockGateway.show = () => {
+        throw new Error('Both failed');
+      };
+      const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+
+      const result = repository.getBeadToon('bd-1');
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.code).toBe('gateway_error');
+      }
+
+      warnSpy.mockRestore();
+      mockGateway.show = originalShow;
     });
   });
 });

@@ -1,73 +1,22 @@
 import { describe, expect, test } from 'bun:test';
 import * as path from 'path';
-import { DockerSandboxService } from 'warcraft-core';
+import { applySandboxHook } from './sandbox-hook.js';
 
 /**
- * Tests for tool.execute.before hook bash interception with Docker sandboxing
+ * Tests for the extracted sandbox hook pure function.
  *
- * The hook should:
+ * The function should:
  * - Only intercept bash tool calls
  * - Only wrap commands with explicit workdir inside .beads/artifacts/.worktrees/
  * - Respect sandbox config mode ('none' = no wrapping, 'docker' = wrap)
  * - Treat commands uniformly (no HOST: escape hatch)
  * - Clear workdir after wrapping (docker runs on host)
- *
- * Note: These tests simulate the hook logic. The actual hook is in index.ts
  */
 
-describe('tool.execute.before bash interception hook logic', () => {
+describe('applySandboxHook', () => {
   const mockDirectory = '/mock/project';
   const warcraftWorktreeBase = path.join(mockDirectory, '.beads/artifacts', '.worktrees');
   const worktreePath = path.join(warcraftWorktreeBase, 'feature-x', 'task-1');
-
-  const isPathInside = (candidatePath: string, parentPath: string): boolean => {
-    const absoluteCandidate = path.resolve(candidatePath);
-    const absoluteParent = path.resolve(parentPath);
-    const relative = path.relative(absoluteParent, absoluteCandidate);
-
-    return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
-  };
-
-  const shellQuoteArg = (arg: string): string => {
-    if (/^[A-Za-z0-9_./:=+-]+$/.test(arg)) {
-      return arg;
-    }
-    return `'${arg.replace(/'/g, "'\"'\"'")}'`;
-  };
-
-  const structuredToCommandString = (command: string, args: string[]): string => {
-    return [command, ...args.map(shellQuoteArg)].join(' ');
-  };
-
-  /**
-   * Simulates the hook logic from index.ts
-   */
-  const executeHook = (
-    input: { tool: string; sessionID: string; callID: string },
-    output: { args: any },
-    sandboxConfig: { mode: 'none' | 'docker'; image?: string },
-    directory: string,
-  ) => {
-    if (input.tool !== 'bash') return;
-
-    if (sandboxConfig.mode === 'none') return;
-
-    const command = output.args?.command?.trim();
-    if (!command) return;
-
-    // Only wrap commands with explicit workdir inside warcraft worktrees
-    const workdir = output.args?.workdir;
-    if (!workdir) return;
-
-    const warcraftWorktreeBase = path.join(directory, '.beads/artifacts', '.worktrees');
-    if (!isPathInside(workdir, warcraftWorktreeBase)) return;
-
-    // Wrap command using static method
-    const wrapped = DockerSandboxService.wrapCommand(workdir, command, sandboxConfig);
-    output.args.command =
-      typeof wrapped === 'string' ? wrapped : structuredToCommandString(wrapped.command, wrapped.args);
-    output.args.workdir = undefined; // docker command runs on host
-  };
 
   describe('sandbox mode: docker', () => {
     test('wraps bash command with explicit workdir inside .beads/artifacts/.worktrees/', () => {
@@ -85,7 +34,7 @@ describe('tool.execute.before bash interception hook logic', () => {
         },
       };
 
-      executeHook(input, output, sandboxConfig, mockDirectory);
+      applySandboxHook(input, output, sandboxConfig, mockDirectory, 'on');
 
       // Command should be wrapped with docker run
       expect(output.args.command).toContain('docker run');
@@ -110,7 +59,7 @@ describe('tool.execute.before bash interception hook logic', () => {
       };
 
       const originalCommand = output.args.command;
-      executeHook(input, output, sandboxConfig, mockDirectory);
+      applySandboxHook(input, output, sandboxConfig, mockDirectory, 'on');
 
       // Command should be unchanged
       expect(output.args.command).toBe(originalCommand);
@@ -134,7 +83,7 @@ describe('tool.execute.before bash interception hook logic', () => {
 
       const originalCommand = output.args.command;
       const originalWorkdir = output.args.workdir;
-      executeHook(input, output, sandboxConfig, mockDirectory);
+      applySandboxHook(input, output, sandboxConfig, mockDirectory, 'on');
 
       // Command and workdir should be unchanged
       expect(output.args.command).toBe(originalCommand);
@@ -157,7 +106,7 @@ describe('tool.execute.before bash interception hook logic', () => {
         },
       };
 
-      executeHook(input, output, sandboxConfig, mockDirectory);
+      applySandboxHook(input, output, sandboxConfig, mockDirectory, 'on');
 
       expect(output.args.command).toBe('npm install');
       expect(output.args.workdir).toBe('/mock/project/.beads/artifacts/.worktrees-evil/feature-x/task-1');
@@ -179,7 +128,7 @@ describe('tool.execute.before bash interception hook logic', () => {
         },
       };
 
-      executeHook(input, output, sandboxConfig, mockDirectory);
+      applySandboxHook(input, output, sandboxConfig, mockDirectory, 'on');
 
       expect(output.args.command).toContain('docker run');
       expect(output.args.command).toContain('HOST: git status');
@@ -205,7 +154,7 @@ describe('tool.execute.before bash interception hook logic', () => {
 
       const originalCommand = output.args.command;
       const originalWorkdir = output.args.workdir;
-      executeHook(input, output, sandboxConfig, mockDirectory);
+      applySandboxHook(input, output, sandboxConfig, mockDirectory, 'on');
 
       // Nothing should change
       expect(output.args.command).toBe(originalCommand);
@@ -229,10 +178,10 @@ describe('tool.execute.before bash interception hook logic', () => {
         },
       };
 
-      executeHook(input, output, sandboxConfig, mockDirectory);
+      applySandboxHook(input, output, sandboxConfig, mockDirectory, 'on');
 
       // Nothing should change (no workdir or command to modify)
-      expect(output.args.filePath).toBe('/some/file.ts');
+      expect((output.args as any).filePath).toBe('/some/file.ts');
     });
 
     test('ignores write tool', () => {
@@ -250,11 +199,11 @@ describe('tool.execute.before bash interception hook logic', () => {
         },
       };
 
-      executeHook(input, output, sandboxConfig, mockDirectory);
+      applySandboxHook(input, output, sandboxConfig, mockDirectory, 'on');
 
       // Nothing should change
-      expect(output.args.filePath).toBe('/some/file.ts');
-      expect(output.args.content).toBe('test');
+      expect((output.args as any).filePath).toBe('/some/file.ts');
+      expect((output.args as any).content).toBe('test');
     });
   });
 
@@ -275,7 +224,7 @@ describe('tool.execute.before bash interception hook logic', () => {
       };
 
       const originalWorkdir = output.args.workdir;
-      executeHook(input, output, sandboxConfig, mockDirectory);
+      applySandboxHook(input, output, sandboxConfig, mockDirectory, 'on');
 
       // Empty command should not be wrapped
       expect(output.args.command).toBe('   ');
@@ -292,11 +241,11 @@ describe('tool.execute.before bash interception hook logic', () => {
         callID: 'test-call',
       };
       const output = {
-        args: undefined,
+        args: undefined as any,
       };
 
       // Should not throw, just return early
-      expect(() => executeHook(input, output, sandboxConfig, mockDirectory)).not.toThrow();
+      expect(() => applySandboxHook(input, output, sandboxConfig, mockDirectory, 'on')).not.toThrow();
     });
 
     test('handles command with special characters', () => {
@@ -314,7 +263,7 @@ describe('tool.execute.before bash interception hook logic', () => {
         },
       };
 
-      executeHook(input, output, sandboxConfig, mockDirectory);
+      applySandboxHook(input, output, sandboxConfig, mockDirectory, 'on');
 
       // Command should be wrapped with proper escaping
       expect(output.args.command).toContain('docker run');
@@ -323,15 +272,73 @@ describe('tool.execute.before bash interception hook logic', () => {
     });
   });
 
-  describe('shellQuoteArg', () => {
-    test('shellQuoteArg correctly quotes apostrophes', () => {
-      const result = shellQuoteArg("hello'world");
-      expect(result).toBe("'hello'\"'\"'world'");
+  describe('worktree path detection', () => {
+    test('uses beads mode to compute correct worktree base path', () => {
+      const sandboxConfig = { mode: 'docker' as const, image: 'node:22-slim' };
+
+      const input = {
+        tool: 'bash',
+        sessionID: 'test-session',
+        callID: 'test-call',
+      };
+      // With beadsMode 'on', worktree base is <dir>/.beads/artifacts/.worktrees
+      const output = {
+        args: {
+          command: 'bun test',
+          workdir: path.join(mockDirectory, '.beads/artifacts', '.worktrees', 'feat', 'task'),
+        },
+      };
+
+      applySandboxHook(input, output, sandboxConfig, mockDirectory, 'on');
+
+      expect(output.args.command).toContain('docker run');
+      expect(output.args.workdir).toBeUndefined();
     });
 
-    test('shellQuoteArg passes through safe strings unchanged', () => {
-      const result = shellQuoteArg('simple-arg_123');
-      expect(result).toBe('simple-arg_123');
+    test('uses off-mode worktree base path when beadsMode is off', () => {
+      const sandboxConfig = { mode: 'docker' as const, image: 'node:22-slim' };
+
+      const input = {
+        tool: 'bash',
+        sessionID: 'test-session',
+        callID: 'test-call',
+      };
+      // With beadsMode 'off', worktree base is <dir>/docs/.worktrees
+      const output = {
+        args: {
+          command: 'bun test',
+          workdir: path.join(mockDirectory, 'docs', '.worktrees', 'feat', 'task'),
+        },
+      };
+
+      applySandboxHook(input, output, sandboxConfig, mockDirectory, 'off');
+
+      expect(output.args.command).toContain('docker run');
+      expect(output.args.workdir).toBeUndefined();
+    });
+
+    test('does not wrap when workdir matches on-mode path but beadsMode is off', () => {
+      const sandboxConfig = { mode: 'docker' as const, image: 'node:22-slim' };
+
+      const input = {
+        tool: 'bash',
+        sessionID: 'test-session',
+        callID: 'test-call',
+      };
+      // Workdir is under .beads/artifacts/.worktrees but beadsMode is 'off'
+      // so the worktree base is docs/.worktrees — no match
+      const output = {
+        args: {
+          command: 'bun test',
+          workdir: path.join(mockDirectory, '.beads/artifacts', '.worktrees', 'feat', 'task'),
+        },
+      };
+
+      applySandboxHook(input, output, sandboxConfig, mockDirectory, 'off');
+
+      // Should NOT wrap because workdir is not inside the off-mode worktree base
+      expect(output.args.command).toBe('bun test');
+      expect(output.args.workdir).toBe(path.join(mockDirectory, '.beads/artifacts', '.worktrees', 'feat', 'task'));
     });
   });
 });

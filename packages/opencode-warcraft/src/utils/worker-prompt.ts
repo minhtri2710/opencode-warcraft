@@ -30,6 +30,7 @@ export interface WorkerPromptParams {
   spec: string;
   previousTasks?: CompletedTask[];
   continueFrom?: ContinueFromBlocked;
+  verificationModel?: 'tdd' | 'best-effort';
 }
 
 /**
@@ -55,6 +56,7 @@ export function buildWorkerPrompt(params: WorkerPromptParams): string {
     // plan, contextFiles, previousTasks - NOT used separately (embedded in spec)
     spec,
     continueFrom,
+    verificationModel = 'tdd',
   } = params;
 
   // Build continuation section if resuming from blocked
@@ -105,8 +107,8 @@ ${spec}
 Before writing code, confirm:
 1. Dependencies are satisfied and required context is present.
 2. The exact files/sections to touch (from references) are identified.
-3. The first failing test to write is clear (TDD).
-4. The minimal change needed to reach green is planned.
+${verificationModel === 'tdd' ? '3. The first failing test to write is clear (TDD).' : ''}
+${verificationModel === 'tdd' ? '4. The minimal change needed to reach green is planned.' : ''}
 
 ---
 
@@ -190,8 +192,7 @@ warcraft_worktree_commit({
 \`\`\`
 
 ---
-
-## TDD Protocol (Required)
+${verificationModel === 'tdd' ? `## TDD Protocol (Required)
 
 1. **Red**: Write failing test first
 2. **Green**: Minimal code to pass
@@ -200,7 +201,7 @@ warcraft_worktree_commit({
 Never write implementation before test exists.
 Exception: Pure refactoring of existing tested code.
 
-## Debugging Protocol (When stuck)
+` : ''}## Debugging Protocol (When stuck)
 
 1. **Reproduce**: Get consistent failure
 2. **Isolate**: Binary search to find cause

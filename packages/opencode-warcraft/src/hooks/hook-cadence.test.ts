@@ -73,4 +73,25 @@ describe('Hook cadence system', () => {
     resetHookCounters();
     expect(shouldExecuteHook('test.hook', configService)).toBe(true); // reset: turn 1 again
   });
+
+  it('clears counters and warns when map exceeds 100 entries', () => {
+    const configService = new ConfigService();
+    spyOn(configService, 'getHookCadence').mockReturnValue(1);
+    const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+
+    // Fill with 100 unique hooks (no guard triggered yet)
+    for (let i = 0; i < 100; i++) {
+      shouldExecuteHook(`hook-${i}`, configService);
+    }
+    expect(warnSpy).not.toHaveBeenCalled();
+
+    // The 101st unique hook should trigger the guard
+    shouldExecuteHook('hook-overflow', configService);
+    expect(warnSpy).toHaveBeenCalledWith('[warcraft] hookCounters exceeded max size, clearing');
+
+    // After clear, the next call should be turn 1 again (map was cleared)
+    expect(shouldExecuteHook('hook-0', configService)).toBe(true);
+
+    warnSpy.mockRestore();
+  });
 });

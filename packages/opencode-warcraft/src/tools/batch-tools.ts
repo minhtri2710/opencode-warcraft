@@ -1,6 +1,5 @@
 import { type ToolDefinition, tool } from '@opencode-ai/plugin';
 import type { FeatureService, PlanService, TaskService, WorktreeService } from 'warcraft-core';
-import { buildEffectiveDependencies, computeRunnableAndBlocked, type TaskWithDeps } from 'warcraft-core';
 import type { BlockedResult } from '../types.js';
 import { toolError, toolSuccess } from '../types.js';
 import { fetchSharedDispatchData, prepareTaskDispatch } from './task-dispatch.js';
@@ -20,6 +19,7 @@ export interface BatchToolsDependencies {
     strategy?: 'unbounded' | 'bounded';
     maxConcurrency?: number;
   };
+  verificationModel: 'tdd' | 'best-effort';
 }
 
 export interface EffectiveParallelPolicy {
@@ -101,6 +101,7 @@ export class BatchTools {
       contextService,
       checkBlocked,
       checkDependencies,
+      verificationModel,
     } = this.deps;
     const parallelPolicy = resolveParallelPolicy(this.deps.parallelExecution);
     return tool({
@@ -132,21 +133,7 @@ export class BatchTools {
         const allTasks = taskService.list(feature);
         if (allTasks.length === 0) return toolError('No tasks found. Run warcraft_tasks_sync first.');
 
-        const tasksWithDeps: TaskWithDeps[] = allTasks.map((t) => {
-          const rawStatus = taskService.getRawStatus(feature, t.folder);
-          return {
-            folder: t.folder,
-            status: t.status,
-            dependsOn: rawStatus?.dependsOn,
-          };
-        });
-
-        const effectiveDeps = buildEffectiveDependencies(tasksWithDeps);
-        const normalizedTasks = tasksWithDeps.map((task) => ({
-          ...task,
-          dependsOn: effectiveDeps.get(task.folder),
-        }));
-        const { runnable, blocked: blockedBy } = computeRunnableAndBlocked(normalizedTasks);
+        const { runnable, blocked: blockedBy } = taskService.computeRunnableStatus(feature);
 
         if (mode === 'preview') {
           const inProgress = allTasks.filter((t) => t.status === 'in_progress');
@@ -224,7 +211,12 @@ export class BatchTools {
         }
 
         // Dispatch all tasks in parallel
-        const shared = fetchSharedDispatchData(feature, { planService, taskService, contextService });
+        const shared = fetchSharedDispatchData(feature, {
+          planService,
+          taskService,
+          contextService,
+          verificationModel,
+        });
 
         const dispatchTask = async (task: string): Promise<TaskDispatchResult> => {
           const taskInfo = taskService.get(feature, task);
@@ -247,7 +239,7 @@ export class BatchTools {
                 taskInfo,
                 worktree,
               },
-              { planService, taskService, contextService },
+              { planService, taskService, contextService, verificationModel },
               shared,
             );
 

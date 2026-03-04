@@ -18,4 +18,5 @@ export {
   writeJsonLockedSync,
 } from './utils/json-lock.js';
 export * from './utils/paths.js';
+export * from './utils/shell.js';
 export * from './utils/slug.js';

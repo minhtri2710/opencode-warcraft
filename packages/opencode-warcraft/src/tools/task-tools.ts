@@ -28,8 +28,12 @@ export class TaskTools {
       description: 'Generate tasks from approved plan',
       args: {
         feature: tool.schema.string().optional().describe('Feature name (defaults to detection or single feature)'),
+        mode: tool.schema
+          .enum(['sync', 'preview'])
+          .optional()
+          .describe('preview: show what would change. sync (default): apply changes.'),
       },
-      async execute({ feature: explicitFeature }) {
+      async execute({ feature: explicitFeature, mode }) {
         const resolution = resolveFeatureInput(resolveFeature, explicitFeature);
         if (!resolution.ok) return toolError(resolution.error);
         const feature = resolution.feature;
@@ -45,6 +49,19 @@ export class TaskTools {
 
         if (planResult.status !== 'approved') {
           return toolError('Plan must be approved first');
+        }
+
+        if (mode === 'preview') {
+          const preview = taskService.previewSync(feature);
+          return toolSuccess({
+            mode: 'preview',
+            feature,
+            wouldCreate: preview.created,
+            wouldRemove: preview.removed,
+            wouldKeep: preview.kept,
+            manualTasks: preview.manual,
+            message: `Preview: Would create ${preview.created.length}, remove ${preview.removed.length}, keep ${preview.kept.length} task(s). Use mode "sync" to apply.`,
+          });
         }
 
         let warning = '';

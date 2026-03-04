@@ -75,6 +75,11 @@ function createProject(worktree: string): PluginInput['project'] {
   };
 }
 
+function parseToolResponse<T>(output: string): T {
+  const parsed = JSON.parse(output);
+  return (parsed.data ?? parsed) as T;
+}
+
 describeIfHostReady('integration: post-refactor behavior stability', () => {
   let testRoot: string;
   let originalHome: string | undefined;
@@ -222,23 +227,23 @@ Test the implementation thoroughly.
       toolContext,
     );
 
-    const _execStart = JSON.parse(execStartOutput as string) as {
+    const execStart = parseToolResponse<{
       instructions?: string;
       taskSpec?: string;
       error?: string;
-    };
+    }>(execStartOutput as string);
 
     // Verify no error was returned
-    // expect(execStart.error).toBeUndefined();
-    // expect(execStart.taskSpec).toBeDefined();
-    // expect(execStart.taskSpec).toContain('# Task: 01-create-implementation');
-    // expect(execStart.taskSpec).toContain('## Feature: spec-structure-feature');
-    // expect(execStart.taskSpec).toContain('## Dependencies');
-    // expect(execStart.taskSpec).toContain('## Plan Section');
+    expect(execStart.error).toBeUndefined();
+    expect(execStart.taskSpec).toBeDefined();
+    expect(execStart.taskSpec).toContain('# Task: 01-create-implementation');
+    expect(execStart.taskSpec).toContain('## Feature: spec-structure-feature');
+    expect(execStart.taskSpec).toContain('## Dependencies');
+    expect(execStart.taskSpec).toContain('## Plan Section');
 
     // Verify task type inference works (greenfield for "Create")
-    // expect(execStart.taskSpec).toContain('## Task Type');
-    // expect(execStart.taskSpec).toContain('greenfield');
+    expect(execStart.taskSpec).toContain('## Task Type');
+    expect(execStart.taskSpec).toContain('greenfield');
   });
 
   runIfHostReady('spec formatting handles dependencies correctly', async () => {
@@ -308,11 +313,11 @@ Modify the implementation.
     );
     fs.mkdirSync(path.dirname(progressPath), { recursive: true });
     fs.writeFileSync(progressPath, 'complete task 1\n', 'utf-8');
-    await hooks.tool!.warcraft_worktree_commit.execute(
+    await hooks.tool!.warcraft_task_update.execute(
       {
         feature: 'deps-formatting-feature',
         task: '01-first-task',
-        status: 'completed',
+        status: 'done',
         summary:
           'First task completed successfully.\n\n- build: bun run build (exit 0)\n- test: bun run test (exit 0)\n- lint: bun run lint (exit 0)',
       },
@@ -324,21 +329,21 @@ Modify the implementation.
       toolContext,
     );
 
-    const _execStart = JSON.parse(execStartOutput as string) as {
+    const execStart = parseToolResponse<{
       taskSpec?: string;
       error?: string;
-    };
+    }>(execStartOutput as string);
 
     // Verify no error was returned
-    // expect(execStart.error).toBeUndefined();
-    // expect(execStart.taskSpec).toBeDefined();
-    // expect(execStart.taskSpec).toContain('## Dependencies');
-    // expect(execStart.taskSpec).toContain('1. first-task');
-    // expect(execStart.taskSpec).toContain('01-first-task');
+    expect(execStart.error).toBeUndefined();
+    expect(execStart.taskSpec).toBeDefined();
+    expect(execStart.taskSpec).toContain('## Dependencies');
+    expect(execStart.taskSpec).toContain('**1. first-task**');
+    expect(execStart.taskSpec).toContain('01-first-task');
 
     // Task 2 depends on task 1, so should show modification type
-    // expect(execStart.taskSpec).toContain('## Task Type');
-    // expect(execStart.taskSpec).toContain('modification');
+    expect(execStart.taskSpec).toContain('## Task Type');
+    expect(execStart.taskSpec).toContain('modification');
   });
 
   runIfHostReady('completed tasks are included in spec context', async () => {
@@ -409,11 +414,11 @@ Build on top of setup.
     fs.mkdirSync(path.dirname(progressPath), { recursive: true });
     fs.writeFileSync(progressPath, 'complete setup\n', 'utf-8');
 
-    await hooks.tool!.warcraft_worktree_commit.execute(
+    await hooks.tool!.warcraft_task_update.execute(
       {
         feature: 'completed-context-feature',
         task: '01-setup-task',
-        status: 'completed',
+        status: 'done',
         summary:
           'Setup completed successfully with all dependencies installed.\n\n- build: bun run build (exit 0)\n- test: bun run test (exit 0)\n- lint: bun run lint (exit 0)',
       },
@@ -425,18 +430,18 @@ Build on top of setup.
       toolContext,
     );
 
-    const _execStart = JSON.parse(execStartOutput as string) as {
+    const execStart = parseToolResponse<{
       taskSpec?: string;
       error?: string;
-    };
+    }>(execStartOutput as string);
 
     // Verify no error was returned
-    // expect(execStart.error).toBeUndefined();
+    expect(execStart.error).toBeUndefined();
 
     // Verify completed tasks section exists with the summary
-    // expect(execStart.taskSpec).toBeDefined();
-    // expect(execStart.taskSpec).toContain('## Completed Tasks');
-    // expect(execStart.taskSpec).toContain('01-setup-task');
-    // expect(execStart.taskSpec).toContain('Setup completed successfully');
+    expect(execStart.taskSpec).toBeDefined();
+    expect(execStart.taskSpec).toContain('## Completed Tasks');
+    expect(execStart.taskSpec).toContain('01-setup-task');
+    expect(execStart.taskSpec).toContain('Setup completed successfully');
   });
 });

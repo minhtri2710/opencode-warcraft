@@ -21,6 +21,17 @@ export const COMPLETION_GATES = ['build', 'test', 'lint'] as const;
 export const COMPLETION_PASS_SIGNAL =
   /\b(exit(?:\s+code)?\s*0|pass(?:ed|es)?|success(?:ful|fully)?|succeed(?:ed|s)?|ok)\b/i;
 
+export const COMPLETION_FAIL_SIGNAL = /\b(not ok|not successful|failed|failure|error)\b/i;
+
+/**
+ * Escape special regex characters in a string to use it safely in a RegExp constructor.
+ * @param string - The string to escape
+ * @returns The escaped string safe for use in regex
+ */
+function escapeRegExp(string: string): string {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 export function validateTaskStatus(status: string): TaskStatusType {
   if (!VALID_TASK_STATUSES.has(status)) {
     throw new Error(`Invalid task status: "${status}". Valid values: ${Array.from(VALID_TASK_STATUSES).join(', ')}`);
@@ -34,7 +45,17 @@ export function hasCompletionGateEvidence(summary: string, gate: (typeof COMPLET
     .map((line) => line.trim())
     .filter(Boolean);
 
-  return lines.some((line) => line.toLowerCase().includes(gate) && COMPLETION_PASS_SIGNAL.test(line));
+  return lines.some((line) => {
+    // Check for fail signals first - if present, reject the line
+    if (COMPLETION_FAIL_SIGNAL.test(line)) {
+      return false;
+    }
+
+    // Check for pass signals and gate name with word boundaries
+    // Allow optional trailing 's' for plural forms (test -> tests, build -> builds)
+    const gatePattern = new RegExp(`\\b${escapeRegExp(gate)}s?\\b`, 'i');
+    return gatePattern.test(line) && COMPLETION_PASS_SIGNAL.test(line);
+  });
 }
 
 export function isPathInside(candidatePath: string, parentPath: string): boolean {
