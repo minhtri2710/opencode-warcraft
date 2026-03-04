@@ -19,9 +19,6 @@
   },
   "license": "MIT",
   "devDependencies": {
-    "@biomejs/biome": "^2.4.4"
-  },
-  "dependencies": {
-    "pi-design-deck": "^0.3.0"
+    "@biomejs/biome": "^2.4.5"
   }
 }
