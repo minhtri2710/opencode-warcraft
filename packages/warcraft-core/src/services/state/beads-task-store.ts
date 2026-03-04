@@ -376,6 +376,111 @@ export class BeadsTaskStore implements TaskStore {
     }
   }
 
+  /**
+   * Sync bead-level dependency edges to match task dependsOn relationships.
+   * Idempotent: reads existing edges, computes desired edges, adds missing, removes stale.
+   */
+  syncDependencies(featureName: string): void {
+    const gateway = this.repository.getGateway();
+    const tasks = this.list(featureName);
+
+    // Build folder→beadId map
+    const folderToBeadId = new Map<string, string>();
+    for (const task of tasks) {
+      if (task.beadId) {
+        folderToBeadId.set(task.folder, task.beadId);
+      }
+    }
+
+    // Compute desired dependency edges from task dependsOn fields
+    const desiredEdges = new Set<string>();
+    for (const task of tasks) {
+      if (!task.beadId) continue;
+      const rawStatus = this.getRawStatus(featureName, task.folder);
+      if (!rawStatus?.dependsOn) continue;
+
+      for (const depFolder of rawStatus.dependsOn) {
+        const depBeadId = folderToBeadId.get(depFolder);
+        if (depBeadId) {
+          // Edge key: "taskBeadId->depBeadId" (task depends on dep)
+          desiredEdges.add(`${task.beadId}->${depBeadId}`);
+        } else {
+          console.warn(
+            `[warcraft] Dependency '${depFolder}' for task '${task.folder}' cannot be resolved to a bead ID`,
+          );
+        }
+      }
+    }
+
+    // Guard: verify the feature has a valid epic before syncing dependencies
+    const epicResult = this.repository.getEpicByFeatureName(featureName, true);
+    if (epicResult.success === false) {
+      console.warn(`[warcraft] Cannot sync dependencies: ${epicResult.error.message}`);
+      return;
+    }
+    const existingEdges = new Set<string>();
+    try {
+      // Read existing dependency edges per-task via bead graph queries
+      for (const task of tasks) {
+        if (!task.beadId) continue;
+        try {
+          const depOutput = gateway.listDependencies(task.beadId);
+          for (const dep of depOutput) {
+            existingEdges.add(`${task.beadId}->${dep.id}`);
+          }
+        } catch {
+          // Task may not have dependencies yet — that's fine
+        }
+      }
+    } catch {
+      // Cannot read existing edges — proceed with add-only mode
+    }
+
+    // Add missing edges
+    for (const edge of desiredEdges) {
+      if (!existingEdges.has(edge)) {
+        const [taskBeadId, depBeadId] = edge.split('->');
+        try {
+          gateway.addDependency(taskBeadId, depBeadId);
+        } catch (error) {
+          const reason = error instanceof Error ? error.message : String(error);
+          console.warn(`[warcraft] Failed to add dependency ${taskBeadId} -> ${depBeadId}: ${reason}`);
+        }
+      }
+    }
+
+    // Remove stale edges
+    for (const edge of existingEdges) {
+      if (!desiredEdges.has(edge)) {
+        const [taskBeadId, depBeadId] = edge.split('->');
+        try {
+          gateway.removeDependency(taskBeadId, depBeadId);
+        } catch (error) {
+          const reason = error instanceof Error ? error.message : String(error);
+          console.warn(`[warcraft] Failed to remove dependency ${taskBeadId} -> ${depBeadId}: ${reason}`);
+        }
+      }
+    }
+
+    // Advisory cycle detection via bv --robot-insights (non-blocking)
+    try {
+      const viewerGateway = this.repository.getViewerGateway();
+      const health = viewerGateway.getHealth();
+      if (health.available) {
+        const insights = viewerGateway.getRobotInsights();
+        if (insights?.cycles && insights.cycles.length > 0) {
+          console.warn(
+            `[warcraft] Advisory: bead graph has ${insights.cycles.length} cycle(s). ` +
+              `Plan-space validation passed, but bead graph may have drifted. ` +
+              `Run 'bv --robot-insights' for details.`,
+          );
+        }
+      }
+    } catch {
+      // bv not available or failed — advisory only, don't block
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Private helpers
   // ---------------------------------------------------------------------------

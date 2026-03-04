@@ -147,6 +147,12 @@ export class BeadsRepository {
   // Short-lived memoization cache (cleared on each operation)
   private cache = new Map<string, unknown>();
 
+  // Epic ID resolution cache: featureName -> epicBeadId.
+  // Populated by createEpic() so that getEpicByFeatureName() can resolve
+  // the epic in O(1) without an expensive `br list --type epic --status all`
+  // CLI call. Cleared on importArtifacts() since external state may have changed.
+  private epicIdCache = new Map<string, string>();
+
   constructor(projectRoot: string, syncPolicy: Partial<SyncPolicy> = {}, beadsMode: 'on' | 'off' = 'on') {
     this.syncPolicy = { ...DEFAULT_SYNC_POLICY, ...syncPolicy };
     this.gateway = new BeadGateway(projectRoot);
@@ -165,6 +171,7 @@ export class BeadsRepository {
     try {
       this.gateway.importArtifacts();
       this.cache.clear();
+      this.epicIdCache.clear();
       return { success: true, value: undefined };
     } catch (error) {
       return {
@@ -232,6 +239,7 @@ export class BeadsRepository {
   createEpic(name: string, priority: number): Result<string> {
     try {
       const epicBeadId = this.gateway.createEpic(name, priority);
+      this.epicIdCache.set(name, epicBeadId);
       this.afterWrite();
       return { success: true, value: epicBeadId };
     } catch (error) {
@@ -267,10 +275,9 @@ export class BeadsRepository {
   /**
    * Resolve epic bead ID by feature name, with fallback logic.
    *
-   * Strategy:
-   * 1. List epics from bead gateway
-   * 2. Find match by title
-   * 3. Return null if not found (for optional variant)
+   * Resolution strategy (ordered by cost):
+   * 1. Check in-memory cache (O(1)) — populated by createEpic() for same-session epics
+   * 2. Fall back to gateway.list() (O(n) CLI call) — for epics created in prior sessions
    *
    * @param featureName - Feature name to resolve
    * @param strict - Whether to throw if not found (default: false)
@@ -279,6 +286,13 @@ export class BeadsRepository {
    */
   getEpicByFeatureName(featureName: string, strict: boolean = false): Result<string | null> {
     try {
+      // Fast path: check in-memory cache first (avoids O(n) CLI call)
+      const cached = this.epicIdCache.get(featureName);
+      if (cached) {
+        return { success: true, value: cached };
+      }
+
+      // Slow path: list all epics via CLI
       this.beforeRead();
 
       const epics = this.gateway.list({ type: 'epic', status: 'all' });
@@ -293,6 +307,9 @@ export class BeadsRepository {
         }
         return { success: true, value: null };
       }
+
+      // Warm the cache for subsequent lookups
+      this.epicIdCache.set(featureName, epic.id);
 
       return { success: true, value: epic.id };
     } catch (error) {

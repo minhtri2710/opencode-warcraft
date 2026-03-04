@@ -165,11 +165,23 @@ export class BeadGateway {
     );
   }
 
+  private static readonly TIMEOUT_READ = 5_000;
+  private static readonly TIMEOUT_WRITE = 15_000;
+  private static readonly TIMEOUT_SYNC = 30_000;
+
+  private getOperationTimeout(args: string[]): number {
+    const cmd = args[0];
+    if (cmd === 'sync') return BeadGateway.TIMEOUT_SYNC;
+    if (cmd === 'list' || cmd === 'show' || cmd === '--version') return BeadGateway.TIMEOUT_READ;
+    if (cmd === 'dep' && args[1] === 'list') return BeadGateway.TIMEOUT_READ;
+    return BeadGateway.TIMEOUT_WRITE;
+  }
+
   private executeBr(args: string[]): string {
     return execFileSync('br', args, {
       cwd: this.projectRoot,
       encoding: 'utf-8',
-      timeout: 30_000,
+      timeout: this.getOperationTimeout(args),
       // Keep CLI output off the parent process console; capture for parsing/sanitization only.
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -208,12 +220,26 @@ export class BeadGateway {
     this.ensurePreflight();
     const actions = getTaskBeadActions(status);
     for (const action of actions) {
+      // Remove stale labels from prior states before applying the new state.
+      // Best-effort: if a label doesn't exist on the bead, br may error —
+      // swallow that to avoid aborting the actual status transition.
+      if ('removeLabels' in action && action.removeLabels) {
+        for (const label of action.removeLabels) {
+          try {
+            this.removeLabel(beadId, label);
+          } catch {
+            // Label may not exist on this bead — that's expected
+          }
+        }
+      }
+
       if (action.type === 'close') {
         this.runBr(['close', beadId], `close bead '${beadId}'`);
       } else if (action.type === 'claim') {
         this.runBr(['update', beadId, '--claim'], `claim bead '${beadId}'`);
       } else if (action.type === 'unclaim') {
-        this.runBr(['update', beadId, '--unclaim'], `unclaim bead '${beadId}'`);
+        // No --unclaim flag exists in br CLI. Use --assignee '' -s open instead.
+        this.runBr(['update', beadId, '--assignee', '', '-s', 'open'], `unclaim bead '${beadId}'`);
       } else {
         this.runBr(['update', beadId, '-s', 'deferred'], `mark bead '${beadId}' deferred`);
         this.runBr(['update', beadId, '--add-label', action.label], `add label '${action.label}' to bead '${beadId}'`);
@@ -239,6 +265,43 @@ export class BeadGateway {
   addLabel(beadId: string, label: string): void {
     this.ensurePreflight();
     this.runBr(['update', beadId, '--add-label', label], `add label '${label}' to bead '${beadId}'`);
+  }
+
+  removeLabel(beadId: string, label: string): void {
+    this.ensurePreflight();
+    this.runBr(['update', beadId, '--remove-label', label], `remove label '${label}' from bead '${beadId}'`);
+  }
+
+  addDependency(beadId: string, dependsOnBeadId: string): void {
+    this.ensurePreflight();
+    this.runBr(['dep', 'add', beadId, dependsOnBeadId], `add dependency: '${beadId}' depends on '${dependsOnBeadId}'`);
+  }
+
+  removeDependency(beadId: string, dependsOnBeadId: string): void {
+    this.ensurePreflight();
+    this.runBr(
+      ['dep', 'remove', beadId, dependsOnBeadId],
+      `remove dependency: '${beadId}' depends on '${dependsOnBeadId}'`,
+    );
+  }
+
+  /**
+   * List 'blocks' type dependency targets for a given bead.
+   * Returns beads that this bead depends on (blocks relationship).
+   */
+  listDependencies(beadId: string): Array<{ id: string; title: string; status: string }> {
+    this.ensurePreflight();
+    try {
+      const output = this.runBr(
+        ['dep', 'list', beadId, '--direction', 'down', '--type', 'blocks', '--json'],
+        `list dependencies for bead '${beadId}'`,
+      );
+      const parsed = this.parseJson(output, `dependencies for bead '${beadId}'`);
+      const items = this.parseDependentIssues(parsed, undefined, 'blocks');
+      return items;
+    } catch {
+      return [];
+    }
   }
 
   addComment(beadId: string, comment: string): void {
@@ -268,7 +331,9 @@ export class BeadGateway {
     status?: 'open' | 'closed' | 'all';
   }): Array<{ id: string; title: string; status: string; type?: string }> {
     this.ensurePreflight();
-    const args = options?.parent ? ['dep', 'list', options.parent, '--direction', 'up', '--json'] : ['list', '--json'];
+    const args = options?.parent
+      ? ['dep', 'list', options.parent, '--direction', 'up', '--type', 'parent-child', '--json']
+      : ['list', '--json'];
 
     if (!options?.parent) {
       if (options?.type) {
@@ -323,6 +388,7 @@ export class BeadGateway {
   private parseDependentIssues(
     payload: unknown,
     issueTypeHint?: string,
+    acceptedRelationType?: string,
   ): Array<{ id: string; title: string; status: string; type?: string }> {
     const dependencies = Array.isArray(payload)
       ? payload
@@ -332,11 +398,12 @@ export class BeadGateway {
             .find((value) => Array.isArray(value)) as unknown[] | undefined) ?? [])
         : [];
 
+    const expectedType = acceptedRelationType ?? 'parent-child';
     const children = new Map<string, { id: string; title: string; status: string; type?: string }>();
     for (const dependency of dependencies) {
       const dep = dependency as Record<string, unknown>;
       const relationType = dep.type ? String(dep.type) : undefined;
-      if (relationType && relationType !== 'parent-child') {
+      if (relationType && relationType !== expectedType) {
         continue;
       }
 

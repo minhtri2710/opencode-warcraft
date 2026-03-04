@@ -126,6 +126,13 @@ export interface TaskStore {
 
   /** Ensure pending writes are flushed to persistent storage. No-op for filesystem. */
   flush(): void;
+
+  /**
+   * Sync bead-level dependency edges to match task-level dependsOn relationships.
+   * Idempotent: only adds missing edges and removes stale ones.
+   * No-op for filesystem store.
+   */
+  syncDependencies?(featureName: string): void;
 }
 
 // ============================================================================

@@ -466,7 +466,7 @@ br create "Task title" -t task --parent $EPIC_ID -d "..."  # Create child task
 
 # Update beads
 br update $BEAD_ID --claim          # Claim bead for work
-br update $BEAD_ID --unclaim        # Release claim
+br update $BEAD_ID --assignee '' -s open  # Release claim (no --unclaim flag in br)
 br update $BEAD_ID -s deferred      # Mark deferred/blocked
 br update $BEAD_ID --status open    # Explicit status update
 br update $BEAD_ID --add-label parallel   # Add label

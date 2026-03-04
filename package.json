@@ -1,6 +1,6 @@
 {
   "name": "opencode-warcraft",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "repository": {
     "type": "git",
     "url": "https://github.com/minhtri2710/opencode-warcraft.git"
@@ -20,5 +20,8 @@
   "license": "MIT",
   "devDependencies": {
     "@biomejs/biome": "^2.4.4"
+  },
+  "dependencies": {
+    "pi-design-deck": "^0.3.0"
   }
 }

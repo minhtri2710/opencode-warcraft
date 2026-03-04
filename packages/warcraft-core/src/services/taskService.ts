@@ -150,6 +150,11 @@ export class TaskService {
 
     this.store.flush();
 
+    // Sync bead-level dependency edges if the store supports it (beads mode)
+    if (this.store.syncDependencies) {
+      this.store.syncDependencies(featureName);
+    }
+
     return result;
   }
 

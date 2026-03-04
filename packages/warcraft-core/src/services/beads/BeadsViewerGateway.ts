@@ -31,6 +31,20 @@ export interface RobotPlanResult {
 }
 
 /**
+ * A cycle detected in the bead dependency graph
+ */
+export interface BeadCycle {
+  beadIds: string[];
+}
+
+/**
+ * Result of getRobotInsights() containing graph health diagnostics
+ */
+export interface RobotInsightsResult {
+  cycles: BeadCycle[];
+}
+
+/**
  * BeadsViewerGateway manages BV (Beads Viewer) operations for parallel execution planning.
  *
  * Responsibilities:
@@ -96,6 +110,35 @@ export class BeadsViewerGateway {
     return parsed;
   }
 
+  /**
+   * Get robot insights including cycle detection.
+   * Calls `bv --robot-insights --format json` and parses the cycles array.
+   */
+  getRobotInsights(): RobotInsightsResult | null {
+    const { result, error } = runBvCommand(['--robot-insights'], {
+      directory: this.directory,
+      enabled: this.enabled,
+      executor: this.executor,
+    });
+
+    if (error) {
+      this.lastError = error;
+      this.lastErrorAt = Date.now();
+      return null;
+    }
+
+    const parsed = this.parseRobotInsights(result);
+
+    if (parsed) {
+      this.lastError = null;
+      this.lastSuccessAt = Date.now();
+    } else {
+      this.lastError = 'failed to parse robot insights output';
+      this.lastErrorAt = Date.now();
+    }
+
+    return parsed;
+  }
   /**
    * Parse robot plan JSON output into RobotPlanResult
    */
@@ -257,5 +300,44 @@ export class BeadsViewerGateway {
     }
 
     return result;
+  }
+
+  /**
+   * Parse robot insights JSON output into RobotInsightsResult
+   */
+  private parseRobotInsights(payload: unknown): RobotInsightsResult | null {
+    if (!payload || typeof payload !== 'object') {
+      return null;
+    }
+
+    const data = payload as Record<string, unknown>;
+
+    // Defensively extract cycles array — format may vary
+    const rawCycles = data.cycles;
+    const cycles: BeadCycle[] = [];
+
+    if (Array.isArray(rawCycles)) {
+      for (const item of rawCycles) {
+        if (Array.isArray(item)) {
+          // Simple format: cycles is array of arrays of bead IDs
+          const beadIds = item.filter((id): id is string => typeof id === 'string' && id.length > 0);
+          if (beadIds.length > 0) {
+            cycles.push({ beadIds });
+          }
+        } else if (item && typeof item === 'object') {
+          // Object format: cycles[].beadIds or cycles[].nodes
+          const record = item as Record<string, unknown>;
+          const ids = record.beadIds ?? record.bead_ids ?? record.nodes ?? record.ids;
+          if (Array.isArray(ids)) {
+            const beadIds = ids.filter((id): id is string => typeof id === 'string' && id.length > 0);
+            if (beadIds.length > 0) {
+              cycles.push({ beadIds });
+            }
+          }
+        }
+      }
+    }
+
+    return { cycles };
   }
 }

@@ -15,7 +15,7 @@ describe('BeadGateway', () => {
     expect(execSpy).toHaveBeenCalledWith('br', ['--version'], {
       cwd: '/repo',
       encoding: 'utf-8',
-      timeout: 30_000,
+      timeout: 5_000,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     execSpy.mockRestore();
@@ -69,19 +69,19 @@ describe('BeadGateway', () => {
     expect(execSpy).toHaveBeenNthCalledWith(1, 'br', ['--version'], {
       cwd: '/repo',
       encoding: 'utf-8',
-      timeout: 30_000,
+      timeout: 5_000,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     expect(execSpy).toHaveBeenNthCalledWith(2, 'br', ['init'], {
       cwd: '/repo',
       encoding: 'utf-8',
-      timeout: 30_000,
+      timeout: 15_000,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     expect(execSpy).toHaveBeenNthCalledWith(3, 'br', ['create', 'my-feature', '-t', 'epic', '-p', '2', '--json'], {
       cwd: '/repo',
       encoding: 'utf-8',
-      timeout: 30_000,
+      timeout: 15_000,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
@@ -396,14 +396,14 @@ describe('BeadGateway', () => {
     expect(execSpy).toHaveBeenNthCalledWith(3, 'br', ['create', 'my-feature', '-t', 'epic', '-p', '2', '--json'], {
       cwd: '/repo',
       encoding: 'utf-8',
-      timeout: 30_000,
+      timeout: 15_000,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     expect(execSpy).toHaveBeenNthCalledWith(
       4,
       'br',
       ['create', 'Task A', '-t', 'task', '--parent', 'epic-1', '-p', '1', '--json'],
-      { cwd: '/repo', encoding: 'utf-8', timeout: 30_000, stdio: ['ignore', 'pipe', 'pipe'] },
+      { cwd: '/repo', encoding: 'utf-8', timeout: 15_000, stdio: ['ignore', 'pipe', 'pipe'] },
     );
 
     execSpy.mockRestore();
@@ -461,36 +461,46 @@ describe('BeadGateway', () => {
     gateway.syncTaskStatus('bd-1', 'pending');
     gateway.syncTaskStatus('bd-1', 'done');
 
-    expect(execSpy).toHaveBeenCalledWith('br', ['update', 'bd-1', '--claim'], {
+    const brOpts = {
       cwd: '/repo',
       encoding: 'utf-8',
-      timeout: 30_000,
+      timeout: 15_000,
       stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    expect(execSpy).toHaveBeenCalledWith('br', ['update', 'bd-1', '-s', 'deferred'], {
-      cwd: '/repo',
-      encoding: 'utf-8',
-      timeout: 30_000,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    expect(execSpy).toHaveBeenCalledWith('br', ['update', 'bd-1', '--add-label', 'blocked'], {
-      cwd: '/repo',
-      encoding: 'utf-8',
-      timeout: 30_000,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    expect(execSpy).toHaveBeenCalledWith('br', ['update', 'bd-1', '--unclaim'], {
-      cwd: '/repo',
-      encoding: 'utf-8',
-      timeout: 30_000,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    expect(execSpy).toHaveBeenCalledWith('br', ['close', 'bd-1'], {
-      cwd: '/repo',
-      encoding: 'utf-8',
-      timeout: 30_000,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
+    };
+
+    // in_progress: removes transient labels, then claims
+    expect(execSpy).toHaveBeenCalledWith('br', ['update', 'bd-1', '--remove-label', 'blocked'], brOpts);
+    expect(execSpy).toHaveBeenCalledWith('br', ['update', 'bd-1', '--remove-label', 'failed'], brOpts);
+    expect(execSpy).toHaveBeenCalledWith('br', ['update', 'bd-1', '--remove-label', 'partial'], brOpts);
+    expect(execSpy).toHaveBeenCalledWith('br', ['update', 'bd-1', '--remove-label', 'cancelled'], brOpts);
+    expect(execSpy).toHaveBeenCalledWith('br', ['update', 'bd-1', '--claim'], brOpts);
+
+    // blocked: removes other transient labels, then defers + adds label
+    expect(execSpy).toHaveBeenCalledWith('br', ['update', 'bd-1', '-s', 'deferred'], brOpts);
+    expect(execSpy).toHaveBeenCalledWith('br', ['update', 'bd-1', '--add-label', 'blocked'], brOpts);
+
+    // pending: removes transient labels, then unclaims via --assignee '' -s open
+    expect(execSpy).toHaveBeenCalledWith('br', ['update', 'bd-1', '--assignee', '', '-s', 'open'], brOpts);
+
+    // done: close (no labels to remove)
+    expect(execSpy).toHaveBeenCalledWith('br', ['close', 'bd-1'], brOpts);
+
+    execSpy.mockRestore();
+  });
+
+  it('unclaim uses --assignee and -s open instead of nonexistent --unclaim flag', () => {
+    const execSpy = spyOn(childProcess, 'execFileSync').mockReturnValueOnce('beads_rust 1.2.3').mockReturnValue('');
+    const gateway = new BeadGateway('/repo');
+
+    gateway.syncTaskStatus('bd-1', 'pending');
+
+    // Must NOT use --unclaim (doesn't exist in br CLI)
+    const allCalls = execSpy.mock.calls.map((c) => c[1]);
+    const hasUnclaimFlag = allCalls.some((args: unknown) => Array.isArray(args) && args.includes('--unclaim'));
+    expect(hasUnclaimFlag).toBe(false);
+
+    // Must use --assignee '' -s open
+    expect(execSpy).toHaveBeenCalledWith('br', ['update', 'bd-1', '--assignee', '', '-s', 'open'], expect.any(Object));
 
     execSpy.mockRestore();
   });
@@ -511,13 +521,13 @@ describe('BeadGateway', () => {
     expect(execSpy).toHaveBeenNthCalledWith(3, 'br', ['show', 'bd-2', '--json'], {
       cwd: '/repo',
       encoding: 'utf-8',
-      timeout: 30_000,
+      timeout: 5_000,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     expect(execSpy).toHaveBeenNthCalledWith(4, 'br', ['update', 'bd-2', '--description', 'Spec content'], {
       cwd: '/repo',
       encoding: 'utf-8',
-      timeout: 30_000,
+      timeout: 15_000,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
@@ -588,7 +598,7 @@ describe('BeadGateway', () => {
     expect(execSpy).toHaveBeenCalledWith('br', ['close', 'bd-77'], {
       cwd: '/repo',
       encoding: 'utf-8',
-      timeout: 30_000,
+      timeout: 15_000,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     expect(execSpy).toHaveBeenCalledWith('br', ['sync', '--flush-only'], {
@@ -626,7 +636,7 @@ describe('BeadGateway', () => {
     expect(execSpy).toHaveBeenCalledWith('br', ['update', 'bd-1', '--description', 'New description content'], {
       cwd: '/repo',
       encoding: 'utf-8',
-      timeout: 30_000,
+      timeout: 15_000,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
@@ -643,7 +653,7 @@ describe('BeadGateway', () => {
     expect(execSpy).toHaveBeenCalledWith('br', ['update', 'bd-1', '--description', multilineContent], {
       cwd: '/repo',
       encoding: 'utf-8',
-      timeout: 30_000,
+      timeout: 15_000,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
@@ -659,7 +669,7 @@ describe('BeadGateway', () => {
     expect(execSpy).toHaveBeenCalledWith('br', ['comments', 'add', 'bd-1', 'This is a comment'], {
       cwd: '/repo',
       encoding: 'utf-8',
-      timeout: 30_000,
+      timeout: 15_000,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
@@ -678,7 +688,7 @@ describe('BeadGateway', () => {
     expect(execSpy).toHaveBeenCalledWith('br', ['show', 'bd-1', '--json'], {
       cwd: '/repo',
       encoding: 'utf-8',
-      timeout: 30_000,
+      timeout: 5_000,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
@@ -696,12 +706,16 @@ describe('BeadGateway', () => {
     const result = gateway.list({ type: 'task', parent: 'epic-1' });
 
     expect(result).toEqual([{ id: 'bd-1', title: 'Task 1', status: 'open', type: 'task' }]);
-    expect(execSpy).toHaveBeenCalledWith('br', ['dep', 'list', 'epic-1', '--direction', 'up', '--json'], {
-      cwd: '/repo',
-      encoding: 'utf-8',
-      timeout: 30_000,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
+    expect(execSpy).toHaveBeenCalledWith(
+      'br',
+      ['dep', 'list', 'epic-1', '--direction', 'up', '--type', 'parent-child', '--json'],
+      {
+        cwd: '/repo',
+        encoding: 'utf-8',
+        timeout: 5_000,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    );
 
     execSpy.mockRestore();
   });
@@ -733,7 +747,7 @@ describe('BeadGateway', () => {
     expect(execSpy).toHaveBeenCalledWith('br', ['list', '--json'], {
       cwd: '/repo',
       encoding: 'utf-8',
-      timeout: 30_000,
+      timeout: 5_000,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
@@ -803,7 +817,7 @@ describe('BeadGateway', () => {
     expect(execSpy).toHaveBeenCalledWith('br', ['update', 'bd-1', '--status', 'in_progress'], {
       cwd: '/repo',
       encoding: 'utf-8',
-      timeout: 30_000,
+      timeout: 15_000,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
@@ -819,7 +833,7 @@ describe('BeadGateway', () => {
     expect(execSpy).toHaveBeenCalledWith('br', ['update', 'bd-1', '--add-label', 'blocked'], {
       cwd: '/repo',
       encoding: 'utf-8',
-      timeout: 30_000,
+      timeout: 15_000,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
@@ -921,6 +935,76 @@ describe('BeadGateway', () => {
     expect(taskState).toBe('{"status":"pending"}');
 
     fs.rmSync(tmpDir, { recursive: true, force: true });
+    execSpy.mockRestore();
+  });
+
+  it('removes label from bead via br update --remove-label', () => {
+    const execSpy = spyOn(childProcess, 'execFileSync').mockReturnValueOnce('beads_rust 1.2.3').mockReturnValue('');
+    const gateway = new BeadGateway('/repo');
+
+    gateway.removeLabel('bd-1', 'blocked');
+
+    expect(execSpy).toHaveBeenCalledWith('br', ['update', 'bd-1', '--remove-label', 'blocked'], {
+      cwd: '/repo',
+      encoding: 'utf-8',
+      timeout: 15_000,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    execSpy.mockRestore();
+  });
+
+  it('adds dependency between beads via br dep add', () => {
+    const execSpy = spyOn(childProcess, 'execFileSync').mockReturnValueOnce('beads_rust 1.2.3').mockReturnValue('');
+    const gateway = new BeadGateway('/repo');
+
+    gateway.addDependency('task-2', 'task-1');
+
+    expect(execSpy).toHaveBeenCalledWith('br', ['dep', 'add', 'task-2', 'task-1'], {
+      cwd: '/repo',
+      encoding: 'utf-8',
+      timeout: 15_000,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    execSpy.mockRestore();
+  });
+
+  it('removes dependency between beads via br dep remove', () => {
+    const execSpy = spyOn(childProcess, 'execFileSync').mockReturnValueOnce('beads_rust 1.2.3').mockReturnValue('');
+    const gateway = new BeadGateway('/repo');
+
+    gateway.removeDependency('task-2', 'task-1');
+
+    expect(execSpy).toHaveBeenCalledWith('br', ['dep', 'remove', 'task-2', 'task-1'], {
+      cwd: '/repo',
+      encoding: 'utf-8',
+      timeout: 15_000,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    execSpy.mockRestore();
+  });
+
+  it('lists child beads with --type parent-child filter', () => {
+    const execSpy = spyOn(childProcess, 'execFileSync')
+      .mockReturnValueOnce('beads_rust 1.2.3')
+      .mockReturnValue('[{"type":"parent-child","issue_id":"bd-1","title":"Task 1","status":"open"}]');
+    const gateway = new BeadGateway('/repo');
+
+    gateway.list({ type: 'task', parent: 'epic-1' });
+
+    expect(execSpy).toHaveBeenCalledWith(
+      'br',
+      ['dep', 'list', 'epic-1', '--direction', 'up', '--type', 'parent-child', '--json'],
+      {
+        cwd: '/repo',
+        encoding: 'utf-8',
+        timeout: 5_000,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    );
+
     execSpy.mockRestore();
   });
 });

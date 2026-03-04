@@ -4,13 +4,16 @@
   "workspaces": {
     "": {
       "name": "@minhtri2710/opencode-warcraft",
+      "dependencies": {
+        "pi-design-deck": "^0.3.0",
+      },
       "devDependencies": {
         "@biomejs/biome": "^2.4.4",
       },
     },
     "packages/opencode-warcraft": {
       "name": "opencode-warcraft",
-      "version": "0.0.5",
+      "version": "0.0.7",
       "devDependencies": {
         "@opencode-ai/plugin": "^1.0.143",
         "@opencode-ai/sdk": "^0.13.0",
@@ -30,7 +33,7 @@
     },
     "packages/warcraft-core": {
       "name": "warcraft-core",
-      "version": "0.0.5",
+      "version": "0.0.7",
       "dependencies": {
         "simple-git": "^3.27.0",
       },
@@ -353,6 +356,8 @@
     "pathe": ["pathe@1.1.2", "", {}, "sha512-whLdWMYL2TwI08hn8/ZqAbrVemu0LNaNNJZX73O6qaIdCTfXutsLhMkjdENX0qhsQ9uIimo4/aQOmXkoon2nDQ=="],
 
     "perfect-debounce": ["perfect-debounce@1.0.0", "", {}, "sha512-xCy9V055GLEqoFaHoC1SoLIaLmWctgCUaBaWxDZ7/Zx4CTyX7cJQLJOok/orfjZAh9kEYpjJa4d0KcJmCbctZA=="],
+
+    "pi-design-deck": ["pi-design-deck@0.3.0", "", {}, "sha512-OWYZ5uwonP0uTr1FcRRZDcEr8mG4+MrFFhAH6saHu78iP7KNhcE360A4rKxUK09MqgrIA8UvNWP+QYzKGcEKmQ=="],
 
     "pkce-challenge": ["pkce-challenge@5.0.1", "", {}, "sha512-wQ0b/W4Fr01qtpHlqSqspcj3EhBvimsdh0KlHhH8HRZnMsEa0ea2fTULOXOS9ccQr3om+GcGRk4e+isrZWV8qQ=="],
 
