@@ -55,11 +55,21 @@ export class BeadsTaskStore implements TaskStore {
   private beadIdIndex = new Map<string, Map<string, string>>();
 
   private pendingTransitions: TransitionEvent[] = [];
+  private transitionBatchMode = false;
 
   constructor(
     private readonly projectRoot: string,
     private readonly repository: BeadsRepository,
   ) {}
+
+  beginTransitionBatch(): void {
+    this.transitionBatchMode = true;
+  }
+
+  endTransitionBatch(): void {
+    this.transitionBatchMode = false;
+    this.flushTransitionAudit();
+  }
 
   /**
    * Explicitly refresh the index for a feature.
@@ -706,8 +716,10 @@ export class BeadsTaskStore implements TaskStore {
       summary,
     };
 
-    // For single operations, flush immediately
-    this.flushSingleTransition(transition);
+    this.pendingTransitions.push(transition);
+    if (!this.transitionBatchMode) {
+      this.flushTransitionAudit();
+    }
   }
 
   /**

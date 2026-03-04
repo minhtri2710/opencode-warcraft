@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { WorktreeService } from './worktreeService';
+import { createWorktreeService, WorktreeService } from './worktreeService';
 
 // ============================================================================
 // Test Helpers
@@ -22,6 +22,7 @@ function createService(mode: 'on' | 'off'): WorktreeService {
   return new WorktreeService({
     baseDir: testRoot,
     warcraftDir: mode === 'off' ? path.join(testRoot, 'docs') : path.join(testRoot, '.beads', 'artifacts'),
+    gitFactory: () => createMockGit() as any,
   });
 }
 
@@ -30,10 +31,32 @@ function createService(mode: 'on' | 'off'): WorktreeService {
  * Mirrors the GitClient port interface methods used by WorktreeService.
  */
 function createMockGit(overrides: Record<string, (...args: any[]) => any> = {}): Record<string, any> {
+  const raw = overrides.raw ?? (async () => '');
+  const diff = overrides.diff ?? (async () => '');
+
   return {
-    raw: overrides.raw ?? (async () => ''),
+    raw,
+    worktreeAdd:
+      overrides.worktreeAdd ??
+      (async ({ path, branch, commit }: { path: string; branch: string; commit?: string }) => {
+        const args = ['worktree', 'add'];
+        if (commit) {
+          args.push('-b', branch, path, commit);
+        } else {
+          args.push(path, branch);
+        }
+        await raw(args);
+      }),
+    worktreeAddWithBranch:
+      overrides.worktreeAddWithBranch ??
+      (async ({ path, branch }: { path: string; branch: string }) => {
+        await raw(['worktree', 'add', path, branch]);
+      }),
+    worktreeRemove: overrides.worktreeRemove ?? (async (path: string) => raw(['worktree', 'remove', path, '--force'])),
+    worktreePrune: overrides.worktreePrune ?? (async () => raw(['worktree', 'prune'])),
     revparse: overrides.revparse ?? (async () => 'abc123def'),
-    status: overrides.status ??
+    status:
+      overrides.status ??
       (async () => ({
         staged: [],
         modified: [],
@@ -43,22 +66,37 @@ function createMockGit(overrides: Record<string, (...args: any[]) => any> = {}):
       })),
     add: overrides.add ?? (async () => {}),
     commit: overrides.commit ?? (async () => ({ commit: 'def456' })),
-    diff: overrides.diff ?? (async () => ''),
-    branch: overrides.branch ??
+    diff,
+    diffStat: overrides.diffStat ?? (async (refspec: string) => diff([refspec, '--stat'])),
+    diffCached: overrides.diffCached ?? (async () => diff(['--cached'])),
+    diffCachedStat: overrides.diffCachedStat ?? (async () => diff(['--cached', '--stat'])),
+    branch:
+      overrides.branch ??
       (async () => ({
         current: 'main',
         all: ['main'],
       })),
-    deleteLocalBranch: overrides.deleteLocalBranch ?? (async () => {}),
-    merge: overrides.merge ??
+    deleteBranch:
+      overrides.deleteBranch ??
+      (async (branchName: string, force?: boolean) => {
+        await raw(['branch', force ? '-D' : '-d', branchName]);
+      }),
+    merge:
+      overrides.merge ??
       (async () => ({
         failed: false,
         conflicts: [],
       })),
-    log: overrides.log ??
+    mergeSquash: overrides.mergeSquash ?? (async (branchName: string) => raw(['merge', '--squash', branchName])),
+    mergeAbort: overrides.mergeAbort ?? (async () => raw(['merge', '--abort'])),
+    log:
+      overrides.log ??
       (async () => ({
         all: [],
       })),
+    cherryPick: overrides.cherryPick ?? (async (commitSha: string) => raw(['cherry-pick', commitSha])),
+    cherryPickAbort: overrides.cherryPickAbort ?? (async () => raw(['cherry-pick', '--abort'])),
+    rebaseAbort: overrides.rebaseAbort ?? (async () => raw(['rebase', '--abort'])),
     applyPatch: overrides.applyPatch ?? (async () => {}),
   };
 }
@@ -527,7 +565,7 @@ describe('WorktreeService.remove', () => {
 
     const mockGit = createMockGit({
       raw: async () => '',
-      deleteLocalBranch: async (name: string) => {
+      deleteBranch: async (name: string) => {
         deletedBranch = name;
       },
     });
@@ -547,7 +585,7 @@ describe('WorktreeService.remove', () => {
 
     const mockGit = createMockGit({
       raw: async () => '',
-      deleteLocalBranch: async () => {
+      deleteBranch: async () => {
         deleteCalled = true;
       },
     });
@@ -766,11 +804,12 @@ describe('WorktreeService.getDiff', () => {
         deleted: [],
         created: [],
       }),
-      diff: async (args: string[]) => {
-        if (args.some((a: string) => a.includes('..HEAD')) && args.includes('--stat')) {
+      diff: async (args: string | string[]) => {
+        const values = Array.isArray(args) ? args : [args];
+        if (values.some((a: string) => a.includes('..HEAD')) && values.includes('--stat')) {
           return ' src/b.ts | 10 ++++++++++\n 1 file changed, 10 insertions(+)\n';
         }
-        if (args.some((a: string) => a.includes('..HEAD'))) {
+        if (values.some((a: string) => a.includes('..HEAD'))) {
           return 'diff --git a/src/b.ts b/src/b.ts\n+new content\n';
         }
         return '';
@@ -850,8 +889,9 @@ describe('WorktreeService.getDiff', () => {
         deleted: [],
         created: [],
       }),
-      diff: async (args: string[]) => {
-        const refArg = args.find((a: string) => a.includes('..HEAD'));
+      diff: async (args: string | string[]) => {
+        const values = Array.isArray(args) ? args : [args];
+        const refArg = values.find((a: string) => a.includes('..HEAD'));
         if (refArg) capturedBase = refArg;
         return '';
       },
@@ -1297,10 +1337,7 @@ describe('WorktreeService integration', () => {
     const warcraftDir = path.join(testRoot, '.beads', 'artifacts');
     fs.mkdirSync(warcraftDir, { recursive: true });
 
-    const service = new WorktreeService({
-      baseDir: testRoot,
-      warcraftDir,
-    });
+    const service = createWorktreeService(testRoot);
 
     // Step 1: Create worktree
     const info = await service.create('int-test', '01-task');
@@ -1360,10 +1397,7 @@ describe('WorktreeService integration', () => {
     const warcraftDir = path.join(testRoot, '.beads', 'artifacts');
     fs.mkdirSync(warcraftDir, { recursive: true });
 
-    const service = new WorktreeService({
-      baseDir: testRoot,
-      warcraftDir,
-    });
+    const service = createWorktreeService(testRoot);
 
     // Create worktree and modify shared.ts
     const info = await service.create('conflict-test', '01-conflict');
@@ -1401,10 +1435,7 @@ describe('WorktreeService integration', () => {
     const warcraftDir = path.join(testRoot, '.beads', 'artifacts');
     fs.mkdirSync(warcraftDir, { recursive: true });
 
-    const service = new WorktreeService({
-      baseDir: testRoot,
-      warcraftDir,
-    });
+    const service = createWorktreeService(testRoot);
 
     const info = await service.create('dirty-test', '01-dirty');
 

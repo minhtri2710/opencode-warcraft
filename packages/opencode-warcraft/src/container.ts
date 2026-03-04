@@ -8,13 +8,13 @@ import {
   type ConfigService,
   ContextService,
   createStores,
+  createWorktreeService,
   detectContext,
   FeatureService,
   getFeaturePath,
-  getWarcraftPath,
   PlanService,
   TaskService,
-  WorktreeService,
+  type WorktreeService,
 } from 'warcraft-core';
 import { COMPLETION_GATES, hasCompletionGateEvidence, isPathInside, validateTaskStatus } from './guards.js';
 import { createBuiltinMcps } from './mcp/index.js';
@@ -82,10 +82,7 @@ export function createWarcraftContainer(directory: string, configService: Config
   const disabledSkills = configService.getDisabledSkills();
   const builtinMcps = createBuiltinMcps(disabledMcps);
   const filteredSkills = getFilteredSkills(disabledSkills);
-  const worktreeService = new WorktreeService({
-    baseDir: directory,
-    warcraftDir: getWarcraftPath(directory, configService.getBeadsMode()),
-  });
+  const worktreeService = createWorktreeService(directory);
 
   // Initialize BV Triage Service with explicit state ownership
   const bvTriageService = new BvTriageService(directory, configService.getBeadsMode() !== 'off');

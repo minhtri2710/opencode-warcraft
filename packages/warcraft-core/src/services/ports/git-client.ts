@@ -64,20 +64,13 @@ export interface GitClient {
    * Add a new worktree.
    * @param options - Worktree options
    */
-  worktreeAdd(options: {
-    path: string;
-    branch: string;
-    commit: string;
-  }): Promise<void>;
+  worktreeAdd(options: { path: string; branch: string; commit: string }): Promise<void>;
 
   /**
    * Add a new worktree (with existing branch).
    * @param options - Worktree options
    */
-  worktreeAddWithBranch(options: {
-    path: string;
-    branch: string;
-  }): Promise<void>;
+  worktreeAddWithBranch(options: { path: string; branch: string }): Promise<void>;
 
   /**
    * Remove a worktree.
@@ -143,7 +136,7 @@ export interface GitClient {
    * @param patchPath - Path to patch file
    * @param options - Apply options
    */
-  applyPatch(patchPath: string, options?: { reverse?: boolean; check?: boolean }): Promise<void>;
+  applyPatch(patchPath: string, options?: { reverse?: boolean; check?: boolean } | string[]): Promise<void>;
 
   // -------------------------------------------------------------------------
   // Commit Operations
@@ -231,7 +224,7 @@ export interface GitClient {
    * @param refspec - Git refspec (e.g., 'HEAD~1..HEAD')
    * @returns Log result
    */
-  log(refspec: string): Promise<LogResult>;
+  log(refspec: string, cwd?: string): Promise<LogResult>;
 
   // -------------------------------------------------------------------------
   // Cherry-pick Operations

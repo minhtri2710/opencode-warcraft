@@ -1,8 +1,10 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import simpleGit, { type SimpleGit } from 'simple-git';
+import simpleGit from 'simple-git';
 import { acquireLock } from '../utils/json-lock.js';
 import { getWarcraftPath, sanitizeName } from '../utils/paths.js';
+import type { GitClient, GitClientFactory } from './ports/git-client.js';
+import { SimpleGitClient } from './ports/simple-git-client.js';
 export interface WorktreeInfo {
   path: string;
   branch: string;
@@ -44,6 +46,7 @@ export interface MergeResult {
 export interface WorktreeConfig {
   baseDir: string;
   warcraftDir: string;
+  gitFactory: GitClientFactory;
 }
 
 export class WorktreeService {
@@ -53,8 +56,8 @@ export class WorktreeService {
     this.config = config;
   }
 
-  private getGit(cwd?: string): SimpleGit {
-    return simpleGit(cwd || this.config.baseDir);
+  private getGit(cwd?: string): GitClient {
+    return this.config.gitFactory(cwd);
   }
 
   private getWorktreesDir(): string {
@@ -84,7 +87,7 @@ export class WorktreeService {
     const lockPath = path.join(this.getWorktreesDir(), `${feature}-${step}.create`);
     const release = await acquireLock(lockPath, { timeout: 10000 });
     try {
-      const base = baseBranch || (await git.revparse(['HEAD'])).trim();
+      const base = baseBranch || (await git.revparse(['HEAD']));
 
       const existing = await this.get(feature, step);
       if (existing) {
@@ -92,17 +95,17 @@ export class WorktreeService {
       }
 
       try {
-        await git.raw(['worktree', 'add', '-b', branchName, worktreePath, base]);
+        await git.worktreeAdd({ path: worktreePath, branch: branchName, commit: base });
       } catch {
         try {
-          await git.raw(['worktree', 'add', worktreePath, branchName]);
+          await git.worktreeAddWithBranch({ path: worktreePath, branch: branchName });
         } catch (retryError) {
           throw new Error(`Failed to create worktree: ${retryError}`);
         }
       }
 
       const worktreeGit = this.getGit(worktreePath);
-      const commit = (await worktreeGit.revparse(['HEAD'])).trim();
+      const commit = await worktreeGit.revparse(['HEAD']);
 
       return {
         path: worktreePath,
@@ -123,7 +126,7 @@ export class WorktreeService {
     try {
       await fs.access(worktreePath);
       const worktreeGit = this.getGit(worktreePath);
-      const commit = (await worktreeGit.revparse(['HEAD'])).trim();
+      const commit = await worktreeGit.revparse(['HEAD']);
       return {
         path: worktreePath,
         branch: branchName,
@@ -154,18 +157,18 @@ export class WorktreeService {
     }
 
     try {
-      const status = await worktreeGit.status();
+      const status = await worktreeGit.status(worktreePath);
       const hasStaged = status.staged.length > 0;
 
       let diffContent = '';
       let stat = '';
 
       if (hasStaged) {
-        diffContent = await worktreeGit.diff(['--cached']);
-        stat = diffContent ? await worktreeGit.diff(['--cached', '--stat']) : '';
+        diffContent = await worktreeGit.diffCached(worktreePath);
+        stat = diffContent ? await worktreeGit.diffCachedStat(worktreePath) : '';
       } else {
-        diffContent = await worktreeGit.diff([`${base}..HEAD`]).catch(() => '');
-        stat = diffContent ? await worktreeGit.diff([`${base}..HEAD`, '--stat']) : '';
+        diffContent = await worktreeGit.diff(`${base}..HEAD`, worktreePath).catch(() => '');
+        stat = diffContent ? await worktreeGit.diffStat(`${base}..HEAD`, worktreePath) : '';
       }
 
       const statLines = stat.split('\n').filter((l) => l.trim());
@@ -205,7 +208,7 @@ export class WorktreeService {
     const worktreeGit = this.getGit(worktreePath);
     const base = baseBranch || 'HEAD';
 
-    const diff = await worktreeGit.diff([`${base}...HEAD`]);
+    const diff = await worktreeGit.diff(`${base}...HEAD`, worktreePath);
     await fs.writeFile(patchPath, diff);
 
     return patchPath;
@@ -304,20 +307,20 @@ export class WorktreeService {
     const release = await acquireLock(lockPath, { timeout: 10000 });
     try {
       try {
-        await git.raw(['worktree', 'remove', worktreePath, '--force']);
+        await git.worktreeRemove(worktreePath);
       } catch {
         await fs.rm(worktreePath, { recursive: true, force: true });
       }
 
       try {
-        await git.raw(['worktree', 'prune']);
+        await git.worktreePrune();
       } catch {
         /* intentional */
       }
 
       if (deleteBranch) {
         try {
-          await git.deleteLocalBranch(branchName, true);
+          await git.deleteBranch(branchName, true);
         } catch {
           /* intentional */
         }
@@ -361,7 +364,7 @@ export class WorktreeService {
     const git = this.getGit();
 
     try {
-      await git.raw(['worktree', 'prune']);
+      await git.worktreePrune();
     } catch {
       /* intentional */
     }
@@ -470,18 +473,18 @@ export class WorktreeService {
     const worktreeGit = this.getGit(worktreePath);
 
     try {
-      await worktreeGit.add(['.', '--', ':!*.patch']);
+      await worktreeGit.add(['.', '--', ':!*.patch'], undefined, worktreePath);
 
-      const status = await worktreeGit.status();
+      const status = await worktreeGit.status(worktreePath);
       const hasChanges = status.staged.length > 0 || status.modified.length > 0 || status.not_added.length > 0;
 
       if (!hasChanges) {
-        const currentSha = (await worktreeGit.revparse(['HEAD'])).trim();
+        const currentSha = await worktreeGit.revparse(['HEAD']);
         return { committed: false, sha: currentSha, message: 'No changes to commit' };
       }
 
       const commitMessage = message || `warcraft(${step}): task changes`;
-      const result = await worktreeGit.commit(commitMessage, ['--allow-empty-message']);
+      const result = await worktreeGit.commit(commitMessage, { allowEmptyMessage: true }, worktreePath);
 
       return {
         committed: true,
@@ -490,7 +493,7 @@ export class WorktreeService {
       };
     } catch (error: unknown) {
       const err = error as { message?: string };
-      const currentSha = (await worktreeGit.revparse(['HEAD']).catch(() => '')).trim();
+      const currentSha = await worktreeGit.revparse(['HEAD']).catch(() => '');
       return {
         committed: false,
         sha: currentSha,
@@ -511,14 +514,14 @@ export class WorktreeService {
 
       const currentBranch = branches.current;
 
-      const diffStat = await git.diff([`${currentBranch}...${branchName}`, '--stat']);
+      const diffStat = await git.diffStat(`${currentBranch}...${branchName}`);
       const filesChanged = diffStat
         .split('\n')
         .filter((l) => l.trim() && l.includes('|'))
         .map((l) => l.split('|')[0].trim());
 
       if (strategy === 'squash') {
-        await git.raw(['merge', '--squash', branchName]);
+        await git.mergeSquash(branchName);
         const result = await git.commit(`warcraft: merge ${step} (squashed)`);
         return {
           success: true,
@@ -527,12 +530,12 @@ export class WorktreeService {
           filesChanged,
         };
       } else if (strategy === 'rebase') {
-        const commits = await git.log([`${currentBranch}..${branchName}`]);
+        const commits = await git.log(`${currentBranch}..${branchName}`);
         const commitsToApply = [...commits.all].reverse();
         for (const commit of commitsToApply) {
-          await git.raw(['cherry-pick', commit.hash]);
+          await git.cherryPick(commit.hash);
         }
-        const head = (await git.revparse(['HEAD'])).trim();
+        const head = await git.revparse(['HEAD']);
         return {
           success: true,
           merged: true,
@@ -540,8 +543,8 @@ export class WorktreeService {
           filesChanged,
         };
       } else {
-        const result = await git.merge([branchName, '--no-ff', '-m', `warcraft: merge ${step}`]);
-        const head = (await git.revparse(['HEAD'])).trim();
+        const result = await git.merge(branchName, { noFastForward: true, message: `warcraft: merge ${step}` });
+        const head = await git.revparse(['HEAD']);
         return {
           success: true,
           merged: !result.failed,
@@ -554,9 +557,9 @@ export class WorktreeService {
       const err = error as { message?: string };
 
       if (err.message?.includes('CONFLICT') || err.message?.includes('conflict')) {
-        await git.raw(['merge', '--abort']).catch(() => {});
-        await git.raw(['rebase', '--abort']).catch(() => {});
-        await git.raw(['cherry-pick', '--abort']).catch(() => {});
+        await git.mergeAbort().catch(() => {});
+        await git.rebaseAbort().catch(() => {});
+        await git.cherryPickAbort().catch(() => {});
 
         return {
           success: false,
@@ -579,7 +582,7 @@ export class WorktreeService {
 
     try {
       const worktreeGit = this.getGit(worktreePath);
-      const status = await worktreeGit.status();
+      const status = await worktreeGit.status(worktreePath);
       return (
         status.modified.length > 0 ||
         status.not_added.length > 0 ||
@@ -606,8 +609,10 @@ export class WorktreeService {
 }
 
 export function createWorktreeService(projectDir: string): WorktreeService {
+  const gitFactory: GitClientFactory = (cwd?: string) => new SimpleGitClient(simpleGit(cwd ?? projectDir));
   return new WorktreeService({
     baseDir: projectDir,
     warcraftDir: getWarcraftPath(projectDir),
+    gitFactory,
   });
 }

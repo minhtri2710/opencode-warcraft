@@ -133,6 +133,10 @@ export interface TaskStore {
    * No-op for filesystem store.
    */
   syncDependencies?(featureName: string): void;
+
+  /** Optional batching hooks for transition audit sidecars. */
+  beginTransitionBatch?(): void;
+  endTransitionBatch?(): void;
 }
 
 // ============================================================================

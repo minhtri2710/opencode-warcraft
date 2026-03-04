@@ -90,7 +90,16 @@ export class SimpleGitClient implements GitClient {
   // Patch Operations
   // -------------------------------------------------------------------------
 
-  async applyPatch(patchPath: string, options?: { reverse?: boolean; check?: boolean }): Promise<void> {
+  async applyPatch(patchPath: string, options?: { reverse?: boolean; check?: boolean } | string[]): Promise<void> {
+    if (Array.isArray(options)) {
+      if (options.length > 0) {
+        await this.git.applyPatch(patchPath, options);
+      } else {
+        await this.git.applyPatch(patchPath);
+      }
+      return;
+    }
+
     const args: string[] = [];
     if (options?.reverse) {
       args.push('-R');

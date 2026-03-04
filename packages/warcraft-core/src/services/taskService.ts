@@ -96,46 +96,58 @@ export class TaskService {
 
   sync(featureName: string): TasksSyncResult {
     const delta = this._computeSyncDelta(featureName);
+    const supportsTransitionBatch =
+      typeof this.store.beginTransitionBatch === 'function' && typeof this.store.endTransitionBatch === 'function';
 
-    // Apply removals
-    for (const folder of delta.removed) {
-      this.store.delete(featureName, folder);
+    if (supportsTransitionBatch) {
+      this.store.beginTransitionBatch!();
     }
 
-    // Apply creations
-    for (const planTask of delta.planTasks) {
-      if (!delta.existingByFolder.has(planTask.folder)) {
-        // Resolve dependencies: numbers -> folder names
-        const dependsOn = this.resolveDependencies(planTask, delta.planTasks);
-
-        const status: TaskStatus = {
-          status: 'pending',
-          origin: 'plan',
-          planTitle: planTask.name,
-          dependsOn,
-        };
-
-        // Default priority for plan tasks is 3 (medium)
-        this.store.createTask(featureName, planTask.folder, planTask.name, status, 3);
-
-        // Build and store spec
-        const specData = this.buildSpecData({
-          featureName,
-          task: planTask,
-          dependsOn,
-          allTasks: delta.planTasks,
-          planContent: delta.planContent,
-        });
-        const specContent = formatSpecContent(specData);
-        this.store.writeArtifact(featureName, planTask.folder, 'spec', specContent);
+    try {
+      // Apply removals
+      for (const folder of delta.removed) {
+        this.store.delete(featureName, folder);
       }
-    }
 
-    this.store.flush();
+      // Apply creations
+      for (const planTask of delta.planTasks) {
+        if (!delta.existingByFolder.has(planTask.folder)) {
+          // Resolve dependencies: numbers -> folder names
+          const dependsOn = this.resolveDependencies(planTask, delta.planTasks);
 
-    // Sync bead-level dependency edges if the store supports it (beads mode)
-    if (this.store.syncDependencies) {
-      this.store.syncDependencies(featureName);
+          const status: TaskStatus = {
+            status: 'pending',
+            origin: 'plan',
+            planTitle: planTask.name,
+            dependsOn,
+          };
+
+          // Default priority for plan tasks is 3 (medium)
+          this.store.createTask(featureName, planTask.folder, planTask.name, status, 3);
+
+          // Build and store spec
+          const specData = this.buildSpecData({
+            featureName,
+            task: planTask,
+            dependsOn,
+            allTasks: delta.planTasks,
+            planContent: delta.planContent,
+          });
+          const specContent = formatSpecContent(specData);
+          this.store.writeArtifact(featureName, planTask.folder, 'spec', specContent);
+        }
+      }
+
+      this.store.flush();
+
+      // Sync bead-level dependency edges if the store supports it (beads mode)
+      if (this.store.syncDependencies) {
+        this.store.syncDependencies(featureName);
+      }
+    } finally {
+      if (supportsTransitionBatch) {
+        this.store.endTransitionBatch!();
+      }
     }
 
     return {

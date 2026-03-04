@@ -144,9 +144,6 @@ export class BeadsRepository {
   private readonly viewerGateway: BeadsViewerGateway;
   private readonly syncPolicy: SyncPolicy;
 
-  // Short-lived memoization cache (cleared on each operation)
-  private cache = new Map<string, unknown>();
-
   // Epic ID resolution cache: featureName -> epicBeadId.
   // Populated by createEpic() so that getEpicByFeatureName() can resolve
   // the epic in O(1) without an expensive `br list --type epic --status all`
@@ -170,7 +167,6 @@ export class BeadsRepository {
   importArtifacts(): Result<void> {
     try {
       this.gateway.importArtifacts();
-      this.cache.clear();
       this.epicIdCache.clear();
       return { success: true, value: undefined };
     } catch (error) {
@@ -208,7 +204,6 @@ export class BeadsRepository {
         console.warn(`[BeadsRepository] Auto-import failed: ${result.error.message}`);
       }
     }
-    this.cache.clear();
   }
 
   /**
@@ -222,7 +217,6 @@ export class BeadsRepository {
         console.warn(`[BeadsRepository] Auto-flush failed: ${result.error.message}`);
       }
     }
-    this.cache.clear();
   }
 
   // ==========================================================================
