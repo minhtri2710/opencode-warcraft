@@ -135,12 +135,7 @@ describe('json-lock', () => {
       release2();
       order.push('lock2-released');
 
-      expect(order).toEqual([
-        'lock1-acquired',
-        'lock1-released',
-        'lock2-acquired',
-        'lock2-released',
-      ]);
+      expect(order).toEqual(['lock1-acquired', 'lock1-released', 'lock2-acquired', 'lock2-released']);
     });
 
     it('times out when lock cannot be acquired', async () => {
@@ -148,9 +143,7 @@ describe('json-lock', () => {
 
       const release = await acquireLock(filePath);
 
-      await expect(
-        acquireLock(filePath, { timeout: 80, retryInterval: 10 }),
-      ).rejects.toThrow(/Failed to acquire lock/);
+      await expect(acquireLock(filePath, { timeout: 80, retryInterval: 10 })).rejects.toThrow(/Failed to acquire lock/);
 
       release();
     });
@@ -195,9 +188,7 @@ describe('json-lock', () => {
 
       const release = acquireLockSync(filePath);
 
-      expect(() =>
-        acquireLockSync(filePath, { timeout: 80, retryInterval: 10 }),
-      ).toThrow(/Failed to acquire lock/);
+      expect(() => acquireLockSync(filePath, { timeout: 80, retryInterval: 10 })).toThrow(/Failed to acquire lock/);
 
       release();
     });
@@ -262,9 +253,9 @@ describe('json-lock', () => {
         hostname: os.hostname(),
       });
 
-      await expect(
-        acquireLock(filePath, { staleLockTTL: 500, timeout: 100, retryInterval: 10 }),
-      ).rejects.toThrow(/Failed to acquire lock/);
+      await expect(acquireLock(filePath, { staleLockTTL: 500, timeout: 100, retryInterval: 10 })).rejects.toThrow(
+        /Failed to acquire lock/,
+      );
     });
 
     it('does NOT break lock that is younger than staleTTL', async () => {
@@ -283,9 +274,9 @@ describe('json-lock', () => {
       fs.writeFileSync(lockPath, JSON.stringify(content));
       // No utimesSync — mtime is current
 
-      await expect(
-        acquireLock(filePath, { staleLockTTL: 60_000, timeout: 100, retryInterval: 10 }),
-      ).rejects.toThrow(/Failed to acquire lock/);
+      await expect(acquireLock(filePath, { staleLockTTL: 60_000, timeout: 100, retryInterval: 10 })).rejects.toThrow(
+        /Failed to acquire lock/,
+      );
     });
 
     it('sync: breaks stale lock and acquires', () => {
@@ -424,9 +415,7 @@ describe('json-lock', () => {
       const filePath = path.join(TEST_DIR, 'concurrent.json');
 
       // Launch 5 concurrent writes
-      const promises = [1, 2, 3, 4, 5].map((n) =>
-        writeJsonLocked(filePath, { value: n }),
-      );
+      const promises = [1, 2, 3, 4, 5].map((n) => writeJsonLocked(filePath, { value: n }));
 
       await Promise.all(promises);
 
@@ -467,10 +456,7 @@ describe('json-lock', () => {
       const target = { outer: { inner1: 'a', inner2: 'b' }, other: 'x' };
       const patch = { outer: { inner2: 'c', inner3: 'd' } };
 
-      const result = deepMerge(
-        target as Record<string, unknown>,
-        patch as Record<string, unknown>,
-      );
+      const result = deepMerge(target as Record<string, unknown>, patch as Record<string, unknown>);
 
       expect(result).toEqual({
         outer: { inner1: 'a', inner2: 'c', inner3: 'd' },
@@ -482,10 +468,7 @@ describe('json-lock', () => {
       const target = { l1: { l2: { l3: { keep: true, update: 'old' } } } };
       const patch = { l1: { l2: { l3: { update: 'new', add: true } } } };
 
-      const result = deepMerge(
-        target as Record<string, unknown>,
-        patch as Record<string, unknown>,
-      );
+      const result = deepMerge(target as Record<string, unknown>, patch as Record<string, unknown>);
 
       expect(result).toEqual({
         l1: { l2: { l3: { keep: true, update: 'new', add: true } } },
@@ -549,10 +532,7 @@ describe('json-lock', () => {
       const targetCopy = JSON.parse(JSON.stringify(target));
       const patchCopy = JSON.parse(JSON.stringify(patch));
 
-      deepMerge(
-        target as Record<string, unknown>,
-        patch as Record<string, unknown>,
-      );
+      deepMerge(target as Record<string, unknown>, patch as Record<string, unknown>);
 
       expect(target).toEqual(targetCopy);
       expect(patch).toEqual(patchCopy);
@@ -584,10 +564,7 @@ describe('json-lock', () => {
       const filePath = path.join(TEST_DIR, 'patch.json');
       fs.writeFileSync(filePath, JSON.stringify({ a: 1, b: 2 }));
 
-      const result = await patchJsonLocked<Record<string, number>>(
-        filePath,
-        { b: 3, c: 4 },
-      );
+      const result = await patchJsonLocked<Record<string, number>>(filePath, { b: 3, c: 4 });
 
       expect(result).toEqual({ a: 1, b: 3, c: 4 });
       expect(readJson(filePath)).toEqual({ a: 1, b: 3, c: 4 });
@@ -662,11 +639,9 @@ describe('json-lock', () => {
       const filePath = path.join(TEST_DIR, 'update.json');
       fs.writeFileSync(filePath, JSON.stringify({ count: 5 }));
 
-      const result = updateJsonLockedSync<{ count: number }>(
-        filePath,
-        (current) => ({ count: current.count + 1 }),
-        { count: 0 },
-      );
+      const result = updateJsonLockedSync<{ count: number }>(filePath, (current) => ({ count: current.count + 1 }), {
+        count: 0,
+      });
 
       expect(result).toEqual({ count: 6 });
       expect(readJson(filePath)).toEqual({ count: 6 });
@@ -714,11 +689,7 @@ describe('json-lock', () => {
       const filePath = path.join(TEST_DIR, 'update-seq.json');
 
       for (let i = 0; i < 5; i++) {
-        updateJsonLockedSync<{ count: number }>(
-          filePath,
-          (current) => ({ count: current.count + 1 }),
-          { count: 0 },
-        );
+        updateJsonLockedSync<{ count: number }>(filePath, (current) => ({ count: current.count + 1 }), { count: 0 });
       }
 
       expect(readJson<{ count: number }>(filePath)).toEqual({ count: 5 });

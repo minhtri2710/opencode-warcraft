@@ -192,7 +192,9 @@ warcraft_worktree_commit({
 \`\`\`
 
 ---
-${verificationModel === 'tdd' ? `## TDD Protocol (Required)
+${
+  verificationModel === 'tdd'
+    ? `## TDD Protocol (Required)
 
 1. **Red**: Write failing test first
 2. **Green**: Minimal code to pass
@@ -201,7 +203,9 @@ ${verificationModel === 'tdd' ? `## TDD Protocol (Required)
 Never write implementation before test exists.
 Exception: Pure refactoring of existing tested code.
 
-` : ''}## Debugging Protocol (When stuck)
+`
+    : ''
+}## Debugging Protocol (When stuck)
 
 1. **Reproduce**: Get consistent failure
 2. **Isolate**: Binary search to find cause

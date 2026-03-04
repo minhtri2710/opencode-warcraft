@@ -4,7 +4,6 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { BeadGateway } from './BeadGateway';
-import type { AuditEntry, BeadComment } from './BeadGateway.types.js';
 import { BeadGatewayError } from './BeadGateway.types.js';
 
 describe('BeadGateway', () => {
@@ -1129,7 +1128,7 @@ describe('BeadGateway', () => {
     });
 
     it('includes truncated excerpt in error for long malformed JSON', () => {
-      const longMalformedJson = 'a'.repeat(300) + '... and more invalid content';
+      const longMalformedJson = `${'a'.repeat(300)}... and more invalid content`;
       const execSpy = spyOn(childProcess, 'execFileSync')
         .mockReturnValueOnce('beads_rust 1.2.3')
         .mockReturnValue(longMalformedJson);

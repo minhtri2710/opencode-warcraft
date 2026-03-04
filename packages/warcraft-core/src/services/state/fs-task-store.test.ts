@@ -1,7 +1,7 @@
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import type { TaskStatus } from '../../types.js';
 import { FilesystemTaskStore } from './fs-task-store.js';
 
@@ -34,9 +34,7 @@ describe('FilesystemTaskStore', () => {
 
       // Should have a valid UUID as beadId
       expect(result.beadId).toBeDefined();
-      expect(result.beadId).toMatch(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-      );
+      expect(result.beadId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
       expect(result.status).toBe('pending');
     });
 
@@ -52,9 +50,7 @@ describe('FilesystemTaskStore', () => {
 
       expect(retrieved).not.toBeNull();
       expect(retrieved!.folder).toBe('01-setup');
-      expect(retrieved!.beadId).toMatch(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
-      );
+      expect(retrieved!.beadId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
     });
 
     it('should handle writeArtifact gracefully when repository is absent', () => {

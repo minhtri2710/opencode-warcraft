@@ -68,5 +68,3 @@ export function getFilteredSkills(disabledSkills: string[] = [], agentSkills?: s
 
   return filtered;
 }
-
-

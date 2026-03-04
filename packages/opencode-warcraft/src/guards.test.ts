@@ -1,16 +1,16 @@
 import { describe, expect, it } from 'bun:test';
 import {
-  validateTaskStatus,
-  hasCompletionGateEvidence,
-  isPathInside,
   COMPLETION_GATES,
   COMPLETION_PASS_SIGNAL,
+  hasCompletionGateEvidence,
+  isPathInside,
+  validateTaskStatus,
 } from './guards.js';
 
 describe('guards.ts test suite', () => {
   describe('VALID_TASK_STATUSES constant', () => {
     it('should contain all 7 valid task statuses', () => {
-      const expectedStatuses = ['pending', 'in_progress', 'done', 'cancelled', 'blocked', 'failed', 'partial'];
+      const _expectedStatuses = ['pending', 'in_progress', 'done', 'cancelled', 'blocked', 'failed', 'partial'];
       expect(COMPLETION_GATES).toBeArray();
       expect(COMPLETION_GATES).toHaveLength(3);
     });
@@ -112,7 +112,7 @@ describe('guards.ts test suite', () => {
 
     it('should throw error for invalid status', () => {
       expect(() => validateTaskStatus('invalid')).toThrow(
-        'Invalid task status: "invalid". Valid values: pending, in_progress, done, cancelled, blocked, failed, partial'
+        'Invalid task status: "invalid". Valid values: pending, in_progress, done, cancelled, blocked, failed, partial',
       );
     });
 
@@ -370,7 +370,7 @@ describe('guards.ts test suite', () => {
     describe('absolute vs relative paths', () => {
       it('should handle mixing absolute and relative paths', () => {
         const absolute = '/Users/test/project/src';
-        const relative = 'src';
+        const _relative = 'src';
         expect(isPathInside(absolute, '/Users/test/project')).toBe(true);
       });
 

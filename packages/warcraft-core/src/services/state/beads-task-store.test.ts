@@ -417,7 +417,9 @@ describe('BeadsTaskStore audit trail for state transitions', () => {
     expect(appendCommentSpy).toHaveBeenCalledTimes(1);
     expect(appendCommentSpy).toHaveBeenCalledWith(
       'task-1',
-      expect.stringMatching(/^\[warcraft:transition\] pending → in_progress \| \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z \| Working on task$/),
+      expect.stringMatching(
+        /^\[warcraft:transition\] pending → in_progress \| \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z \| Working on task$/,
+      ),
     );
   });
 
@@ -527,7 +529,9 @@ describe('BeadsTaskStore audit trail for state transitions', () => {
     expect(appendCommentSpy).toHaveBeenCalledTimes(1);
     const commentBody = appendCommentSpy.mock.calls[0][1] as string;
     // Comment should NOT end with trailing whitespace or pipe
-    expect(commentBody).toMatch(/^\[warcraft:transition\] pending → in_progress \| \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z \|$/);
+    expect(commentBody).toMatch(
+      /^\[warcraft:transition\] pending → in_progress \| \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z \|$/,
+    );
     expect(commentBody).not.toMatch(/\s$/);
   });
 

@@ -402,7 +402,7 @@ export class BeadGateway {
         throw error;
       }
 
-      const excerpt = output.length > 200 ? output.slice(0, 200) + '...' : output;
+      const excerpt = output.length > 200 ? `${output.slice(0, 200)}...` : output;
       throw new BeadGatewayError(
         'parse_error',
         `Failed to parse audit log for bead '${beadId}' [BR_PARSE_FAILED]: invalid JSON. Raw excerpt: "${excerpt}"`,
@@ -464,7 +464,7 @@ export class BeadGateway {
       }
 
       // For JSON parse errors, include a raw excerpt in the error message
-      const excerpt = output.length > 200 ? output.slice(0, 200) + '...' : output;
+      const excerpt = output.length > 200 ? `${output.slice(0, 200)}...` : output;
       throw new BeadGatewayError(
         'parse_error',
         `Failed to parse comments for bead '${beadId}' [BR_PARSE_FAILED]: invalid JSON. Raw excerpt: "${excerpt}"`,
@@ -559,7 +559,7 @@ export class BeadGateway {
     try {
       parsed = JSON.parse(output) as unknown;
     } catch {
-      const excerpt = output.length > 200 ? output.slice(0, 200) + '...' : output;
+      const excerpt = output.length > 200 ? `${output.slice(0, 200)}...` : output;
       throw new BeadGatewayError(
         'parse_error',
         `Failed to parse tasks for epic '${epicId}' [BR_PARSE_FAILED]: invalid JSON. Raw excerpt: "${excerpt}"`,
@@ -583,7 +583,6 @@ export class BeadGateway {
         return 'done';
       case 'deferred':
         return 'blocked';
-      case 'open':
       default:
         return 'pending';
     }

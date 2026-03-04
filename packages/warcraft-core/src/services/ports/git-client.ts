@@ -5,7 +5,7 @@
  * enabling dependency injection and testability.
  */
 
-import type { MergeResult, StatusResult as SimpleGitStatusResult } from 'simple-git';
+import type { MergeResult } from 'simple-git';
 
 // Re-export MergeResult for use in GitClient implementations
 export type { MergeResult };

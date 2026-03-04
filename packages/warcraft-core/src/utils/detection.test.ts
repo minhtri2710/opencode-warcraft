@@ -86,10 +86,7 @@ describe('detection utilities', () => {
       fs.mkdirSync(mainGitDir, { recursive: true });
 
       // Create .git file in worktree pointing to the main repo's worktree gitdir
-      fs.writeFileSync(
-        path.join(worktreePath, '.git'),
-        `gitdir: ${mainGitDir}`,
-      );
+      fs.writeFileSync(path.join(worktreePath, '.git'), `gitdir: ${mainGitDir}`);
 
       const result = detectContext(worktreePath);
 
@@ -269,8 +266,7 @@ describe('detection utilities', () => {
       if (result !== null) {
         // If it found something, it should be a valid path with .git or .beads/artifacts
         expect(
-          fs.existsSync(path.join(result, '.git')) ||
-            fs.existsSync(path.join(result, '.beads', 'artifacts')),
+          fs.existsSync(path.join(result, '.git')) || fs.existsSync(path.join(result, '.beads', 'artifacts')),
         ).toBe(true);
       } else {
         expect(result).toBeNull();

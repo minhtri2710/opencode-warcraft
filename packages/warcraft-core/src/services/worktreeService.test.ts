@@ -1157,7 +1157,7 @@ describe('WorktreeService.exportPatch', () => {
     });
     (service as any).getGit = () => mockGit;
 
-    const wtPath = setupWorktreeDir(service, 'feat', '01-step');
+    const _wtPath = setupWorktreeDir(service, 'feat', '01-step');
 
     const patchPath = await service.exportPatch('feat', '01-step');
 
