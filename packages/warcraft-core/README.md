@@ -1,6 +1,6 @@
 # warcraft-core
 
-Shared domain services, types, and utilities for [Project Warcraft](https://github.com/minhtri2710/opencode-warcraft) — a context-driven development system for AI coding assistants.
+Shared domain services, types, and utilities for [Project Warcraft](https://github.com/minhtri2710/opencode-warcraft), a context-driven development system for AI coding assistants.
 
 ## Installation
 
@@ -18,12 +18,14 @@ npm install warcraft-core
 |---------|---------|
 | `FeatureService` | Feature lifecycle (create, list, complete, metadata) |
 | `PlanService` | Plan CRUD, comment management, approval with SHA-256 hash verification |
-| `TaskService` | Task sync from plan, CRUD, dependency graph resolution |
+| `TaskService` | Task sync from plan, CRUD, dependency graph resolution with cycle detection |
 | `WorktreeService` | Git worktree creation, commit, merge, diff, conflict detection |
 | `ContextService` | Persistent context file management for features |
 | `ConfigService` | User config at `~/.config/opencode/opencode_warcraft.json` |
 | `AgentsMdService` | AGENTS.md generation and management |
 | `DockerSandboxService` | Docker-based sandbox for worker isolation |
+
+`ConfigService` manages runtime configuration including `verificationModel` and `workflowGatesMode` settings that control tool behavior in the plugin layer. See [opencode-warcraft docs](../opencode-warcraft/docs/WARCRAFT-TOOLS.md) for operational details.
 
 ### Beads Subsystem
 
@@ -36,13 +38,15 @@ Integration with `beads_rust` (`br` CLI) for canonical artifact tracking:
 | `BvTriageService` | Beads viewer health and triage |
 | `ArtifactSchemas` | Schema definitions for bead artifacts |
 
+For detailed architecture diagrams and component descriptions, see [BEADS.md](BEADS.md).
+
 ### State Stores
 
 Pluggable storage backends via Strategy pattern:
 
-- **Beads stores** (`beads-feature-store`, `beads-task-store`, `beads-plan-store`) — backed by `br` artifacts
-- **Filesystem stores** (`fs-feature-store`, `fs-task-store`, `fs-plan-store`) — backed by local JSON files
-- **Factory** (`createStores`) — selects backend based on `beadsMode`
+- **Beads stores** (`beads-feature-store`, `beads-task-store`, `beads-plan-store`): backed by `br` artifacts
+- **Filesystem stores** (`fs-feature-store`, `fs-task-store`, `fs-plan-store`): backed by local JSON files
+- **Factory** (`createStores`): selects backend based on `beadsMode`
 
 ## Usage
 

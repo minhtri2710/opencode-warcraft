@@ -23,6 +23,7 @@ export { ContextService } from './contextService.js';
 export type { SandboxConfig } from './dockerSandboxService.js';
 export { DockerSandboxService } from './dockerSandboxService.js';
 export { FeatureService } from './featureService.js';
+export * from './outcomes.js';
 export * from './planGates/index.js';
 export { PlanService } from './planService.js';
 export type { GitClient, GitClientFactory } from './ports/git-client.js';

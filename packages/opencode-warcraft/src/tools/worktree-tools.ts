@@ -5,6 +5,7 @@ import type { FeatureService, PlanService, TaskService, TaskStatusType, Worktree
 import type { BlockedResult } from '../types.js';
 import { toolError, toolSuccess } from '../types.js';
 import { calculatePayloadMeta, calculatePromptMeta, checkWarnings } from '../utils/prompt-observability.js';
+import { getVerificationCommandsForCwd } from '../utils/runtime-commands.js';
 import { DEFAULT_BUDGET, prepareTaskDispatch } from './task-dispatch.js';
 import { resolveFeatureInput, validateTaskInput } from './tool-input.js';
 
@@ -503,9 +504,10 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
 
         if (verify) {
           const execOpts = { cwd: process.cwd(), timeout: 300_000 };
+          const cmds = getVerificationCommandsForCwd(execOpts.cwd);
           try {
-            await execAsync('bun run build', execOpts);
-            await execAsync('bun run test', execOpts);
+            await execAsync(cmds.build, execOpts);
+            await execAsync(cmds.test, execOpts);
             return toolSuccess({
               ...mergeResult,
               verification: { passed: true },

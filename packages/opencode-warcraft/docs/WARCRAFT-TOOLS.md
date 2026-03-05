@@ -39,7 +39,7 @@
 ### Merge (1 tool)
 | Tool | Purpose |
 |------|---------|
-| `warcraft_merge` | Merge task branch (strategies: merge/squash/rebase) |
+| `warcraft_merge` | Merge task branch (strategies: merge/squash/rebase). Optional `verify` flag runs build+test post-merge. |
 
 ### Batch (1 tool)
 | Tool | Purpose |
@@ -65,6 +65,92 @@
 | Tool | Purpose |
 |------|---------|
 | `warcraft_skill` | Load registered Warcraft skills by ID |
+
+## Key Tool Parameters
+
+### warcraft_merge
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `task` | string | required | Task folder name to merge |
+| `strategy` | `merge` \| `squash` \| `rebase` | `merge` | Git merge strategy |
+| `feature` | string | (active) | Feature name |
+| `verify` | boolean | `false` | Run build and test commands after merge to verify integration |
+
+When `verify: true`, Warcraft runs the project's build and test commands after merge. The result includes `verification.passed` (boolean) and `verification.output` on failure.
+
+### warcraft_worktree_commit
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `task` | string | required | Task folder name |
+| `summary` | string | required | Summary of what was done |
+| `status` | `completed` \| `blocked` \| `failed` \| `partial` | `completed` | Task completion status |
+| `blocker` | object | (none) | Blocker info (reason, options, recommendation, context) |
+| `feature` | string | (active) | Feature name |
+
+**Gate behavior by configuration:**
+
+| `verificationModel` | `workflowGatesMode` | Behavior |
+|---------------------|---------------------|----------|
+| `tdd` | `enforce` | Blocks commit if build/test/lint evidence missing in summary. Returns `needs_verification`. |
+| `tdd` | `warn` | Proceeds with commit but includes `verificationNote` about missing gates. |
+| `best-effort` | (any) | Skips gate checks. Returns `verificationDeferred: true`, `deferredTo: "orchestrator"`. |
+
+### warcraft_batch_execute
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `mode` | `preview` \| `execute` | required | Preview shows runnable tasks; execute dispatches them |
+| `tasks` | string[] | (none) | Task folders to execute (required for execute mode) |
+| `feature` | string | (active) | Feature name |
+
+**Preview mode** returns: `parallelPolicy`, task summary counts, `runnable` list, `blocked` map, `inProgress` list, `nextAction`.
+
+**Execute mode** returns: `parallelPolicy`, `dispatched` (total/succeeded/failed counts), `taskToolCalls` (delegation payloads), `instructions` (parallel dispatch guidance), `failed` list.
+
+`parallelPolicy` reflects the effective `parallelExecution` config: `{ strategy, maxConcurrency }`.
+
+## Agent Tool Permissions
+
+Each agent has an explicit allowlist of Warcraft tools. Tools not in an agent's allowlist are not registered for that agent.
+
+| Tool | Khadgar | Mimiron | Saurfang | Mekkatorque | Brann | Algalon |
+|------|---------|---------|----------|-------------|-------|---------|
+| `warcraft_skill` | Yes | Yes | Yes | Yes | Yes | Yes |
+| `warcraft_feature_create` | Yes | Yes | Yes | No | No | No |
+| `warcraft_feature_complete` | Yes | No | Yes | No | No | No |
+| `warcraft_plan_write` | Yes | Yes | No | No | No | No |
+| `warcraft_plan_read` | Yes | Yes | Yes | Yes | Yes | Yes |
+| `warcraft_plan_approve` | Yes | No | Yes | No | No | No |
+| `warcraft_tasks_sync` | Yes | No | Yes | No | No | No |
+| `warcraft_task_create` | Yes | No | Yes | No | No | No |
+| `warcraft_task_update` | Yes | No | Yes | No | No | No |
+| `warcraft_worktree_create` | Yes | No | Yes | No | No | No |
+| `warcraft_worktree_commit` | Yes | No | No | Yes | No | No |
+| `warcraft_worktree_discard` | Yes | No | Yes | No | No | No |
+| `warcraft_merge` | Yes | No | Yes | No | No | No |
+| `warcraft_batch_execute` | Yes | No | Yes | No | No | No |
+| `warcraft_context_write` | Yes | Yes | Yes | Yes | Yes | Yes |
+| `warcraft_status` | Yes | Yes | Yes | No | Yes | Yes |
+| `warcraft_agents_md` | Yes | No | Yes | No | No | No |
+
+**Key patterns:**
+- **Khadgar** (hybrid): full access to all 17 tools
+- **Mimiron** (planner): planning + read-only tools (6 tools)
+- **Saurfang** (orchestrator): all except `worktree_commit` and `plan_write` (15 tools)
+- **Mekkatorque** (worker): minimal set, commit, read plan, write context, load skills (4 tools)
+- **Brann** (explorer) and **Algalon** (reviewer): read-only + context + skills (4 tools each)
+
+## Advanced Configuration
+
+These options control tool behavior at runtime. They are supported by `ConfigService` but are not yet declared in the JSON schema.
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `verificationModel` | `'tdd'` \| `'best-effort'` | `'tdd'` | Controls completion gate enforcement in `warcraft_worktree_commit` |
+| `workflowGatesMode` | `'enforce'` \| `'warn'` | `'warn'` | Strictness of workflow gates. Also settable via `WARCRAFT_WORKFLOW_GATES_MODE` env var |
+| `hook_cadence` | `Record<string, number>` | `1` per hook | Per-hook execution frequency. Safety-critical hooks always run every time |
 
 ## Workflow Guardrails
 

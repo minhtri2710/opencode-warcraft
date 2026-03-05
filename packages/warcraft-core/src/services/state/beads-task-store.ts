@@ -11,6 +11,7 @@ import type { TaskWithDeps } from '../taskDependencyGraph.js';
 import { computeRunnableAndBlocked } from '../taskDependencyGraph.js';
 import type { BackgroundPatchFields, RunnableTask, RunnableTasksResult } from '../taskService.js';
 import { TASK_STATUS_SCHEMA_VERSION } from '../taskService.js';
+import { TransitionJournal } from './transition-journal.js';
 import type { TaskArtifactKind, TaskSaveOptions, TaskStore } from './types.js';
 
 // ============================================================================
@@ -31,6 +32,8 @@ export interface TransitionEvent {
   timestamp: string;
   /** Optional summary/reason for transition */
   summary?: string;
+  /** Journal sequence number for tracking comment write acknowledgment */
+  journalSeq?: number;
 }
 
 /**
@@ -56,11 +59,14 @@ export class BeadsTaskStore implements TaskStore {
 
   private pendingTransitions: TransitionEvent[] = [];
   private transitionBatchMode = false;
+  private readonly journal: TransitionJournal;
 
   constructor(
     private readonly projectRoot: string,
     private readonly repository: BeadsRepository,
-  ) {}
+  ) {
+    this.journal = new TransitionJournal(projectRoot);
+  }
 
   beginTransitionBatch(): void {
     this.transitionBatchMode = true;
@@ -337,10 +343,18 @@ export class BeadsTaskStore implements TaskStore {
     }
 
     if (status.beadId) {
-      // Performance path: encode directly without flush
       const artifact = taskStateFromTaskStatus({ ...updated, folder } as TaskStatus);
       const encoded = encodeTaskState(artifact);
       this.repository.getGateway().upsertArtifact(status.beadId, 'task_state', encoded);
+
+      // Flush to ensure parity with save() - background patches must be persisted
+      const flushResult = this.repository.flushArtifacts();
+      if (flushResult.success === false) {
+        throwIfInitFailure(
+          flushResult.error,
+          `[warcraft] Failed to flush artifacts after background patch for '${status.beadId}'`,
+        );
+      }
     }
 
     // Invalidate cache entry for the patched task
@@ -368,7 +382,10 @@ export class BeadsTaskStore implements TaskStore {
     const upsertResult = this.repository.upsertTaskArtifact(status.beadId, kind, content);
     if (upsertResult.success === false) {
       throwIfInitFailure(upsertResult.error, `[warcraft] Failed to write '${kind}' artifact for '${status.beadId}'`);
-      throw new Error(`Failed to write '${kind}' artifact for '${status.beadId}': ${upsertResult.error.message}`);
+      console.warn(
+        `[warcraft] Failed to write '${kind}' artifact for '${status.beadId}': ${upsertResult.error.message}`,
+      );
+      return folder;
     }
 
     const flushResult = this.repository.flushArtifacts();
@@ -695,13 +712,18 @@ export class BeadsTaskStore implements TaskStore {
    * Wrapped in try/catch to ensure audit failures never block status changes.
    */
   private appendTransitionComment(beadId: string, from: string, to: string, summary?: string): void {
+    const timestamp = new Date().toISOString();
     const transition: TransitionEvent = {
       beadId,
       from,
       to,
-      timestamp: new Date().toISOString(),
+      timestamp,
       summary,
     };
+
+    // Write to local journal first (fast, survives bead flush failures)
+    const journalEntry = this.journal.append({ beadId, from, to, timestamp, summary });
+    transition.journalSeq = journalEntry.seq;
 
     this.pendingTransitions.push(transition);
     if (!this.transitionBatchMode) {
@@ -717,6 +739,10 @@ export class BeadsTaskStore implements TaskStore {
     try {
       const commentBody = `[warcraft:transition] ${transition.from} → ${transition.to} | ${transition.timestamp} | ${transition.summary ?? ''}`;
       this.repository.appendComment(transition.beadId, commentBody.trim());
+      // Mark the journal entry as acknowledged after successful comment write
+      if (transition.journalSeq != null) {
+        this.journal.markCommentWritten(transition.journalSeq);
+      }
     } catch (error) {
       // Audit failures must never block status changes
       const reason = error instanceof Error ? error.message : String(error);

@@ -103,16 +103,17 @@ export class TaskService {
       this.store.beginTransitionBatch!();
     }
 
+    const createdFolders: string[] = [];
+
     try {
       // Apply removals
       for (const folder of delta.removed) {
         this.store.delete(featureName, folder);
       }
 
-      // Apply creations
+      // Apply creations with rollback tracking
       for (const planTask of delta.planTasks) {
         if (!delta.existingByFolder.has(planTask.folder)) {
-          // Resolve dependencies: numbers -> folder names
           const dependsOn = this.resolveDependencies(planTask, delta.planTasks);
 
           const status: TaskStatus = {
@@ -122,10 +123,9 @@ export class TaskService {
             dependsOn,
           };
 
-          // Default priority for plan tasks is 3 (medium)
           this.store.createTask(featureName, planTask.folder, planTask.name, status, 3);
+          createdFolders.push(planTask.folder);
 
-          // Build and store spec
           const specData = this.buildSpecData({
             featureName,
             task: planTask,
@@ -140,10 +140,31 @@ export class TaskService {
 
       this.store.flush();
 
-      // Sync bead-level dependency edges if the store supports it (beads mode)
+      // Sync bead-level dependency edges (non-fatal: degraded outcome on failure)
       if (this.store.syncDependencies) {
-        this.store.syncDependencies(featureName);
+        try {
+          this.store.syncDependencies(featureName);
+        } catch (depError) {
+          const reason = depError instanceof Error ? depError.message : String(depError);
+          console.warn(`[warcraft] Dependency sync failed after task sync for '${featureName}' (degraded): ${reason}`);
+        }
       }
+    } catch (error) {
+      // Attempt rollback of partially created tasks
+      for (const folder of createdFolders) {
+        try {
+          this.store.delete(featureName, folder);
+        } catch (rollbackError) {
+          const reason = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
+          console.warn(`[warcraft] Rollback failed for '${folder}' during sync recovery: ${reason}`);
+        }
+      }
+
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `Task sync failed for '${featureName}' after creating ${createdFolders.length} of ${delta.created.length} tasks. ` +
+          `Rolled back ${createdFolders.length} created tasks. Original error: ${reason}`,
+      );
     } finally {
       if (supportsTransitionBatch) {
         this.store.endTransitionBatch!();

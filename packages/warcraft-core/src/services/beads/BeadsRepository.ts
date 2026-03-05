@@ -221,7 +221,6 @@ export class BeadsRepository {
     if (this.syncPolicy.autoFlush) {
       const result = this.flushArtifacts();
       if (result.success === false) {
-        // Log but don't fail - data is persisted, just not flushed yet
         console.warn(`[BeadsRepository] Auto-flush failed: ${result.error.message}`);
       }
     }

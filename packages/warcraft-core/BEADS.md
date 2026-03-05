@@ -62,11 +62,11 @@ The `beadsMode` setting (`'on'` | `'off'`) determines which storage backend is u
 | Aspect | **On** (default) | **Off** |
 |--------|-----------------|---------|
 | Storage | Bead artifacts via `br` CLI | JSON files on local filesystem |
-| Feature state | `feature_state` artifact in epic bead | `.warcraft/features/<name>/feature.json` |
-| Task state | `task_state` artifact in task bead | `.warcraft/features/<name>/tasks/<folder>/status.json` |
-| Plan content | Bead description on epic | `.warcraft/features/<name>/plan.md` |
-| Plan approval | `plan_approval` artifact | `.warcraft/features/<name>/plan-approved.json` |
-| Comments | Bead comments | `.warcraft/features/<name>/plan-comments.json` |
+| Feature state | `feature_state` artifact in epic bead | `docs/<name>/feature.json` |
+| Task state | `task_state` artifact in task bead | `docs/<name>/tasks/<folder>/status.json` |
+| Plan content | Bead description on epic | `docs/<name>/plan.md` |
+| Plan approval | `plan_approval` artifact | `docs/<name>/feature.json` (`planApprovalHash` field) |
+| Comments | Bead comments | `docs/<name>/feature.json` (`planComments` field) |
 | Sync lifecycle | Import → operate → flush | Direct filesystem reads/writes |
 | `br` dependency | **Required** | Not used |
 
@@ -148,17 +148,17 @@ stateDiagram-v2
 .beads/                          # Bead database (beadsMode: on)
   beads.db                       # SQLite database managed by br
 
-.warcraft/                       # Warcraft workspace (beadsMode: off)
-  features/
-    <feature-name>/
-      feature.json               # Feature state
-      plan.md                    # Plan content
-      plan-approved.json         # Plan approval record
-      plan-comments.json         # Plan comments
-      tasks/
-        <task-folder>/
-          status.json            # Task state
-          spec.md                # Task specification
+docs/                              # Warcraft workspace (beadsMode: off)
+  <feature-name>/
+    feature.json                   # Feature state + plan approval + comments
+    plan.md                        # Plan content
+    context/                       # Persistent context files
+    tasks/
+      <task-folder>/
+        status.json               # Task state
+        spec.md                   # Task specification
+        worker-prompt.md          # Full worker prompt snapshot
+        report.md                 # Execution summary
 ```
 
 ## Store Factory

@@ -98,7 +98,9 @@ export function createWarcraftContainer(directory: string, configService: Config
     const listFeaturesSafe = (): string[] => {
       try {
         return featureService.list();
-      } catch {
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        console.warn(`[warcraft] Failed to list features (degraded: resolving as empty): ${reason}`);
         return [];
       }
     };
@@ -128,8 +130,9 @@ export function createWarcraftContainer(directory: string, configService: Config
         if (currentSession !== ctx.sessionID) {
           featureService.setSession(feature, ctx.sessionID);
         }
-      } catch (_error) {
-        // Ignore if feature not found yet
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        console.warn(`[warcraft] Failed to capture session for '${feature}' (best-effort): ${reason}`);
       }
     }
   };
@@ -147,8 +150,9 @@ export function createWarcraftContainer(directory: string, configService: Config
       if (exists) {
         featureService.patchMetadata(feature, patch);
       }
-    } catch (_error) {
-      // Ignore
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      console.warn(`[warcraft] Failed to update feature metadata for '${feature}' (best-effort): ${reason}`);
     }
   };
 
@@ -166,6 +170,7 @@ The human has blocked this feature. Wait for them to unblock it.
 To unblock: Remove ${blockedPath}`;
       return { blocked: true, reason, message, blockedPath };
     } catch {
+      // BLOCKED file does not exist — feature is not blocked
       return { blocked: false };
     }
   };

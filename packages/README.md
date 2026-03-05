@@ -14,6 +14,11 @@ Use this split when making changes:
 
 For workflow details, configuration options (beadsMode, agentMode, priority, plan approval, parallel execution), and tool reference, see the root [AGENTS.md](../AGENTS.md).
 
+For detailed tool behavior and parameters, see:
+- [WARCRAFT-TOOLS.md](opencode-warcraft/docs/WARCRAFT-TOOLS.md): Tool reference with parameters and gate behavior
+- [DATA-MODEL.md](opencode-warcraft/docs/DATA-MODEL.md): Artifact layout and data schemas
+- [BEADS.md](warcraft-core/BEADS.md): Beads subsystem architecture and storage backends
+
 ## Workflow
 
 1. Identify the package boundary (`core` logic vs plugin runtime).

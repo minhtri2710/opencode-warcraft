@@ -4,6 +4,7 @@ import { createOpencodeClient } from '@opencode-ai/sdk';
 import * as fs from 'fs';
 import * as path from 'path';
 import plugin from '../index';
+import { ensureFeatureExists } from './helpers/feature-setup.js';
 import {
   cleanupTempProjectRoot,
   createTempProjectRoot,
@@ -139,11 +140,7 @@ Test BV triage service integration.
 ### 1. First Task
 Do it
 `;
-    try {
-      await hooks.tool!.warcraft_feature_create.execute({ name: 'bv-triage-feature' }, toolContext);
-    } catch (_e) {
-      // Ignore if exists
-    }
+    await ensureFeatureExists(hooks, 'bv-triage-feature', toolContext);
     process.env.WARCRAFT_FEATURE = 'bv-triage-feature';
     await hooks.tool!.warcraft_plan_write.execute({ content: plan, feature: 'bv-triage-feature' }, toolContext);
     await hooks.tool!.warcraft_plan_approve.execute({ feature: 'bv-triage-feature' }, toolContext);
@@ -214,9 +211,7 @@ Create the main implementation file.
 
 Test the implementation thoroughly.
 `;
-    try {
-      await hooks.tool!.warcraft_feature_create.execute({ name: 'spec-structure-feature' }, toolContext);
-    } catch (_e) {}
+    await ensureFeatureExists(hooks, 'spec-structure-feature', toolContext);
     process.env.WARCRAFT_FEATURE = 'spec-structure-feature';
     await hooks.tool!.warcraft_plan_write.execute({ content: plan, feature: 'spec-structure-feature' }, toolContext);
     await hooks.tool!.warcraft_plan_approve.execute({ feature: 'spec-structure-feature' }, toolContext);
@@ -246,22 +241,24 @@ Test the implementation thoroughly.
     expect(execStart.taskSpec).toContain('greenfield');
   });
 
-  runIfHostReady('spec formatting handles dependencies correctly', async () => {
-    const ctx: PluginInput = {
-      directory: testRoot,
-      worktree: testRoot,
-      serverUrl: new URL('http://localhost:1'),
-      project: createProject(testRoot),
-      client: OPENCODE_CLIENT,
-      $: createStubShell(),
-    };
+  runIfHostReady(
+    'spec formatting handles dependencies correctly',
+    async () => {
+      const ctx: PluginInput = {
+        directory: testRoot,
+        worktree: testRoot,
+        serverUrl: new URL('http://localhost:1'),
+        project: createProject(testRoot),
+        client: OPENCODE_CLIENT,
+        $: createStubShell(),
+      };
 
-    const hooks = await plugin(ctx);
-    const toolContext = createToolContext('sess_deps_formatting');
+      const hooks = await plugin(ctx);
+      const toolContext = createToolContext('sess_deps_formatting');
 
-    await hooks.tool!.warcraft_feature_create.execute({ name: 'deps-formatting-feature' }, toolContext);
+      await hooks.tool!.warcraft_feature_create.execute({ name: 'deps-formatting-feature' }, toolContext);
 
-    const plan = `# Dependencies Formatting Feature
+      const plan = `# Dependencies Formatting Feature
 
 ## Discovery
 
@@ -294,74 +291,76 @@ Create base implementation.
 
 Modify the implementation.
 `;
-    try {
-      await hooks.tool!.warcraft_feature_create.execute({ name: 'deps-formatting-feature' }, toolContext);
-    } catch (_e) {}
-    process.env.WARCRAFT_FEATURE = 'deps-formatting-feature';
-    await hooks.tool!.warcraft_plan_write.execute({ content: plan, feature: 'deps-formatting-feature' }, toolContext);
-    await hooks.tool!.warcraft_plan_approve.execute({ feature: 'deps-formatting-feature' }, toolContext);
-    await hooks.tool!.warcraft_tasks_sync.execute({ feature: 'deps-formatting-feature' }, toolContext);
+      await ensureFeatureExists(hooks, 'deps-formatting-feature', toolContext);
+      process.env.WARCRAFT_FEATURE = 'deps-formatting-feature';
+      await hooks.tool!.warcraft_plan_write.execute({ content: plan, feature: 'deps-formatting-feature' }, toolContext);
+      await hooks.tool!.warcraft_plan_approve.execute({ feature: 'deps-formatting-feature' }, toolContext);
+      await hooks.tool!.warcraft_tasks_sync.execute({ feature: 'deps-formatting-feature' }, toolContext);
 
-    // Complete task 1 first since task 2 depends on it
-    await hooks.tool!.warcraft_worktree_create.execute(
-      { feature: 'deps-formatting-feature', task: '01-first-task' },
-      toolContext,
-    );
-    const progressPath = path.join(
-      testRoot,
-      '.beads/artifacts/.worktrees/deps-formatting-feature/01-first-task/progress.txt',
-    );
-    fs.mkdirSync(path.dirname(progressPath), { recursive: true });
-    fs.writeFileSync(progressPath, 'complete task 1\n', 'utf-8');
-    await hooks.tool!.warcraft_task_update.execute(
-      {
-        feature: 'deps-formatting-feature',
-        task: '01-first-task',
-        status: 'done',
-        summary:
-          'First task completed successfully.\n\n- build: bun run build (exit 0)\n- test: bun run test (exit 0)\n- lint: bun run lint (exit 0)',
-      },
-      toolContext,
-    );
+      // Complete task 1 first since task 2 depends on it
+      await hooks.tool!.warcraft_worktree_create.execute(
+        { feature: 'deps-formatting-feature', task: '01-first-task' },
+        toolContext,
+      );
+      const progressPath = path.join(
+        testRoot,
+        '.beads/artifacts/.worktrees/deps-formatting-feature/01-first-task/progress.txt',
+      );
+      fs.mkdirSync(path.dirname(progressPath), { recursive: true });
+      fs.writeFileSync(progressPath, 'complete task 1\n', 'utf-8');
+      await hooks.tool!.warcraft_task_update.execute(
+        {
+          feature: 'deps-formatting-feature',
+          task: '01-first-task',
+          status: 'done',
+          summary:
+            'First task completed successfully.\n\n- build: bun run build (exit 0)\n- test: bun run test (exit 0)\n- lint: bun run lint (exit 0)',
+        },
+        toolContext,
+      );
 
-    const execStartOutput = await hooks.tool!.warcraft_worktree_create.execute(
-      { feature: 'deps-formatting-feature', task: '02-second-task' },
-      toolContext,
-    );
+      const execStartOutput = await hooks.tool!.warcraft_worktree_create.execute(
+        { feature: 'deps-formatting-feature', task: '02-second-task' },
+        toolContext,
+      );
 
-    const execStart = parseToolResponse<{
-      taskSpec?: string;
-      error?: string;
-    }>(execStartOutput as string);
+      const execStart = parseToolResponse<{
+        taskSpec?: string;
+        error?: string;
+      }>(execStartOutput as string);
 
-    // Verify no error was returned
-    expect(execStart.error).toBeUndefined();
-    expect(execStart.taskSpec).toBeDefined();
-    expect(execStart.taskSpec).toContain('## Dependencies');
-    expect(execStart.taskSpec).toContain('**1. first-task**');
-    expect(execStart.taskSpec).toContain('01-first-task');
+      // Verify no error was returned
+      expect(execStart.error).toBeUndefined();
+      expect(execStart.taskSpec).toBeDefined();
+      expect(execStart.taskSpec).toContain('## Dependencies');
+      expect(execStart.taskSpec).toContain('**1. first-task**');
+      expect(execStart.taskSpec).toContain('01-first-task');
 
-    // Task 2 depends on task 1, so should show modification type
-    expect(execStart.taskSpec).toContain('## Task Type');
-    expect(execStart.taskSpec).toContain('modification');
-  });
+      // Task 2 depends on task 1, so should show modification type
+      expect(execStart.taskSpec).toContain('## Task Type');
+      expect(execStart.taskSpec).toContain('modification');
+    },
+    15_000,
+  );
 
-  runIfHostReady('completed tasks are included in spec context', async () => {
-    const ctx: PluginInput = {
-      directory: testRoot,
-      worktree: testRoot,
-      serverUrl: new URL('http://localhost:1'),
-      project: createProject(testRoot),
-      client: OPENCODE_CLIENT,
-      $: createStubShell(),
-    };
+  runIfHostReady(
+    'completed tasks are included in spec context',
+    async () => {
+      const ctx: PluginInput = {
+        directory: testRoot,
+        worktree: testRoot,
+        serverUrl: new URL('http://localhost:1'),
+        project: createProject(testRoot),
+        client: OPENCODE_CLIENT,
+        $: createStubShell(),
+      };
 
-    const hooks = await plugin(ctx);
-    const toolContext = createToolContext('sess_completed_context');
+      const hooks = await plugin(ctx);
+      const toolContext = createToolContext('sess_completed_context');
 
-    await hooks.tool!.warcraft_feature_create.execute({ name: 'completed-context-feature' }, toolContext);
+      await hooks.tool!.warcraft_feature_create.execute({ name: 'completed-context-feature' }, toolContext);
 
-    const plan = `# Completed Context Feature
+      const plan = `# Completed Context Feature
 
 ## Discovery
 
@@ -394,54 +393,57 @@ Setup the project.
 
 Build on top of setup.
 `;
-    try {
-      await hooks.tool!.warcraft_feature_create.execute({ name: 'completed-context-feature' }, toolContext);
-    } catch (_e) {}
-    process.env.WARCRAFT_FEATURE = 'completed-context-feature';
-    await hooks.tool!.warcraft_plan_write.execute({ content: plan, feature: 'completed-context-feature' }, toolContext);
-    await hooks.tool!.warcraft_plan_approve.execute({ feature: 'completed-context-feature' }, toolContext);
-    await hooks.tool!.warcraft_tasks_sync.execute({ feature: 'completed-context-feature' }, toolContext);
+      await ensureFeatureExists(hooks, 'completed-context-feature', toolContext);
+      process.env.WARCRAFT_FEATURE = 'completed-context-feature';
+      await hooks.tool!.warcraft_plan_write.execute(
+        { content: plan, feature: 'completed-context-feature' },
+        toolContext,
+      );
+      await hooks.tool!.warcraft_plan_approve.execute({ feature: 'completed-context-feature' }, toolContext);
+      await hooks.tool!.warcraft_tasks_sync.execute({ feature: 'completed-context-feature' }, toolContext);
 
-    // Mark first task as done
-    await hooks.tool!.warcraft_worktree_create.execute(
-      { feature: 'completed-context-feature', task: '01-setup-task' },
-      toolContext,
-    );
-    const progressPath = path.join(
-      testRoot,
-      '.beads/artifacts/.worktrees/completed-context-feature/01-setup-task/progress.txt',
-    );
-    fs.mkdirSync(path.dirname(progressPath), { recursive: true });
-    fs.writeFileSync(progressPath, 'complete setup\n', 'utf-8');
+      // Mark first task as done
+      await hooks.tool!.warcraft_worktree_create.execute(
+        { feature: 'completed-context-feature', task: '01-setup-task' },
+        toolContext,
+      );
+      const progressPath = path.join(
+        testRoot,
+        '.beads/artifacts/.worktrees/completed-context-feature/01-setup-task/progress.txt',
+      );
+      fs.mkdirSync(path.dirname(progressPath), { recursive: true });
+      fs.writeFileSync(progressPath, 'complete setup\n', 'utf-8');
 
-    await hooks.tool!.warcraft_task_update.execute(
-      {
-        feature: 'completed-context-feature',
-        task: '01-setup-task',
-        status: 'done',
-        summary:
-          'Setup completed successfully with all dependencies installed.\n\n- build: bun run build (exit 0)\n- test: bun run test (exit 0)\n- lint: bun run lint (exit 0)',
-      },
-      toolContext,
-    );
+      await hooks.tool!.warcraft_task_update.execute(
+        {
+          feature: 'completed-context-feature',
+          task: '01-setup-task',
+          status: 'done',
+          summary:
+            'Setup completed successfully with all dependencies installed.\n\n- build: bun run build (exit 0)\n- test: bun run test (exit 0)\n- lint: bun run lint (exit 0)',
+        },
+        toolContext,
+      );
 
-    const execStartOutput = await hooks.tool!.warcraft_worktree_create.execute(
-      { feature: 'completed-context-feature', task: '02-build-task' },
-      toolContext,
-    );
+      const execStartOutput = await hooks.tool!.warcraft_worktree_create.execute(
+        { feature: 'completed-context-feature', task: '02-build-task' },
+        toolContext,
+      );
 
-    const execStart = parseToolResponse<{
-      taskSpec?: string;
-      error?: string;
-    }>(execStartOutput as string);
+      const execStart = parseToolResponse<{
+        taskSpec?: string;
+        error?: string;
+      }>(execStartOutput as string);
 
-    // Verify no error was returned
-    expect(execStart.error).toBeUndefined();
+      // Verify no error was returned
+      expect(execStart.error).toBeUndefined();
 
-    // Verify completed tasks section exists with the summary
-    expect(execStart.taskSpec).toBeDefined();
-    expect(execStart.taskSpec).toContain('## Completed Tasks');
-    expect(execStart.taskSpec).toContain('01-setup-task');
-    expect(execStart.taskSpec).toContain('Setup completed successfully');
-  });
+      // Verify completed tasks section exists with the summary
+      expect(execStart.taskSpec).toBeDefined();
+      expect(execStart.taskSpec).toContain('## Completed Tasks');
+      expect(execStart.taskSpec).toContain('01-setup-task');
+      expect(execStart.taskSpec).toContain('Setup completed successfully');
+    },
+    15_000,
+  );
 });

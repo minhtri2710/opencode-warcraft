@@ -5,6 +5,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import plugin from '../index';
 import { BUILTIN_SKILLS } from '../skills/registry.generated.js';
+import { ensureFeatureExists } from './helpers/feature-setup.js';
 import {
   cleanupTempProjectRoot,
   createTempProjectRoot,
@@ -176,17 +177,7 @@ Test
 ### 1. First Task
 Do it
 `;
-    try {
-      await hooks.tool!.warcraft_feature_create.execute({ name: 'smoke-feature' }, toolContext);
-    } catch (_e) {
-      // Ignore if exists
-    }
-    // Re-create it if it doesn't exist, we don't care
-    try {
-      await hooks.tool!.warcraft_feature_create.execute({ name: 'smoke-feature' }, toolContext);
-    } catch (_e) {
-      // Ignore if exists
-    }
+    await ensureFeatureExists(hooks, 'smoke-feature', toolContext);
     process.env.WARCRAFT_FEATURE = 'smoke-feature';
     const planOutput = await hooks.tool!.warcraft_plan_write.execute(
       { content: plan, feature: 'smoke-feature' },
@@ -310,21 +301,11 @@ Test
 ### 1. First Task
 Do it
 `;
-    try {
-      await hooks.tool!.warcraft_feature_create.execute({ name: 'task-mode-feature' }, toolContext);
-    } catch (_e) {
-      // Ignore if exists
-    }
+    await ensureFeatureExists(hooks, 'task-mode-feature', toolContext);
+    process.env.WARCRAFT_FEATURE = 'task-mode-feature';
     await hooks.tool!.warcraft_plan_write.execute({ content: plan, feature: 'task-mode-feature' }, toolContext);
     await hooks.tool!.warcraft_plan_approve.execute({ feature: 'task-mode-feature' }, toolContext);
     await hooks.tool!.warcraft_tasks_sync.execute({ feature: 'task-mode-feature' }, toolContext);
-
-    try {
-      await hooks.tool!.warcraft_feature_create.execute({ name: 'task-mode-feature' }, toolContext);
-    } catch (_e) {
-      // Ignore if exists
-    }
-    process.env.WARCRAFT_FEATURE = 'task-mode-feature';
     const execStartOutput = await hooks.tool!.warcraft_worktree_create.execute(
       { feature: 'task-mode-feature', task: '01-first-task' },
       toolContext,
@@ -448,11 +429,7 @@ Do it later
     await hooks.tool!.warcraft_plan_approve.execute({ feature: 'dep-block-feature' }, toolContext);
     await hooks.tool!.warcraft_tasks_sync.execute({ feature: 'dep-block-feature' }, toolContext);
 
-    try {
-      await hooks.tool!.warcraft_feature_create.execute({ name: 'dep-block-feature' }, toolContext);
-    } catch (_e) {
-      // Ignore if exists
-    }
+    await ensureFeatureExists(hooks, 'dep-block-feature', toolContext);
     process.env.WARCRAFT_FEATURE = 'dep-block-feature';
     const execStartOutput = await hooks.tool!.warcraft_worktree_create.execute(
       { feature: 'dep-block-feature', task: '02-second-task' },
@@ -541,11 +518,7 @@ A: Yes, this integration test validates task prompt mode functionality. Ensures 
 ### 1. First Task
 Do it
 `;
-    try {
-      await hooks.tool!.warcraft_feature_create.execute({ name: 'prompt-mode-feature' }, toolContext);
-    } catch (_e) {
-      // Ignore if exists
-    }
+    await ensureFeatureExists(hooks, 'prompt-mode-feature', toolContext);
     process.env.WARCRAFT_FEATURE = 'prompt-mode-feature';
     await hooks.tool!.warcraft_plan_write.execute({ content: plan, feature: 'prompt-mode-feature' }, toolContext);
     await hooks.tool!.warcraft_plan_approve.execute({ feature: 'prompt-mode-feature' }, toolContext);
@@ -615,11 +588,7 @@ Do gamma work (depends on alpha and beta)
       await hooks.tool!.warcraft_tasks_sync.execute({ feature: 'batch-feature' }, toolContext);
 
       // Preview mode should show tasks 1 and 2 as runnable, 3 as blocked
-      try {
-        await hooks.tool!.warcraft_feature_create.execute({ name: 'batch-feature' }, toolContext);
-      } catch (_e) {
-        // Ignore if exists
-      }
+      await ensureFeatureExists(hooks, 'batch-feature', toolContext);
       process.env.WARCRAFT_FEATURE = 'batch-feature';
       const previewOutput = await hooks.tool!.warcraft_batch_execute.execute(
         { mode: 'preview', feature: 'batch-feature' },

@@ -96,6 +96,8 @@ Typical fields:
 - `failed`
 - `partial`
 
+`partial` indicates a task that committed changes but did not fully complete its scope. The orchestrator may re-dispatch or split the remaining work.
+
 ### Feature status values
 
 - `planning`
@@ -108,15 +110,21 @@ Typical fields:
 - `dependsOn` uses task folder names (`01-setup`, `02-core`, ...).
 - Only dependency status `done` unblocks downstream tasks.
 - If `dependsOn` is omitted, dependency checks use implicit sequential ordering by numeric prefix (`N` depends on `N-1`).
+- `warcraft_tasks_sync` validates the dependency graph at sync time. Cycles are rejected with an error listing the involved tasks.
+- Dependencies are validated again at dispatch time (`warcraft_worktree_create`, `warcraft_batch_execute`) to ensure no task starts before its dependencies are `done`.
 
 ## `warcraft_status` Output
 
-`warcraft_status` returns a JSON snapshot with task readiness fields:
+`warcraft_status` returns a JSON snapshot:
 
 ```
-tasks.list[]      # task metadata including status, summary, dependsOn
-tasks.runnable[]  # task folders ready to start
-tasks.blockedBy   # map: task folder -> unmet dependency folders
+feature            # feature name, status, workflow metadata
+plan               # plan approval state (approved, hash)
+tasks.list[]       # task metadata including status, summary, dependsOn
+tasks.runnable[]   # task folders ready to start (dependencies met, not in progress)
+tasks.blockedBy    # map: task folder -> unmet dependency folders
+tasks.summary      # counts: total, done, inProgress, pending, blocked
+triage             # (when bv available) blocker analysis and priority hints
 ```
 
 ## Prompt Files

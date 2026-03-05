@@ -50,6 +50,8 @@ From the repository root:
 bun run build          # Build all workspace packages
 bun run test           # Run all package tests
 bun run lint           # Type-check all workspace packages
+bun run format         # Format all files
+bun run format:check   # Check formatting without writing
 bun run release:check  # Install, build, test, and lint
 ```
 
@@ -143,6 +145,16 @@ Features and tasks support priority `1..5`:
 
 In beads mode, Warcraft maps these to `br` priority `0..4` before CLI operations.
 
+### Advanced Runtime Options
+
+These options are supported at runtime but not yet reflected in the JSON schema:
+
+- `verificationModel`: `"tdd"` (default) or `"best-effort"` -- controls completion gate enforcement
+- `workflowGatesMode`: `"enforce"` or `"warn"` (default) -- plan approval and commit gate strictness (also settable via `WARCRAFT_WORKFLOW_GATES_MODE` env var)
+- `hook_cadence`: per-hook execution frequency (integer, minimum 1; safety-critical hooks always run every time)
+
+For detailed behavior, see [WARCRAFT-TOOLS.md](packages/opencode-warcraft/docs/WARCRAFT-TOOLS.md).
+
 ## Worktree Troubleshooting
 
 If a task worktree fails with missing modules, either install dependencies in the worktree or run tests from repo root:
@@ -161,6 +173,9 @@ bun run test --filter warcraft-core
 - [packages/warcraft-core/AGENTS.md](packages/warcraft-core/AGENTS.md)
 - [packages/opencode-warcraft/AGENTS.md](packages/opencode-warcraft/AGENTS.md)
 - [packages/opencode-warcraft/docs](packages/opencode-warcraft/docs)
+- [WARCRAFT-TOOLS.md](packages/opencode-warcraft/docs/WARCRAFT-TOOLS.md) -- Tool behavior reference
+- [DATA-MODEL.md](packages/opencode-warcraft/docs/DATA-MODEL.md) -- Data model and artifact layout
+- [BEADS.md](packages/warcraft-core/BEADS.md) -- Beads subsystem architecture
 
 ## License
 

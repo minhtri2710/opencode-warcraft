@@ -3,16 +3,11 @@
 [![npm version](https://img.shields.io/npm/v/opencode-warcraft)](https://www.npmjs.com/package/opencode-warcraft)
 [![License: MIT with Commons Clause](https://img.shields.io/badge/License-MIT%20with%20Commons%20Clause-blue.svg)](../../LICENSE)
 
-**From Vibe Coding to Warcraft Coding** — The OpenCode plugin that brings structure to AI-assisted development.
+An OpenCode plugin for structured, plan-first AI-assisted development.
 
-## Why Warcraft?
+## Overview
 
-Stop losing context. Stop repeating decisions. Start shipping with confidence.
-
-```
-Vibe: "Just make it work"
-Warcraft: Plan → Review → Approve → Execute → Ship
-```
+Warcraft enforces a plan-first workflow for AI coding assistants: write a plan, get human approval, then execute in isolated git worktrees with full audit trails.
 
 ## Installation
 
@@ -32,12 +27,12 @@ This enables tools like `grep_app_searchGitHub`, `context7_query-docs`, and `web
 
 ## The Workflow
 
-1. **Create Feature** — `warcraft_feature_create("dark-mode")`
-2. **Write Plan** — AI generates structured plan
-3. **Review** — You review `plan.md`, add comments in `plan.md`
-4. **Approve** — `warcraft_plan_approve()`
-5. **Execute** — Tasks run in isolated git worktrees
-6. **Ship** — Clean commits, full audit trail
+1. **Create Feature**: `warcraft_feature_create("dark-mode")`
+2. **Write Plan**: AI generates structured plan
+3. **Review**: You review `plan.md`, add comments in `plan.md`
+4. **Approve**: `warcraft_plan_approve()`
+5. **Execute**: Tasks run in isolated git worktrees
+6. **Ship**: Clean commits, full audit trail
 
 ### Workflow guardrails
 
@@ -127,6 +122,9 @@ This separation allows:
 |------|-------------|
 | `warcraft_skill` | Load registered Warcraft skills by ID |
 | `warcraft_agents_md` | Read/append/replace AGENTS.md guidance |
+
+Warcraft tools use per-agent allowlists. Not every agent has access to every tool. Khadgar has access to all 17 tools; Mekkatorque can only commit, read plans, write context, and load skills. See [WARCRAFT-TOOLS.md](docs/WARCRAFT-TOOLS.md) for the full permission matrix.
+
 ## Prompt Budgeting & Observability
 
 Warcraft automatically bounds worker prompt sizes to prevent context overflow and tool output truncation.
@@ -189,7 +187,7 @@ Use `beadsMode` to control integration with the **beads_rust (`br`)** CLI. Accep
 }
 ```
 
-**`beadsMode: "on"` (default)** — Beads-native state:
+**`beadsMode: "on"` (default)**: Beads-native state:
 - Beads are the **canonical source of truth** for feature and task state
 - Local cache is still maintained under `.beads/artifacts/<feature>/` while bead artifacts remain canonical
 - Feature lifecycle and approval state are sourced from bead epics/artifacts via `br` CLI
@@ -198,7 +196,7 @@ Use `beadsMode` to control integration with the **beads_rust (`br`)** CLI. Accep
 - Warcraft tools run `br sync --import-only` at start and `br sync --flush-only` at end
 - Manual git operations required for `.beads/` directory
 
-**`beadsMode: "off"`** — Legacy local artifacts:
+**`beadsMode: "off"`**: Legacy local artifacts:
 - Local `docs/<feature>/` files remain authoritative
 - Feature creation initializes `docs/<feature>/feature.json`, `docs/<feature>/context/`, and `docs/<feature>/tasks/`; task `status.json` files are created when tasks are generated
 - Plan approval is persisted in `docs/<feature>/feature.json` (`status`, `approvedAt`, `planApprovalHash`)
@@ -238,8 +236,8 @@ Features and tasks require a numeric **priority** (1–5) that determines urgenc
 | 5 | Trivial | Documentation tweaks, minor refactors |
 
 **API usage**:
-- `warcraft_feature_create(name, ticket?, priority?)` — optional priority parameter (default: 3)
-- `warcraft_task_create(featureName, taskName, order?, priority?)` — optional priority parameter (default: 3)
+- `warcraft_feature_create(name, ticket?, priority?)`: optional priority parameter (default: 3)
+- `warcraft_task_create(featureName, taskName, order?, priority?)`: optional priority parameter (default: 3)
 
 **Requirements**:
 - Must be an integer between 1 and 5 (inclusive)
@@ -270,6 +268,51 @@ Control how batch task dispatch works:
 
 - `strategy`: `"unbounded"` (default) dispatches all tasks at once; `"bounded"` limits concurrency.
 - `maxConcurrency`: Maximum parallel workers when strategy is `"bounded"` (default: 4).
+
+### Verification Model
+
+Control how workers verify their changes before marking tasks complete:
+
+```json
+{
+	"verificationModel": "tdd"
+}
+```
+
+- **`"tdd"`** (default): Workers follow strict completion gates. `warcraft_worktree_commit` requires build, test, and lint pass evidence in the summary when marking a task `completed`. Missing evidence behavior depends on `workflowGatesMode`.
+- **`"best-effort"`**: Gate checks are skipped at commit time. Verification is deferred to the orchestrator after merge. `warcraft_worktree_commit` returns `verificationDeferred: true`.
+
+### Workflow Gates Mode
+
+Control strictness of workflow gates (plan approval checklist, commit completion gates):
+
+```json
+{
+	"workflowGatesMode": "warn"
+}
+```
+
+- **`"warn"`** (default): Missing gates produce warnings but do not block operations.
+- **`"enforce"`**: Missing gates block the operation. `warcraft_worktree_commit` returns `needs_verification` status; `warcraft_plan_approve` rejects unanswered checklist items.
+
+Also settable via environment variable: `WARCRAFT_WORKFLOW_GATES_MODE=enforce`
+
+### Hook Cadence
+
+Control per-hook execution frequency. Each value is a positive integer; `1` means run every time (default).
+
+```json
+{
+	"hook_cadence": {
+		"variant": 2,
+		"compaction": 3
+	}
+}
+```
+
+Safety-critical hooks always run every time regardless of cadence setting.
+
+> **Note:** `verificationModel`, `workflowGatesMode`, and `hook_cadence` are supported at runtime but are not yet declared in the JSON schema file. They work in configuration and are validated by `ConfigService` at runtime.
 
 ### Sandbox
 
@@ -320,12 +363,12 @@ Plan approval uses **SHA-256 content hashing** to detect plan modifications:
 
 | ID | Description |
 |----|-------------|
-| `agents-md-mastery` | Use when bootstrapping, updating, or reviewing AGENTS.md — teaches effective agent memory and signal vs noise filtering. |
+| `agents-md-mastery` | Use when bootstrapping, updating, or reviewing AGENTS.md. Teaches effective agent memory and signal vs noise filtering. |
 | `ast-grep` | Guide for writing ast-grep rules to perform structural code search and analysis using AST patterns. |
-| `brainstorming` | Use before any creative work — creating features, building components, adding functionality, or modifying behavior. |
+| `brainstorming` | Use before any creative work: creating features, building components, adding functionality, or modifying behavior. |
 | `code-reviewer` | Use when reviewing implementation changes against an approved plan or task to catch missing requirements, YAGNI, dead code, and risky patterns. |
 | `dispatching-parallel-agents` | Use when facing 2+ independent tasks that can be worked on without shared state or sequential dependencies. |
-| `docker-mastery` | Use when working with Docker containers — debugging failures, writing Dockerfiles, docker-compose, image optimization, or deploying containerized apps. |
+| `docker-mastery` | Use when working with Docker containers: debugging failures, writing Dockerfiles, docker-compose, image optimization, or deploying containerized apps. |
 | `executing-plans` | Use when you have a written implementation plan to execute in a separate session with review checkpoints. |
 | `finishing-a-development-branch` | Use when implementation is complete and you need to choose how to integrate, preserve, or discard worktree changes safely. |
 | `parallel-exploration` | Use when you need parallel, read-only exploration with task() (Brann fan-out). |
@@ -335,7 +378,7 @@ Plan approval uses **SHA-256 content hashing** to detect plan modifications:
 | `systematic-debugging` | Use when encountering any bug, test failure, or unexpected behavior, before proposing fixes. |
 | `test-driven-development` | Use when implementing any feature or bugfix, before writing implementation code. |
 | `using-git-worktrees` | Use when starting implementation work that requires isolation from the current branch and reproducible task execution. |
-| `verification-before-completion` | Use when about to claim work is complete, fixed, or passing — requires running verification commands and confirming output before making any success claims. |
+| `verification-before-completion` | Use when about to claim work is complete, fixed, or passing. Requires running verification commands and confirming output before making any success claims. |
 | `warcraft` | Plan-first AI development with isolated git worktrees and human review. Use for any feature development. |
 | `writing-plans` | Use when you have a spec or requirements for a multi-step task, before touching code. |
 | `writing-skills` | Use when creating or updating built-in skills so they remain discoverable, testable, and aligned with Warcraft workflows. |
@@ -397,18 +440,18 @@ Use `autoLoadSkills` to automatically inject skills into an agent's system promp
 
 `autoLoadSkills` accepts both Warcraft builtin skill IDs and file-based skill IDs. Resolution order:
 
-1. **Warcraft builtin** — Skills bundled with opencode-warcraft (always win if ID matches)
-2. **Project OpenCode** — `<project>/.opencode/skills/<id>/SKILL.md`
-3. **Global OpenCode** — `~/.config/opencode/skills/<id>/SKILL.md`
-4. **Project Claude** — `<project>/.claude/skills/<id>/SKILL.md`
-5. **Global Claude** — `~/.claude/skills/<id>/SKILL.md`
+1. **Warcraft builtin**: Skills bundled with opencode-warcraft (always win if ID matches)
+2. **Project OpenCode**: `<project>/.opencode/skills/<id>/SKILL.md`
+3. **Global OpenCode**: `~/.config/opencode/skills/<id>/SKILL.md`
+4. **Project Claude**: `<project>/.claude/skills/<id>/SKILL.md`
+5. **Global Claude**: `~/.claude/skills/<id>/SKILL.md`
 
-Skill IDs must be safe directory names (no `/`, `\`, `..`, or `.`). Missing or invalid skills emit a warning and are skipped—startup continues without failure.
+Skill IDs must be safe directory names (no `/`, `\`, `..`, or `.`). Missing or invalid skills emit a warning and are skipped; startup continues without failure.
 
 **How `skills` and `autoLoadSkills` interact:**
 
-- `skills` controls what appears in `warcraft_skill()` — the agent can manually load these on demand
-- `autoLoadSkills` injects skills unconditionally at session start — no manual loading needed
+- `skills` controls what appears in `warcraft_skill()`; the agent can manually load these on demand
+- `autoLoadSkills` injects skills unconditionally at session start; no manual loading needed
 - These are **independent**: a skill can be auto-loaded but not appear in `warcraft_skill()`, or vice versa
 - User `autoLoadSkills` are **merged** with defaults (use global `disableSkills` to remove defaults)
 
@@ -502,8 +545,4 @@ bun run test --filter warcraft-core
 
 ## License
 
-MIT with Commons Clause — Free for personal and non-commercial use. See [LICENSE](../../LICENSE) for details.
-
----
-
-**Stop vibing. Start questing.** ⚔️
+MIT with Commons Clause. Free for personal and non-commercial use. See [LICENSE](../../LICENSE) for details.

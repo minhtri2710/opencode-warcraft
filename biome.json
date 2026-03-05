@@ -29,7 +29,8 @@
         "noExplicitAny": "off",
         "noAssignInExpressions": "off",
         "noControlCharactersInRegex": "off",
-        "noTemplateCurlyInString": "off"
+        "noTemplateCurlyInString": "off",
+        "noEmptyBlockStatements": "warn"
       },
       "correctness": {
         "noUnusedImports": "warn",

@@ -96,7 +96,9 @@ export class WorktreeService {
 
       try {
         await git.worktreeAdd({ path: worktreePath, branch: branchName, commit: base });
-      } catch {
+      } catch (addError) {
+        const reason = addError instanceof Error ? addError.message : String(addError);
+        console.warn(`[warcraft] Primary worktree add failed, retrying with branch-only: ${reason}`);
         try {
           await git.worktreeAddWithBranch({ path: worktreePath, branch: branchName });
         } catch (retryError) {
@@ -135,6 +137,7 @@ export class WorktreeService {
         step,
       };
     } catch {
+      // Worktree directory does not exist or is inaccessible
       return null;
     }
   }
@@ -148,7 +151,10 @@ export class WorktreeService {
       try {
         const status = JSON.parse(await fs.readFile(statusPath, 'utf-8'));
         base = status.baseCommit; // Read baseCommit directly from task status
-      } catch {}
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        console.warn(`[warcraft] Failed to read base commit from '${statusPath}' (falling back to HEAD): ${reason}`);
+      }
     }
 
     const worktreeGit = this.getGit(worktreePath);

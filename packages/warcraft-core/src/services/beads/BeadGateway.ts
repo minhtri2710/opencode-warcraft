@@ -258,8 +258,9 @@ export class BeadGateway {
         for (const label of action.removeLabels) {
           try {
             this.removeLabel(beadId, label);
-          } catch {
-            // Label may not exist on this bead — that's expected
+          } catch (error) {
+            const reason = error instanceof Error ? error.message : String(error);
+            console.warn(`[warcraft] Failed to remove label '${label}' from bead '${beadId}' (best-effort): ${reason}`);
           }
         }
       }

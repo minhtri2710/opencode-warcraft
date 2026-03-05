@@ -260,6 +260,7 @@ describe('BeadsTaskStore caching layer', () => {
       getGateway: () => ({
         upsertArtifact: () => undefined,
       }),
+      flushArtifacts: () => ({ success: true as const, value: undefined }),
     };
 
     const store = new BeadsTaskStore('/tmp/project', repository as any);
