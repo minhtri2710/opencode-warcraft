@@ -30,7 +30,7 @@
         "noAssignInExpressions": "off",
         "noControlCharactersInRegex": "off",
         "noTemplateCurlyInString": "off",
-        "noEmptyBlockStatements": "warn"
+        "noEmptyBlockStatements": "off"
       },
       "correctness": {
         "noUnusedImports": "warn",

@@ -2,7 +2,6 @@ import { describe, expect, it } from 'bun:test';
 import { mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import type { RuntimeKind } from './runtime-commands.js';
 import { detectRuntime, getVerificationCommands, getVerificationCommandsForCwd } from './runtime-commands.js';
 
 describe('runtime-commands', () => {

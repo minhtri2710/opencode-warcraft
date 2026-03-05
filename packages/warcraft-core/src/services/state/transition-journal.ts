@@ -49,7 +49,7 @@ export class TransitionJournal {
       if (!existsSync(dir)) {
         mkdirSync(dir, { recursive: true });
       }
-      appendFileSync(this.journalPath, JSON.stringify(full) + '\n');
+      appendFileSync(this.journalPath, `${JSON.stringify(full)}\n`);
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);
       console.warn(`[warcraft] Failed to write transition journal entry: ${reason}`);
