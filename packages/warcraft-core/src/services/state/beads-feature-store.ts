@@ -4,7 +4,7 @@ import type { FeatureJson, FeatureStatusType } from '../../types.js';
 import { ensureDir, fileExists, writeJson } from '../../utils/fs.js';
 import { acquireLockSync } from '../../utils/json-lock.js';
 import { getContextPath, getFeatureJsonPath, getFeaturePath } from '../../utils/paths.js';
-import { type BeadsRepository, isRepositoryInitFailure } from '../beads/BeadsRepository.js';
+import { type BeadsRepository, throwIfInitFailure } from '../beads/BeadsRepository.js';
 import { mapBeadStatusToFeatureStatus } from '../beads/beadStatus.js';
 import type { CreateFeatureInput, FeatureStore } from './types.js';
 
@@ -70,7 +70,7 @@ export class BeadsFeatureStore implements FeatureStore {
   get(name: string): FeatureJson | null {
     const epicResult = this.repository.getEpicByFeatureName(name, false);
     if (epicResult.success === false) {
-      this.throwIfInitFailure(epicResult.error, `Failed to get epic for feature '${name}'`);
+      throwIfInitFailure(epicResult.error, `Failed to get epic for feature '${name}'`);
       console.warn(`Failed to get epic: ${epicResult.error.message}`);
       return null;
     }
@@ -85,7 +85,7 @@ export class BeadsFeatureStore implements FeatureStore {
     try {
       details = gateway.show(epicId) as Record<string, unknown>;
     } catch (error) {
-      this.throwIfInitFailure(error, `Failed to show epic '${epicId}' for feature '${name}'`);
+      throwIfInitFailure(error, `Failed to show epic '${epicId}' for feature '${name}'`);
       return null;
     }
 
@@ -131,9 +131,12 @@ export class BeadsFeatureStore implements FeatureStore {
   }
 
   list(): string[] {
-    const gateway = this.repository.getGateway();
-    const epics = gateway.list({ type: 'epic', status: 'all' });
-    return epics.map((e) => e.title).sort();
+    const result = this.repository.listEpics('all');
+    if (result.success === false) {
+      throwIfInitFailure(result.error, '[warcraft] Failed to list features');
+      return [];
+    }
+    return result.value.map((e) => e.title).sort();
   }
 
   save(feature: FeatureJson): void {
@@ -145,7 +148,7 @@ export class BeadsFeatureStore implements FeatureStore {
     try {
       const closeResult = this.repository.closeBead(feature.epicBeadId);
       if (closeResult.success === false) {
-        this.throwIfInitFailure(
+        throwIfInitFailure(
           closeResult.error,
           `[warcraft] Failed to close epic bead '${feature.epicBeadId}' for feature '${feature.name}'`,
         );
@@ -154,7 +157,7 @@ export class BeadsFeatureStore implements FeatureStore {
         );
       }
     } catch (error) {
-      this.throwIfInitFailure(
+      throwIfInitFailure(
         error,
         `[warcraft] Failed to close epic bead '${feature.epicBeadId}' for feature '${feature.name}'`,
       );
@@ -169,16 +172,8 @@ export class BeadsFeatureStore implements FeatureStore {
     writeJson(getFeatureJsonPath(this.projectRoot, feature.name, 'on'), feature);
     const result = this.repository.setFeatureState(epicBeadId, feature);
     if (result.success === false) {
-      this.throwIfInitFailure(result.error, `Failed to write feature state for epic '${epicBeadId}'`);
+      throwIfInitFailure(result.error, `Failed to write feature state for epic '${epicBeadId}'`);
       console.warn(`Failed to write feature state: ${result.error.message}`);
     }
-  }
-
-  private throwIfInitFailure(error: unknown, context: string): void {
-    if (!isRepositoryInitFailure(error)) {
-      return;
-    }
-    const reason = error instanceof Error ? error.message : String(error);
-    throw new Error(`${context}: ${reason}`);
   }
 }

@@ -1,5 +1,6 @@
 import { execFileSync } from 'child_process';
-import { existsSync } from 'fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
+import { tmpdir } from 'os';
 import { join } from 'path';
 import type { TaskInfo, TaskStatusType } from '../../types.js';
 import type {
@@ -10,10 +11,32 @@ import type {
   TaskBeadArtifacts,
 } from './BeadGateway.types.js';
 import { BeadGatewayError } from './BeadGateway.types.js';
+import {
+  decodeAuditLog,
+  decodeComments,
+  decodeDependentIssues,
+  decodeIdFromJson,
+  decodeListItems,
+  decodeShowPayload,
+  decodeTasksFromDepList,
+  extractBeadContent,
+} from './beadDecoders.js';
 import { getTaskBeadActions } from './beadMapping.js';
 
 const ARTIFACTS_BEGIN = '<!-- WARCRAFT:ARTIFACTS:BEGIN -->';
 const ARTIFACTS_END = '<!-- WARCRAFT:ARTIFACTS:END -->';
+const ARTIFACT_COMMENT_PREFIX = 'WARCRAFT_ARTIFACT_V1 ';
+const ARTIFACT_COMMENT_ENCODING = 'base64';
+const BEAD_ARTIFACT_KINDS = new Set<BeadArtifactKind>([
+  'spec',
+  'worker_prompt',
+  'report',
+  'plan_approval',
+  'approved_plan',
+  'plan_comments',
+  'feature_state',
+  'task_state',
+]);
 
 export class BeadGateway {
   private preflightCompleted: boolean = false;
@@ -202,7 +225,7 @@ export class BeadGateway {
       ['create', name, '-t', 'epic', '-p', String(priority - 1), '--json'],
       `create epic bead for '${name}'`,
     );
-    return this.parseIdFromJson(output, `epic bead for feature '${name}'`);
+    return decodeIdFromJson(output, `epic bead for feature '${name}'`);
   }
 
   createTask(title: string, epicBeadId: string, priority: number): string {
@@ -212,7 +235,7 @@ export class BeadGateway {
       ['create', title, '-t', 'task', '--parent', epicBeadId, '-p', String(priority - 1), '--json'],
       `create child bead '${title}' under epic '${epicBeadId}'`,
     );
-    return this.parseIdFromJson(output, `child bead for task '${title}'`);
+    return decodeIdFromJson(output, `child bead for task '${title}'`);
   }
 
   private validatePriority(priority: number): void {
@@ -304,9 +327,7 @@ export class BeadGateway {
         ['dep', 'list', beadId, '--direction', 'down', '--type', 'blocks', '--json'],
         `list dependencies for bead '${beadId}'`,
       );
-      const parsed = this.parseJson(output, `dependencies for bead '${beadId}'`);
-      const items = this.parseDependentIssues(parsed, undefined, 'blocks');
-      return items;
+      return decodeDependentIssues(output, `dependencies for bead '${beadId}'`, 'blocks');
     } catch {
       return [];
     }
@@ -314,13 +335,30 @@ export class BeadGateway {
 
   addComment(beadId: string, comment: string): void {
     this.ensurePreflight();
-    this.runBr(['comments', 'add', beadId, comment], `add comment to bead '${beadId}'`);
+
+    const tempDir = mkdtempSync(join(tmpdir(), 'warcraft-comment-'));
+    const tempFile = join(tempDir, 'comment.txt');
+    try {
+      writeFileSync(tempFile, comment, 'utf8');
+      this.runBr(['comments', 'add', beadId, '--file', tempFile, '--no-daemon'], `add comment to bead '${beadId}'`);
+    } catch (error) {
+      if (error instanceof BeadGatewayError && error.internalCode === 'BR_COMMAND_FAILED') {
+        this.runBr(['comments', 'add', beadId, '--file', tempFile, '--no-daemon'], `add comment to bead '${beadId}'`);
+      } else {
+        throw error;
+      }
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
   }
 
   listComments(beadId: string): BeadComment[] {
     this.ensurePreflight();
-    const output = this.runBr(['comments', 'list', beadId, '--json'], `list comments for bead '${beadId}'`);
-    return this.parseCommentsArray(output, beadId);
+    const output = this.runBr(
+      ['comments', 'list', beadId, '--json', '--no-daemon'],
+      `list comments for bead '${beadId}'`,
+    );
+    return decodeComments(output, beadId);
   }
 
   /**
@@ -358,57 +396,7 @@ export class BeadGateway {
   auditLog(beadId: string): AuditEntry[] {
     this.ensurePreflight();
     const output = this.runBr(['audit', 'log', beadId, '--json'], `retrieve audit log for bead '${beadId}'`);
-    return this.parseAuditLogArray(output, beadId);
-  }
-
-  private parseAuditLogArray(output: string, beadId: string): AuditEntry[] {
-    try {
-      const parsed = JSON.parse(output) as unknown;
-
-      if (!Array.isArray(parsed)) {
-        throw new BeadGatewayError(
-          'parse_error',
-          `Failed to parse audit log for bead '${beadId}' [BR_PARSE_FAILED]: expected JSON array`,
-          'BR_PARSE_FAILED',
-        );
-      }
-
-      return parsed.map((item: unknown) => {
-        if (!item || typeof item !== 'object') {
-          throw new BeadGatewayError(
-            'parse_error',
-            `Failed to parse audit log for bead '${beadId}' [BR_PARSE_FAILED]: audit entry is not an object`,
-            'BR_PARSE_FAILED',
-          );
-        }
-
-        const obj = item as Record<string, unknown>;
-        const entry: AuditEntry = {
-          id: String(obj.id || ''),
-          kind: String(obj.kind || ''),
-          issueId: String(obj.issue_id || ''),
-        };
-
-        if (obj.model !== undefined) entry.model = String(obj.model);
-        if (obj.tool_name !== undefined) entry.toolName = String(obj.tool_name);
-        if (obj.exit_code !== undefined) entry.exitCode = Number(obj.exit_code);
-        if (obj.error !== undefined) entry.error = String(obj.error);
-        if (obj.timestamp !== undefined) entry.timestamp = String(obj.timestamp);
-
-        return entry;
-      });
-    } catch (error) {
-      if (error instanceof BeadGatewayError) {
-        throw error;
-      }
-
-      const excerpt = output.length > 200 ? `${output.slice(0, 200)}...` : output;
-      throw new BeadGatewayError(
-        'parse_error',
-        `Failed to parse audit log for bead '${beadId}' [BR_PARSE_FAILED]: invalid JSON. Raw excerpt: "${excerpt}"`,
-        'BR_PARSE_FAILED',
-      );
-    }
+    return decodeAuditLog(output, beadId);
   }
 
   generateChangelog(options?: { robot?: boolean }): string {
@@ -417,71 +405,10 @@ export class BeadGateway {
     return this.runBr(args, 'generate changelog');
   }
 
-  private parseCommentsArray(output: string, beadId: string): BeadComment[] {
-    try {
-      const parsed = JSON.parse(output) as unknown;
-
-      if (!Array.isArray(parsed)) {
-        throw new BeadGatewayError(
-          'parse_error',
-          `Failed to parse comments for bead '${beadId}' [BR_PARSE_FAILED]: expected JSON array`,
-          'BR_PARSE_FAILED',
-        );
-      }
-
-      return parsed.map((item: unknown) => {
-        if (!item || typeof item !== 'object') {
-          throw new BeadGatewayError(
-            'parse_error',
-            `Failed to parse comments for bead '${beadId}' [BR_PARSE_FAILED]: comment item is not an object`,
-            'BR_PARSE_FAILED',
-          );
-        }
-
-        const obj = item as Record<string, unknown>;
-        const comment: BeadComment = {
-          id: String(obj.id || ''),
-          body: String(obj.body || ''),
-        };
-
-        if (obj.author !== undefined) comment.author = String(obj.author);
-        if (obj.timestamp !== undefined) comment.timestamp = String(obj.timestamp);
-        if (obj.prompt !== undefined) comment.prompt = String(obj.prompt);
-        if (obj.response !== undefined) comment.response = String(obj.response);
-
-        if (!comment.id) {
-          throw new BeadGatewayError(
-            'missing_field',
-            `Failed to parse comments for bead '${beadId}': missing id field in comment`,
-          );
-        }
-
-        return comment;
-      });
-    } catch (error) {
-      if (error instanceof BeadGatewayError) {
-        throw error;
-      }
-
-      // For JSON parse errors, include a raw excerpt in the error message
-      const excerpt = output.length > 200 ? `${output.slice(0, 200)}...` : output;
-      throw new BeadGatewayError(
-        'parse_error',
-        `Failed to parse comments for bead '${beadId}' [BR_PARSE_FAILED]: invalid JSON. Raw excerpt: "${excerpt}"`,
-        'BR_PARSE_FAILED',
-      );
-    }
-  }
-
   show(beadId: string): unknown {
     this.ensurePreflight();
     const output = this.runBr(['show', beadId, '--json'], `show bead '${beadId}'`);
-    const parsed = this.parseJson(output, `bead data for '${beadId}'`);
-    // br show --json returns a single-element array; unwrap it
-    if (Array.isArray(parsed) && parsed.length === 1) {
-      return parsed[0];
-    }
-    return parsed;
+    return decodeShowPayload(output, beadId);
   }
 
   /**
@@ -500,7 +427,7 @@ export class BeadGateway {
 
   readDescription(beadId: string): string | null {
     const parsed = this.show(beadId);
-    return this.extractBeadContent(parsed);
+    return extractBeadContent(parsed);
   }
 
   list(options?: {
@@ -526,9 +453,10 @@ export class BeadGateway {
     }
 
     const output = this.runBr(args, options?.parent ? `list child beads under '${options.parent}'` : 'list beads');
-    const parsed = this.parseJson(output, 'bead list');
 
-    const items = options?.parent ? this.parseDependentIssues(parsed, options.type) : this.parseListItems(parsed);
+    const items = options?.parent
+      ? decodeDependentIssues(output, 'bead list', 'parent-child', options?.type)
+      : decodeListItems(output, 'bead list');
 
     return items.filter((item) => {
       if (options?.type && item.type !== options.type) {
@@ -551,105 +479,7 @@ export class BeadGateway {
       ['dep', 'list', epicId, '--direction', 'up', '--type', 'parent-child', '--json'],
       `list tasks for epic '${epicId}'`,
     );
-    return this.parseTasksFromDepList(output, epicId);
-  }
-
-  private parseTasksFromDepList(output: string, epicId: string): TaskInfo[] {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(output) as unknown;
-    } catch {
-      const excerpt = output.length > 200 ? `${output.slice(0, 200)}...` : output;
-      throw new BeadGatewayError(
-        'parse_error',
-        `Failed to parse tasks for epic '${epicId}' [BR_PARSE_FAILED]: invalid JSON. Raw excerpt: "${excerpt}"`,
-        'BR_PARSE_FAILED',
-      );
-    }
-
-    const items = this.parseDependentIssues(parsed, undefined, 'parent-child');
-    return items.map((item) => ({
-      folder: '',
-      name: item.title,
-      beadId: item.id,
-      status: this.mapBeadStatusToTaskStatus(item.status),
-      origin: 'plan' as const,
-    }));
-  }
-
-  private mapBeadStatusToTaskStatus(beadStatus: string): TaskStatusType {
-    switch (beadStatus) {
-      case 'closed':
-        return 'done';
-      case 'deferred':
-        return 'blocked';
-      default:
-        return 'pending';
-    }
-  }
-
-  private parseListItems(payload: unknown): Array<{ id: string; title: string; status: string; type?: string }> {
-    const items = Array.isArray(payload)
-      ? payload
-      : payload && typeof payload === 'object'
-        ? ((['issues', 'results', 'items', 'data']
-            .map((key) => (payload as Record<string, unknown>)[key])
-            .find((value) => Array.isArray(value)) as unknown[] | undefined) ?? [])
-        : [];
-
-    return items
-      .map((item: unknown) => {
-        const obj = item as Record<string, unknown>;
-        return {
-          id: String(obj.id || ''),
-          title: String(obj.title || ''),
-          status: String(obj.status || ''),
-          type: obj.issue_type ? String(obj.issue_type) : obj.type ? String(obj.type) : undefined,
-        };
-      })
-      .filter((item) => item.id);
-  }
-
-  private parseDependentIssues(
-    payload: unknown,
-    issueTypeHint?: string,
-    acceptedRelationType?: string,
-  ): Array<{ id: string; title: string; status: string; type?: string }> {
-    const dependencies = Array.isArray(payload)
-      ? payload
-      : payload && typeof payload === 'object'
-        ? ((['dependencies', 'results', 'items', 'data']
-            .map((key) => (payload as Record<string, unknown>)[key])
-            .find((value) => Array.isArray(value)) as unknown[] | undefined) ?? [])
-        : [];
-
-    const expectedType = acceptedRelationType ?? 'parent-child';
-    const children = new Map<string, { id: string; title: string; status: string; type?: string }>();
-    for (const dependency of dependencies) {
-      const dep = dependency as Record<string, unknown>;
-      const relationType = dep.type ? String(dep.type) : undefined;
-      if (relationType && relationType !== expectedType) {
-        continue;
-      }
-
-      const candidate = dep.issue ?? dep.dependent ?? dep.target ?? dep.child ?? dep.to;
-      const hasEmbeddedIssue = Boolean(candidate && typeof candidate === 'object');
-      const issue = hasEmbeddedIssue ? (candidate as Record<string, unknown>) : dep;
-      const id = String(issue.id || issue.issue_id || '');
-      if (!id) {
-        continue;
-      }
-
-      children.set(id, {
-        id,
-        title: String(issue.title || dep.title || ''),
-        status: String(issue.status || dep.status || ''),
-        type:
-          hasEmbeddedIssue && (issue.issue_type || issue.type) ? String(issue.issue_type || issue.type) : issueTypeHint,
-      });
-    }
-
-    return Array.from(children.values());
+    return decodeTasksFromDepList(output, epicId);
   }
 
   updateStatus(beadId: string, status: string): void {
@@ -665,24 +495,18 @@ export class BeadGateway {
   upsertArtifact(beadId: string, kind: BeadArtifactKind, content: string): void {
     this.ensurePreflight();
     if (kind === 'spec') {
-      const currentDescription = this.readDescription(beadId) ?? '';
-      const { artifacts } = this.parseArtifacts(currentDescription);
-      if (Object.keys(artifacts).length > 0) {
-        this.updateDescription(beadId, this.composeArtifactsDescription(content, artifacts));
-      } else {
-        this.updateDescription(beadId, content);
-      }
-      return;
+      this.updateDescription(beadId, content);
     }
-
-    const currentDescription = this.readDescription(beadId) ?? '';
-    const { prefix, artifacts } = this.parseArtifacts(currentDescription);
-    artifacts[kind] = content;
-    this.updateDescription(beadId, this.composeArtifactsDescription(prefix, artifacts));
+    this.addComment(beadId, this.serializeArtifactComment(kind, content));
   }
 
   readArtifact(beadId: string, kind: BeadArtifactKind): string | null {
     this.ensurePreflight();
+    const commentArtifact = this.readLatestArtifactComment(beadId, kind);
+    if (commentArtifact !== null) {
+      return commentArtifact;
+    }
+
     const description = this.readDescription(beadId);
     if (!description) {
       return null;
@@ -694,45 +518,42 @@ export class BeadGateway {
     return artifacts[kind] ?? null;
   }
 
+  // ---------------------------------------------------------------------------
+  // runBr: consolidated retry logic for NOT_INITIALIZED
+  // ---------------------------------------------------------------------------
+
   private runBr(args: string[], operation: string): string {
     const shouldAttemptReinit = args[0] !== 'init';
-    try {
+
+    const executeAndCheck = (): string => {
       const output = this.executeBr(args);
       if (shouldAttemptReinit && this.isNotInitializedPayload(output)) {
-        this.ensureInitialized();
-        const retryOutput = this.executeBr(args);
-        if (this.isNotInitializedPayload(retryOutput)) {
-          throw new BeadGatewayError(
-            'command_error',
-            `Failed to ${operation} [BR_NOT_INITIALIZED]: beads repository initialization failed`,
-            'BR_NOT_INITIALIZED',
-          );
-        }
-        return retryOutput;
+        throw new NotInitializedSignal();
       }
       return output;
+    };
+
+    try {
+      return executeAndCheck();
     } catch (error) {
       if (error instanceof BeadGatewayError) {
         throw error;
       }
 
-      if (shouldAttemptReinit && this.isNotInitializedError(error)) {
+      // Determine if this is a NOT_INITIALIZED condition (either signal or CLI error)
+      const isNotInit =
+        error instanceof NotInitializedSignal || (shouldAttemptReinit && this.isNotInitializedError(error));
+
+      if (isNotInit) {
+        // Re-initialize and retry once
         this.ensureInitialized();
         try {
-          const retryOutput = this.executeBr(args);
-          if (this.isNotInitializedPayload(retryOutput)) {
-            throw new BeadGatewayError(
-              'command_error',
-              `Failed to ${operation} [BR_NOT_INITIALIZED]: beads repository initialization failed`,
-              'BR_NOT_INITIALIZED',
-            );
-          }
-          return retryOutput;
+          return executeAndCheck();
         } catch (retryError) {
           if (retryError instanceof BeadGatewayError) {
             throw retryError;
           }
-          if (this.isNotInitializedError(retryError)) {
+          if (retryError instanceof NotInitializedSignal || this.isNotInitializedError(retryError)) {
             throw new BeadGatewayError(
               'command_error',
               `Failed to ${operation} [BR_NOT_INITIALIZED]: beads repository initialization failed`,
@@ -755,68 +576,10 @@ export class BeadGateway {
     }
   }
 
-  private parseJson(output: string, target: string): unknown {
-    try {
-      return JSON.parse(output) as unknown;
-    } catch {
-      throw new BeadGatewayError(
-        'parse_error',
-        `Failed to parse ${target} [BR_PARSE_FAILED]: invalid JSON payload from br`,
-        'BR_PARSE_FAILED',
-      );
-    }
-  }
-
-  private parseIdFromJson(output: string, target: string): string {
-    const parsed = this.parseJson(output, target) as { id?: string };
-    if (!parsed.id) {
-      throw new BeadGatewayError('missing_field', `Failed to parse ${target}: missing id in br output`);
-    }
-    return parsed.id;
-  }
-
-  private extractBeadContent(payload: unknown): string | null {
-    if (typeof payload === 'string') {
-      const trimmed = payload.trim();
-      return trimmed.length > 0 ? payload : null;
-    }
-
-    if (!payload || typeof payload !== 'object') {
-      return null;
-    }
-
-    if (Array.isArray(payload)) {
-      for (const item of payload) {
-        const content = this.extractBeadContent(item);
-        if (content) {
-          return content;
-        }
-      }
-      return null;
-    }
-
-    const obj = payload as Record<string, unknown>;
-    const preferredKeys = ['description', 'body', 'content'];
-    for (const key of preferredKeys) {
-      const value = obj[key];
-      if (typeof value === 'string' && value.trim().length > 0) {
-        return value;
-      }
-    }
-
-    const nestedKeys = ['issue', 'issues', 'result', 'results', 'item', 'items', 'data'];
-    for (const key of nestedKeys) {
-      const value = obj[key];
-      if (value !== undefined) {
-        const content = this.extractBeadContent(value);
-        if (content) {
-          return content;
-        }
-      }
-    }
-
-    return null;
-  }
+  // ---------------------------------------------------------------------------
+  // Artifact serialization / deserialization (not moved to decoders because
+  // these are tightly coupled to the comment-based artifact protocol)
+  // ---------------------------------------------------------------------------
 
   private parseArtifacts(description: string): { prefix: string; artifacts: TaskBeadArtifacts } {
     const beginIndex = description.indexOf(ARTIFACTS_BEGIN);
@@ -850,13 +613,117 @@ export class BeadGateway {
     }
   }
 
-  private composeArtifactsDescription(prefix: string, artifacts: TaskBeadArtifacts): string {
-    const artifactsJson = JSON.stringify(artifacts, null, 2);
-    const artifactsBlock = `${ARTIFACTS_BEGIN}\n${artifactsJson}\n${ARTIFACTS_END}`;
-    if (!prefix) {
-      return artifactsBlock;
+  private serializeArtifactComment(kind: BeadArtifactKind, content: string): string {
+    const header = JSON.stringify({
+      kind,
+      encoding: ARTIFACT_COMMENT_ENCODING,
+      ts: new Date().toISOString(),
+    });
+    const payload = Buffer.from(content, 'utf8').toString('base64');
+    return `${ARTIFACT_COMMENT_PREFIX}${header}\n${payload}`;
+  }
+
+  private readLatestArtifactComment(beadId: string, kind: BeadArtifactKind): string | null {
+    const comments = this.listComments(beadId);
+    const sortedComments = comments
+      .map((comment, index) => ({
+        comment,
+        index,
+        timestamp: this.parseCommentTimestamp(comment.timestamp),
+        numericId: this.parseCommentNumericId(comment.id),
+      }))
+      .sort((a, b) => {
+        if (a.timestamp !== null && b.timestamp !== null && a.timestamp !== b.timestamp) {
+          return b.timestamp - a.timestamp;
+        }
+        if (a.timestamp !== null && b.timestamp === null) {
+          return -1;
+        }
+        if (a.timestamp === null && b.timestamp !== null) {
+          return 1;
+        }
+        if (a.numericId !== null && b.numericId !== null && a.numericId !== b.numericId) {
+          return b.numericId - a.numericId;
+        }
+        if (a.numericId !== null && b.numericId === null) {
+          return -1;
+        }
+        if (a.numericId === null && b.numericId !== null) {
+          return 1;
+        }
+        return b.index - a.index;
+      });
+
+    for (const entry of sortedComments) {
+      const artifact = this.parseArtifactComment(entry.comment.body);
+      if (artifact?.kind === kind) {
+        return artifact.content;
+      }
     }
-    return `${prefix}\n\n${artifactsBlock}`;
+
+    return null;
+  }
+
+  private parseCommentNumericId(value: string): number | null {
+    const numericId = Number(value);
+    if (!Number.isInteger(numericId)) {
+      return null;
+    }
+    return numericId;
+  }
+
+  private parseCommentTimestamp(value: string | undefined): number | null {
+    if (!value) {
+      return null;
+    }
+    const timestamp = Date.parse(value);
+    return Number.isNaN(timestamp) ? null : timestamp;
+  }
+
+  private parseArtifactComment(body: string): { kind: BeadArtifactKind; content: string } | null {
+    if (!body.startsWith(ARTIFACT_COMMENT_PREFIX)) {
+      return null;
+    }
+
+    const headerEndIndex = body.indexOf('\n');
+    if (headerEndIndex === -1) {
+      return null;
+    }
+
+    const headerJson = body.slice(ARTIFACT_COMMENT_PREFIX.length, headerEndIndex).trim();
+    const payload = body.slice(headerEndIndex + 1).trim();
+    if (!headerJson || !payload) {
+      return null;
+    }
+
+    try {
+      const parsed = JSON.parse(headerJson) as { kind?: string; encoding?: string };
+      if (!parsed.kind || !this.isBeadArtifactKind(parsed.kind) || parsed.encoding !== ARTIFACT_COMMENT_ENCODING) {
+        return null;
+      }
+
+      return {
+        kind: parsed.kind,
+        content: Buffer.from(payload, 'base64').toString('utf8'),
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  private isBeadArtifactKind(value: string): value is BeadArtifactKind {
+    return BEAD_ARTIFACT_KINDS.has(value as BeadArtifactKind);
+  }
+}
+
+/**
+ * Internal signal used to unify the NOT_INITIALIZED detection path
+ * from success-payload checks into the error handling flow of runBr.
+ */
+class NotInitializedSignal extends Error {
+  constructor() {
+    super('NOT_INITIALIZED payload detected');
+    this.name = 'NotInitializedSignal';
   }
 }
 

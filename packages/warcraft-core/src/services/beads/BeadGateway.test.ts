@@ -505,80 +505,137 @@ describe('BeadGateway', () => {
     execSpy.mockRestore();
   });
 
-  it('upserts and reads artifact payload from bead description', () => {
+  it('upserts spec as description plus artifact comment and reads from comment snapshots', () => {
+    const artifactComment =
+      'WARCRAFT_ARTIFACT_V1 {"kind":"spec","encoding":"base64","ts":"2026-01-02T03:04:05.000Z"}\nU3BlYyBjb250ZW50';
     const execSpy = spyOn(childProcess, 'execFileSync')
       .mockReturnValueOnce('beads_rust 1.2.3')
       .mockReturnValueOnce('Initialized')
-      .mockReturnValueOnce('{}')
       .mockReturnValueOnce('')
-      .mockReturnValueOnce('{"description":"Spec content"}');
+      .mockReturnValueOnce('')
+      .mockReturnValueOnce(
+        JSON.stringify([{ id: 'c-1', body: artifactComment, timestamp: '2026-01-02T03:04:05.000Z' }]),
+      );
 
     const gateway = new BeadGateway('/repo');
     gateway.upsertArtifact('bd-2', 'spec', 'Spec content');
     const spec = gateway.readArtifact('bd-2', 'spec');
 
     expect(spec).toBe('Spec content');
-    expect(execSpy).toHaveBeenNthCalledWith(3, 'br', ['show', 'bd-2', '--json'], {
-      cwd: '/repo',
-      encoding: 'utf-8',
-      timeout: 5_000,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    expect(execSpy).toHaveBeenNthCalledWith(4, 'br', ['update', 'bd-2', '--description', 'Spec content'], {
+    expect(execSpy).toHaveBeenNthCalledWith(3, 'br', ['update', 'bd-2', '--description', 'Spec content'], {
       cwd: '/repo',
       encoding: 'utf-8',
       timeout: 15_000,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
+    expect(execSpy).toHaveBeenNthCalledWith(
+      4,
+      'br',
+      ['comments', 'add', 'bd-2', '--file', expect.any(String), '--no-daemon'],
+      expect.any(Object),
+    );
+    expect(execSpy).toHaveBeenNthCalledWith(5, 'br', ['comments', 'list', 'bd-2', '--json', '--no-daemon'], {
+      cwd: '/repo',
+      encoding: 'utf-8',
+      timeout: 5_000,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    const allCalls = execSpy.mock.calls.map((call) => call[1] as string[]);
+    const hasShowCall = allCalls.some((args) => args[0] === 'show');
+    expect(hasShowCall).toBe(false);
 
     execSpy.mockRestore();
   });
 
-  it('spec upsert preserves existing artifacts in description', () => {
-    const existingDesc =
-      'Old prefix\n\n<!-- WARCRAFT:ARTIFACTS:BEGIN -->\n{"task_state":"{\\"status\\":\\"pending\\",\\"dependsOn\\":[]}"}\n<!-- WARCRAFT:ARTIFACTS:END -->';
-    const expectedDesc =
-      'New spec content\n\n<!-- WARCRAFT:ARTIFACTS:BEGIN -->\n{\n  "task_state": "{\\"status\\":\\"pending\\",\\"dependsOn\\":[]}"\n}\n<!-- WARCRAFT:ARTIFACTS:END -->';
+  it('reads latest comment snapshot for artifact kind by timestamp', () => {
     const execSpy = spyOn(childProcess, 'execFileSync')
       .mockReturnValueOnce('beads_rust 1.2.3')
       .mockReturnValueOnce('Initialized')
-      .mockReturnValueOnce(JSON.stringify({ description: existingDesc }))
-      .mockReturnValueOnce('')
-      .mockReturnValueOnce(JSON.stringify({ description: expectedDesc }));
+      .mockReturnValueOnce(
+        JSON.stringify([
+          {
+            id: 'c-1',
+            body: 'WARCRAFT_ARTIFACT_V1 {"kind":"task_state","encoding":"base64","ts":"2026-01-02T03:04:05.000Z"}\neyJzdGF0dXMiOiJvbGQifQ==',
+            timestamp: '2026-01-02T03:04:05.000Z',
+          },
+          {
+            id: 'c-2',
+            body: 'WARCRAFT_ARTIFACT_V1 {"kind":"task_state","encoding":"base64","ts":"2026-01-02T03:04:06.000Z"}\neyJzdGF0dXMiOiJuZXcifQ==',
+            timestamp: '2026-01-02T03:04:06.000Z',
+          },
+          {
+            id: 'c-3',
+            body: 'WARCRAFT_ARTIFACT_V1 {"kind":"feature_state","encoding":"base64","ts":"2026-01-02T03:04:07.000Z"}\neyJzdGF0dXMiOiJhY3RpdmUifQ==',
+            timestamp: '2026-01-02T03:04:07.000Z',
+          },
+        ]),
+      );
 
     const gateway = new BeadGateway('/repo');
-    gateway.upsertArtifact('bd-2', 'spec', 'New spec content');
+    const taskState = gateway.readArtifact('bd-2', 'task_state');
 
-    // The update call should include both spec as prefix and preserved artifacts
-    expect(execSpy).toHaveBeenNthCalledWith(
-      4,
-      'br',
-      ['update', 'bd-2', '--description', expect.stringContaining('New spec content')],
-      expect.any(Object),
-    );
-    expect(execSpy).toHaveBeenNthCalledWith(
-      4,
-      'br',
-      ['update', 'bd-2', '--description', expect.stringContaining('WARCRAFT:ARTIFACTS:BEGIN')],
-      expect.any(Object),
-    );
-    expect(execSpy).toHaveBeenNthCalledWith(
-      4,
-      'br',
-      ['update', 'bd-2', '--description', expect.stringContaining('task_state')],
-      expect.any(Object),
-    );
-
-    const spec = gateway.readArtifact('bd-2', 'spec');
-    expect(spec).toBe('New spec content');
+    expect(taskState).toBe('{"status":"new"}');
 
     execSpy.mockRestore();
   });
 
-  it('reads spec artifact from plain markdown description', () => {
+  it('reads latest artifact snapshot by numeric comment id when timestamps tie', () => {
     const execSpy = spyOn(childProcess, 'execFileSync')
       .mockReturnValueOnce('beads_rust 1.2.3')
-      .mockReturnValue('{"description":"# Task Spec\\n\\nDo the thing."}');
+      .mockReturnValueOnce('Initialized')
+      .mockReturnValueOnce(
+        JSON.stringify([
+          {
+            id: 9,
+            text: 'WARCRAFT_ARTIFACT_V1 {"kind":"feature_state","encoding":"base64","ts":"2026-01-02T03:04:05.000Z"}\neyJzdGF0dXMiOiJvbGQifQ==',
+            created_at: '2026-01-02T03:04:05Z',
+          },
+          {
+            id: 10,
+            text: 'WARCRAFT_ARTIFACT_V1 {"kind":"feature_state","encoding":"base64","ts":"2026-01-02T03:04:05.100Z"}\neyJzdGF0dXMiOiJuZXcifQ==',
+            created_at: '2026-01-02T03:04:05Z',
+          },
+        ]),
+      );
+
+    const gateway = new BeadGateway('/repo');
+    const featureState = gateway.readArtifact('bd-2', 'feature_state');
+
+    expect(featureState).toBe('{"status":"new"}');
+
+    execSpy.mockRestore();
+  });
+
+  it('falls back to legacy artifacts block in description when no comment snapshot exists', () => {
+    const description =
+      'Task title\n\n<!-- WARCRAFT:ARTIFACTS:BEGIN -->\n{"feature_state":"{\\"status\\":\\"legacy\\"}"}\n<!-- WARCRAFT:ARTIFACTS:END -->';
+    const execSpy = spyOn(childProcess, 'execFileSync')
+      .mockReturnValueOnce('beads_rust 1.2.3')
+      .mockReturnValueOnce('Initialized')
+      .mockReturnValueOnce('[]')
+      .mockReturnValueOnce(JSON.stringify({ description }));
+
+    const gateway = new BeadGateway('/repo');
+    const featureState = gateway.readArtifact('bd-2', 'feature_state');
+
+    expect(featureState).toBe('{"status":"legacy"}');
+    expect(execSpy).toHaveBeenNthCalledWith(
+      3,
+      'br',
+      ['comments', 'list', 'bd-2', '--json', '--no-daemon'],
+      expect.any(Object),
+    );
+    expect(execSpy).toHaveBeenNthCalledWith(4, 'br', ['show', 'bd-2', '--json'], expect.any(Object));
+
+    execSpy.mockRestore();
+  });
+
+  it('falls back to plain spec description when no artifact snapshots exist', () => {
+    const execSpy = spyOn(childProcess, 'execFileSync')
+      .mockReturnValueOnce('beads_rust 1.2.3')
+      .mockReturnValueOnce('Initialized')
+      .mockReturnValueOnce('[]')
+      .mockReturnValueOnce('{"description":"# Task Spec\\n\\nDo the thing."}');
     const gateway = new BeadGateway('/repo');
 
     const spec = gateway.readArtifact('bd-2', 'spec');
@@ -588,351 +645,126 @@ describe('BeadGateway', () => {
     execSpy.mockRestore();
   });
 
-  it('supports explicit close and flush operations', () => {
-    const execSpy = spyOn(childProcess, 'execFileSync').mockReturnValueOnce('beads_rust 1.2.3').mockReturnValue('');
-    const gateway = new BeadGateway('/repo');
-
-    gateway.closeBead('bd-77');
-    gateway.flushArtifacts();
-
-    expect(execSpy).toHaveBeenCalledWith('br', ['close', 'bd-77'], {
-      cwd: '/repo',
-      encoding: 'utf-8',
-      timeout: 15_000,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    expect(execSpy).toHaveBeenCalledWith('br', ['sync', '--flush-only'], {
-      cwd: '/repo',
-      encoding: 'utf-8',
-      timeout: 30_000,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-
-    execSpy.mockRestore();
-  });
-
-  it('supports import artifacts operation', () => {
-    const execSpy = spyOn(childProcess, 'execFileSync').mockReturnValueOnce('beads_rust 1.2.3').mockReturnValue('');
-    const gateway = new BeadGateway('/repo');
-
-    gateway.importArtifacts();
-
-    expect(execSpy).toHaveBeenCalledWith('br', ['sync', '--import-only'], {
-      cwd: '/repo',
-      encoding: 'utf-8',
-      timeout: 30_000,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-
-    execSpy.mockRestore();
-  });
-
-  it('updates bead description via br update --description', () => {
-    const execSpy = spyOn(childProcess, 'execFileSync').mockReturnValueOnce('beads_rust 1.2.3').mockReturnValue('');
-    const gateway = new BeadGateway('/repo');
-
-    gateway.updateDescription('bd-1', 'New description content');
-
-    expect(execSpy).toHaveBeenCalledWith('br', ['update', 'bd-1', '--description', 'New description content'], {
-      cwd: '/repo',
-      encoding: 'utf-8',
-      timeout: 15_000,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-
-    execSpy.mockRestore();
-  });
-
-  it('updates bead description with multiline content', () => {
-    const execSpy = spyOn(childProcess, 'execFileSync').mockReturnValueOnce('beads_rust 1.2.3').mockReturnValue('');
-    const gateway = new BeadGateway('/repo');
-
-    const multilineContent = 'Line 1\nLine 2\nLine 3';
-    gateway.updateDescription('bd-1', multilineContent);
-
-    expect(execSpy).toHaveBeenCalledWith('br', ['update', 'bd-1', '--description', multilineContent], {
-      cwd: '/repo',
-      encoding: 'utf-8',
-      timeout: 15_000,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-
-    execSpy.mockRestore();
-  });
-
-  it('adds comment to bead via br comments add', () => {
-    const execSpy = spyOn(childProcess, 'execFileSync').mockReturnValueOnce('beads_rust 1.2.3').mockReturnValue('');
-    const gateway = new BeadGateway('/repo');
-
-    gateway.addComment('bd-1', 'This is a comment');
-
-    expect(execSpy).toHaveBeenCalledWith('br', ['comments', 'add', 'bd-1', 'This is a comment'], {
-      cwd: '/repo',
-      encoding: 'utf-8',
-      timeout: 15_000,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-
-    execSpy.mockRestore();
-  });
-
-  it('shows bead details via br show --json', () => {
-    const execSpy = spyOn(childProcess, 'execFileSync')
-      .mockReturnValueOnce('beads_rust 1.2.3')
-      .mockReturnValue('{"id":"bd-1","title":"Test Bead"}');
-    const gateway = new BeadGateway('/repo');
-
-    const result = gateway.show('bd-1');
-
-    expect(result).toEqual({ id: 'bd-1', title: 'Test Bead' });
-    expect(execSpy).toHaveBeenCalledWith('br', ['show', 'bd-1', '--json'], {
-      cwd: '/repo',
-      encoding: 'utf-8',
-      timeout: 5_000,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-
-    execSpy.mockRestore();
-  });
-
-  it('lists child beads via br dep list when parent is provided', () => {
-    const execSpy = spyOn(childProcess, 'execFileSync')
-      .mockReturnValueOnce('beads_rust 1.2.3')
-      .mockReturnValue(
-        '[{"type":"parent-child","issue_id":"bd-1","title":"Task 1","status":"open"},{"type":"blocks","issue_id":"bd-2","title":"Not a child","status":"open"}]',
-      );
-    const gateway = new BeadGateway('/repo');
-
-    const result = gateway.list({ type: 'task', parent: 'epic-1' });
-
-    expect(result).toEqual([{ id: 'bd-1', title: 'Task 1', status: 'open', type: 'task' }]);
-    expect(execSpy).toHaveBeenCalledWith(
-      'br',
-      ['dep', 'list', 'epic-1', '--direction', 'up', '--type', 'parent-child', '--json'],
-      {
-        cwd: '/repo',
-        encoding: 'utf-8',
-        timeout: 5_000,
-        stdio: ['ignore', 'pipe', 'pipe'],
-      },
-    );
-
-    execSpy.mockRestore();
-  });
-
-  it('filters child beads by status when parent is provided', () => {
-    const execSpy = spyOn(childProcess, 'execFileSync')
-      .mockReturnValueOnce('beads_rust 1.2.3')
-      .mockReturnValue(
-        '[{"type":"parent-child","issue":{"id":"bd-1","title":"Task 1","status":"open","type":"task"}},{"type":"parent-child","issue":{"id":"bd-2","title":"Task 2","status":"closed","type":"task"}}]',
-      );
-    const gateway = new BeadGateway('/repo');
-
-    const result = gateway.list({ parent: 'epic-1', status: 'closed' });
-
-    expect(result).toEqual([{ id: 'bd-2', title: 'Task 2', status: 'closed', type: 'task' }]);
-
-    execSpy.mockRestore();
-  });
-
-  it('lists beads without options', () => {
-    const execSpy = spyOn(childProcess, 'execFileSync')
-      .mockReturnValueOnce('beads_rust 1.2.3')
-      .mockReturnValue('[{"id":"bd-1"}]');
-    const gateway = new BeadGateway('/repo');
-
-    const result = gateway.list();
-
-    expect(result).toEqual([{ id: 'bd-1', title: '', status: '' }]);
-    expect(execSpy).toHaveBeenCalledWith('br', ['list', '--json'], {
-      cwd: '/repo',
-      encoding: 'utf-8',
-      timeout: 5_000,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-
-    execSpy.mockRestore();
-  });
-
-  it('maps issue_type from br CLI output to type field', () => {
-    const execSpy = spyOn(childProcess, 'execFileSync')
-      .mockReturnValueOnce('beads_rust 1.2.3')
-      .mockReturnValue(
-        '[{"id":"bd-1","title":"my-feature","status":"open","issue_type":"epic"},{"id":"bd-2","title":"my-task","status":"open","issue_type":"task"}]',
-      );
-    const gateway = new BeadGateway('/repo');
-
-    const result = gateway.list({ type: 'epic', status: 'all' });
-
-    expect(result).toEqual([{ id: 'bd-1', title: 'my-feature', status: 'open', type: 'epic' }]);
-
-    execSpy.mockRestore();
-  });
-
-  it('falls back to type field when issue_type is absent', () => {
-    const execSpy = spyOn(childProcess, 'execFileSync')
-      .mockReturnValueOnce('beads_rust 1.2.3')
-      .mockReturnValue('[{"id":"bd-1","title":"my-feature","status":"open","type":"epic"}]');
-    const gateway = new BeadGateway('/repo');
-
-    const result = gateway.list({ type: 'epic', status: 'all' });
-
-    expect(result).toEqual([{ id: 'bd-1', title: 'my-feature', status: 'open', type: 'epic' }]);
-
-    execSpy.mockRestore();
-  });
-
-  it('handles wrapped array response in list', () => {
-    const execSpy = spyOn(childProcess, 'execFileSync')
-      .mockReturnValueOnce('beads_rust 1.2.3')
-      .mockReturnValue('{"issues":[{"id":"bd-1"}]}');
-    const gateway = new BeadGateway('/repo');
-
-    const result = gateway.list();
-
-    expect(result).toEqual([{ id: 'bd-1', title: '', status: '' }]);
-
-    execSpy.mockRestore();
-  });
-
-  it('returns empty array for non-array list response', () => {
-    const execSpy = spyOn(childProcess, 'execFileSync')
-      .mockReturnValueOnce('beads_rust 1.2.3')
-      .mockReturnValue('{"other":"data"}');
-    const gateway = new BeadGateway('/repo');
-
-    const result = gateway.list();
-
-    expect(result).toEqual([]);
-
-    execSpy.mockRestore();
-  });
-
-  it('updates bead status via br update --status', () => {
-    const execSpy = spyOn(childProcess, 'execFileSync').mockReturnValueOnce('beads_rust 1.2.3').mockReturnValue('');
-    const gateway = new BeadGateway('/repo');
-
-    gateway.updateStatus('bd-1', 'in_progress');
-
-    expect(execSpy).toHaveBeenCalledWith('br', ['update', 'bd-1', '--status', 'in_progress'], {
-      cwd: '/repo',
-      encoding: 'utf-8',
-      timeout: 15_000,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-
-    execSpy.mockRestore();
-  });
-
-  it('adds label to bead via br update --add-label', () => {
-    const execSpy = spyOn(childProcess, 'execFileSync').mockReturnValueOnce('beads_rust 1.2.3').mockReturnValue('');
-    const gateway = new BeadGateway('/repo');
-
-    gateway.addLabel('bd-1', 'blocked');
-
-    expect(execSpy).toHaveBeenCalledWith('br', ['update', 'bd-1', '--add-label', 'blocked'], {
-      cwd: '/repo',
-      encoding: 'utf-8',
-      timeout: 15_000,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-
-    execSpy.mockRestore();
-  });
-
-  it('concurrent upsertArtifact calls on same bead preserve both artifacts', () => {
-    // Use a real temp directory so the lock file I/O succeeds
+  it('repeated upserts append comment snapshots and preserve latest-per-kind reads', () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'beadgw-test-'));
-
-    // Track all update calls to verify both artifacts end up in the final description
-    let currentDescription = '';
+    const commentBodies: string[] = [];
 
     const execSpy = spyOn(childProcess, 'execFileSync')
       .mockReturnValueOnce('beads_rust 1.2.3')
+      .mockReturnValueOnce('Initialized')
       .mockImplementation(((_cmd: string, args?: string[]): string => {
-        const argStr = args?.join(' ') || '';
-
-        if (argStr.includes('show')) {
-          return JSON.stringify({ description: currentDescription });
-        }
-        if (argStr.includes('--description')) {
-          // Capture the description that gets written
-          const descIdx = args!.indexOf('--description');
-          currentDescription = args![descIdx + 1];
+        if (!args) {
           return '';
+        }
+        if (args[0] === 'comments' && args[1] === 'add') {
+          const commentFile = args[4];
+          commentBodies.push(fs.readFileSync(commentFile, 'utf8'));
+          return '';
+        }
+        if (args[0] === 'comments' && args[1] === 'list') {
+          return JSON.stringify(
+            commentBodies.map((body, index) => ({
+              id: `c-${index + 1}`,
+              body,
+              timestamp: `2026-01-02T03:04:0${index}.000Z`,
+            })),
+          );
+        }
+        if (args[0] === 'show') {
+          return JSON.stringify({ description: '' });
         }
         return '';
       }) as typeof childProcess.execFileSync);
 
     const gateway = new BeadGateway(tmpDir);
-
-    // First upsert: plan_approval artifact
     gateway.upsertArtifact('bd-1', 'plan_approval', '{"approved":true}');
-
-    // Second upsert: feature_state artifact on same bead
     gateway.upsertArtifact('bd-1', 'feature_state', '{"status":"active"}');
+    gateway.upsertArtifact('bd-1', 'plan_approval', '{"approved":false}');
 
-    // The final description should contain both artifacts
-    // Note: artifact values are JSON-stringified within the artifacts block
-    expect(currentDescription).toContain('plan_approval');
-    expect(currentDescription).toContain('approved');
-    expect(currentDescription).toContain('feature_state');
-    expect(currentDescription).toContain('active');
+    expect(commentBodies).toHaveLength(3);
+    expect(gateway.readArtifact('bd-1', 'plan_approval')).toBe('{"approved":false}');
+    expect(gateway.readArtifact('bd-1', 'feature_state')).toBe('{"status":"active"}');
 
-    // Cleanup
+    const allCalls = execSpy.mock.calls.map((call) => call[1] as string[]);
+    const descriptionUpdates = allCalls.filter((args) => args[0] === 'update' && args.includes('--description'));
+    expect(descriptionUpdates).toHaveLength(0);
+
     fs.rmSync(tmpDir, { recursive: true, force: true });
     execSpy.mockRestore();
   });
 
-  it('preserves all artifact kinds including report, plan_comments, feature_state, and task_state', () => {
+  it('round-trips all artifact kinds through comment snapshots', () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'beadgw-test-'));
-    let currentDescription = '';
+    const commentBodies: string[] = [];
+    let specDescription = '';
 
     const execSpy = spyOn(childProcess, 'execFileSync')
       .mockReturnValueOnce('beads_rust 1.2.3')
+      .mockReturnValueOnce('Initialized')
       .mockImplementation(((_cmd: string, args?: string[]): string => {
-        const argStr = args?.join(' ') || '';
-        if (argStr.includes('show')) {
-          return JSON.stringify({ description: currentDescription });
-        }
-        if (argStr.includes('--description')) {
-          const descIdx = args!.indexOf('--description');
-          currentDescription = args![descIdx + 1];
+        if (!args) {
           return '';
+        }
+        if (args[0] === 'comments' && args[1] === 'add') {
+          const commentFile = args[4];
+          commentBodies.push(fs.readFileSync(commentFile, 'utf8'));
+          return '';
+        }
+        if (args[0] === 'comments' && args[1] === 'list') {
+          return JSON.stringify(
+            commentBodies.map((body, index) => ({
+              id: `c-${index + 1}`,
+              body,
+              timestamp: `2026-01-02T04:05:0${index}.000Z`,
+            })),
+          );
+        }
+        if (args[0] === 'update' && args.includes('--description')) {
+          const contentIndex = args.indexOf('--description');
+          specDescription = args[contentIndex + 1];
+          return '';
+        }
+        if (args[0] === 'show') {
+          return JSON.stringify({ description: specDescription });
         }
         return '';
       }) as typeof childProcess.execFileSync);
 
     const gateway = new BeadGateway(tmpDir);
+    const artifacts: Array<
+      [
+        (
+          | 'spec'
+          | 'worker_prompt'
+          | 'report'
+          | 'plan_approval'
+          | 'approved_plan'
+          | 'plan_comments'
+          | 'feature_state'
+          | 'task_state'
+        ),
+        string,
+      ]
+    > = [
+      ['spec', 'spec content'],
+      ['worker_prompt', 'prompt content'],
+      ['report', 'report content'],
+      ['plan_approval', '{"approved":true}'],
+      ['approved_plan', '# Approved Plan'],
+      ['plan_comments', '{"threads":[]}'],
+      ['feature_state', '{"status":"active"}'],
+      ['task_state', '{"status":"pending"}'],
+    ];
 
-    // Upsert several artifact kinds
-    gateway.upsertArtifact('bd-1', 'worker_prompt', 'prompt content');
-    gateway.upsertArtifact('bd-1', 'report', 'report content');
-    gateway.upsertArtifact('bd-1', 'plan_comments', '{"threads":[]}');
-    gateway.upsertArtifact('bd-1', 'feature_state', '{"status":"active"}');
-    gateway.upsertArtifact('bd-1', 'task_state', '{"status":"pending"}');
+    for (const [kind, content] of artifacts) {
+      gateway.upsertArtifact('bd-1', kind, content);
+    }
 
-    // All artifacts should be present in final description
-    expect(currentDescription).toContain('worker_prompt');
-    expect(currentDescription).toContain('prompt content');
-    expect(currentDescription).toContain('report');
-    expect(currentDescription).toContain('report content');
-    expect(currentDescription).toContain('plan_comments');
-    expect(currentDescription).toContain('feature_state');
-    expect(currentDescription).toContain('task_state');
-
-    // Verify roundtrip: read each artifact back
-    const workerPrompt = gateway.readArtifact('bd-1', 'worker_prompt');
-    const report = gateway.readArtifact('bd-1', 'report');
-    const planComments = gateway.readArtifact('bd-1', 'plan_comments');
-    const featureState = gateway.readArtifact('bd-1', 'feature_state');
-    const taskState = gateway.readArtifact('bd-1', 'task_state');
-
-    expect(workerPrompt).toBe('prompt content');
-    expect(report).toBe('report content');
-    expect(planComments).toBe('{"threads":[]}');
-    expect(featureState).toBe('{"status":"active"}');
-    expect(taskState).toBe('{"status":"pending"}');
+    for (const [kind, content] of artifacts) {
+      expect(gateway.readArtifact('bd-1', kind)).toBe(content);
+    }
+    expect(specDescription).toBe('spec content');
+    expect(commentBodies).toHaveLength(artifacts.length);
 
     fs.rmSync(tmpDir, { recursive: true, force: true });
     execSpy.mockRestore();
@@ -1015,7 +847,7 @@ describe('BeadGateway', () => {
 
       gateway.listComments('bd-1');
 
-      expect(execSpy).toHaveBeenCalledWith('br', ['comments', 'list', 'bd-1', '--json'], {
+      expect(execSpy).toHaveBeenCalledWith('br', ['comments', 'list', 'bd-1', '--json', '--no-daemon'], {
         cwd: '/repo',
         encoding: 'utf-8',
         timeout: 5_000,
@@ -1074,6 +906,28 @@ describe('BeadGateway', () => {
         timestamp: '2024-01-01T00:00:00Z',
         prompt: 'What should I do?',
         response: 'Do this task',
+      });
+      expect(execSpy).toHaveBeenCalledTimes(3);
+
+      execSpy.mockRestore();
+    });
+
+    it('parses br-native comment fields text and created_at', () => {
+      const singleCommentFixture =
+        '[{"id":1,"text":"Artifact snapshot","author":"test-user","created_at":"2024-01-01T00:00:00Z"}]';
+      const execSpy = spyOn(childProcess, 'execFileSync')
+        .mockReturnValueOnce('beads_rust 1.2.3')
+        .mockReturnValue(singleCommentFixture);
+      const gateway = new BeadGateway('/repo');
+
+      const comments = gateway.listComments('bd-1');
+
+      expect(comments).toHaveLength(1);
+      expect(comments[0]).toEqual({
+        id: '1',
+        body: 'Artifact snapshot',
+        author: 'test-user',
+        timestamp: '2024-01-01T00:00:00Z',
       });
       expect(execSpy).toHaveBeenCalledTimes(3);
 

@@ -1,7 +1,7 @@
 import type { FeatureJson, PlanComment } from '../../types.js';
 import { readJson, readText, writeJson } from '../../utils/fs.js';
 import { getFeatureJsonPath, getPlanPath } from '../../utils/paths.js';
-import { type BeadsRepository, isRepositoryInitFailure } from '../beads/BeadsRepository.js';
+import { type BeadsRepository, throwIfInitFailure } from '../beads/BeadsRepository.js';
 import type { PlanStore } from './types.js';
 
 type FeatureJsonWithPlanState = FeatureJson & {
@@ -27,19 +27,19 @@ export class BeadsPlanStore implements PlanStore {
 
     const setApprovalResult = this.repository.setPlanApproval(epicBeadId, planHash, timestamp, sessionId);
     if (setApprovalResult.success === false) {
-      this.throwIfInitFailure(setApprovalResult.error, '[warcraft] Failed to set plan approval');
+      throwIfInitFailure(setApprovalResult.error, '[warcraft] Failed to set plan approval');
       console.warn(`[warcraft] Failed to set plan approval: ${setApprovalResult.error.message}`);
     }
 
     const setPlanResult = this.repository.setApprovedPlan(epicBeadId, planContent, planHash);
     if (setPlanResult.success === false) {
-      this.throwIfInitFailure(setPlanResult.error, '[warcraft] Failed to set approved plan');
+      throwIfInitFailure(setPlanResult.error, '[warcraft] Failed to set approved plan');
       console.warn(`[warcraft] Failed to set approved plan: ${setPlanResult.error.message}`);
     }
 
     const addLabelResult = this.repository.addWorkflowLabel(epicBeadId, 'approved');
     if (addLabelResult.success === false) {
-      this.throwIfInitFailure(addLabelResult.error, '[warcraft] Failed to apply approved workflow label');
+      throwIfInitFailure(addLabelResult.error, '[warcraft] Failed to apply approved workflow label');
       console.warn(`[warcraft] Failed to apply approved workflow label: ${addLabelResult.error.message}`);
     }
 
@@ -53,10 +53,7 @@ export class BeadsPlanStore implements PlanStore {
       writeJson(featurePath, feature);
       const setFeatureStateResult = this.repository.setFeatureState(epicBeadId, feature);
       if (setFeatureStateResult.success === false) {
-        this.throwIfInitFailure(
-          setFeatureStateResult.error,
-          '[warcraft] Failed to cache feature state after plan approval',
-        );
+        throwIfInitFailure(setFeatureStateResult.error, '[warcraft] Failed to cache feature state after plan approval');
         console.warn(
           `[warcraft] Failed to cache feature state after plan approval: ${setFeatureStateResult.error.message}`,
         );
@@ -73,7 +70,7 @@ export class BeadsPlanStore implements PlanStore {
       if (approvalResult.success === true && approvalResult.value) {
         approvalData = approvalResult.value;
       } else if (approvalResult.success === false) {
-        this.throwIfInitFailure(
+        throwIfInitFailure(
           approvalResult.error,
           `[warcraft] Failed to read plan approval for feature '${featureName}'`,
         );
@@ -101,7 +98,7 @@ export class BeadsPlanStore implements PlanStore {
           legacyFeature.sessionId,
         );
         if (migrateApprovalResult.success === false) {
-          this.throwIfInitFailure(migrateApprovalResult.error, '[warcraft] Failed to migrate legacy plan approval');
+          throwIfInitFailure(migrateApprovalResult.error, '[warcraft] Failed to migrate legacy plan approval');
         }
         // Read actual plan content for the approved plan snapshot
         const planContent = readText(getPlanPath(this.projectRoot, featureName, 'on')) ?? '';
@@ -111,10 +108,7 @@ export class BeadsPlanStore implements PlanStore {
           legacyFeature.planApprovalHash,
         );
         if (migratePlanResult.success === false) {
-          this.throwIfInitFailure(
-            migratePlanResult.error,
-            '[warcraft] Failed to migrate legacy approved plan snapshot',
-          );
+          throwIfInitFailure(migratePlanResult.error, '[warcraft] Failed to migrate legacy approved plan snapshot');
         }
         return true;
       }
@@ -135,14 +129,14 @@ export class BeadsPlanStore implements PlanStore {
 
     const clearApprovalResult = this.repository.setPlanApproval(epicBeadId, '', '', undefined);
     if (clearApprovalResult.success === false) {
-      this.throwIfInitFailure(
+      throwIfInitFailure(
         clearApprovalResult.error,
         `[warcraft] Failed to revoke plan approval for feature '${featureName}'`,
       );
     }
     const clearPlanResult = this.repository.setApprovedPlan(epicBeadId, '', '');
     if (clearPlanResult.success === false) {
-      this.throwIfInitFailure(
+      throwIfInitFailure(
         clearPlanResult.error,
         `[warcraft] Failed to clear approved plan for feature '${featureName}'`,
       );
@@ -157,7 +151,7 @@ export class BeadsPlanStore implements PlanStore {
       writeJson(featurePath, feature);
       const setFeatureStateResult = this.repository.setFeatureState(epicBeadId, feature);
       if (setFeatureStateResult.success === false) {
-        this.throwIfInitFailure(
+        throwIfInitFailure(
           setFeatureStateResult.error,
           `[warcraft] Failed to cache revoked approval state for feature '${featureName}'`,
         );
@@ -174,10 +168,7 @@ export class BeadsPlanStore implements PlanStore {
       return commentsResult.value;
     }
     if (commentsResult.success === false) {
-      this.throwIfInitFailure(
-        commentsResult.error,
-        `[warcraft] Failed to read plan comments for feature '${featureName}'`,
-      );
+      throwIfInitFailure(commentsResult.error, `[warcraft] Failed to read plan comments for feature '${featureName}'`);
     }
 
     // Fall back to legacy feature.json comments and migrate if found
@@ -185,7 +176,7 @@ export class BeadsPlanStore implements PlanStore {
     if (legacyComments.length > 0) {
       const migrateCommentsResult = this.repository.setPlanComments(epicBeadId, legacyComments);
       if (migrateCommentsResult.success === false) {
-        this.throwIfInitFailure(migrateCommentsResult.error, '[warcraft] Failed to migrate legacy plan comments');
+        throwIfInitFailure(migrateCommentsResult.error, '[warcraft] Failed to migrate legacy plan comments');
       }
     }
     return legacyComments;
@@ -197,7 +188,7 @@ export class BeadsPlanStore implements PlanStore {
 
     const setCommentsResult = this.repository.setPlanComments(epicBeadId, comments);
     if (setCommentsResult.success === false) {
-      this.throwIfInitFailure(
+      throwIfInitFailure(
         setCommentsResult.error,
         `[warcraft] Failed to set plan comments for feature '${featureName}'`,
       );
@@ -212,7 +203,7 @@ export class BeadsPlanStore implements PlanStore {
 
     const result = this.repository.setPlanDescription(epicBeadId, content);
     if (result.success === false) {
-      this.throwIfInitFailure(result.error, `[warcraft] Failed to sync plan description for feature '${featureName}'`);
+      throwIfInitFailure(result.error, `[warcraft] Failed to sync plan description for feature '${featureName}'`);
       console.warn(`[warcraft] Failed to sync plan description for feature '${featureName}': ${result.error.message}`);
     }
   }
@@ -224,7 +215,7 @@ export class BeadsPlanStore implements PlanStore {
     const commentText = `[${comment.author}] Line ${comment.line}: ${comment.body}`;
     const result = this.repository.appendPlanComment(epicBeadId, commentText);
     if (result.success === false) {
-      this.throwIfInitFailure(result.error, `[warcraft] Failed to sync plan comment for feature '${featureName}'`);
+      throwIfInitFailure(result.error, `[warcraft] Failed to sync plan comment for feature '${featureName}'`);
       console.warn(`[warcraft] Failed to sync plan comment for feature '${featureName}': ${result.error.message}`);
     }
   }
@@ -236,7 +227,7 @@ export class BeadsPlanStore implements PlanStore {
   private resolveEpic(featureName: string): string | null {
     const epicResult = this.repository.getEpicByFeatureName(featureName, false);
     if (epicResult.success === false) {
-      this.throwIfInitFailure(epicResult.error, `Failed to resolve epic for feature '${featureName}'`);
+      throwIfInitFailure(epicResult.error, `Failed to resolve epic for feature '${featureName}'`);
       return null;
     }
     if (!epicResult.value) {
@@ -245,13 +236,6 @@ export class BeadsPlanStore implements PlanStore {
     return epicResult.value;
   }
 
-  private throwIfInitFailure(error: unknown, context: string): void {
-    if (!isRepositoryInitFailure(error)) {
-      return;
-    }
-    const reason = error instanceof Error ? error.message : String(error);
-    throw new Error(`${context}: ${reason}`);
-  }
   private readLegacyComments(featureName: string): PlanComment[] {
     const feature = readJson<FeatureJsonWithPlanState>(getFeatureJsonPath(this.projectRoot, featureName, 'on'));
     return feature?.planComments ?? [];

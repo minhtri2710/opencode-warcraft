@@ -62,6 +62,7 @@ function createMockRepository(overrides: Partial<BeadsRepository> = {}): BeadsRe
     upsertTaskArtifact: () => ({ success: true, value: undefined }),
     readTaskArtifact: () => ({ success: true, value: null }),
     listTaskBeadsForEpic: () => [],
+    listEpics: () => ({ success: true, value: [{ id: 'bd-epic-1', title: 'test-feature', status: 'open' }] }),
     addWorkflowLabel: () => ({ success: true, value: undefined }),
     getRobotPlan: () => ({ success: false, error: new Error('Not implemented') }),
     getViewerHealth: () => ({ success: false, error: new Error('Not implemented') }),
@@ -75,7 +76,7 @@ function createMockRepository(overrides: Partial<BeadsRepository> = {}): BeadsRe
 describe('FeatureService flat layout', () => {
   it('creates features at canonical flat path', () => {
     const mockRepository = createMockRepository({
-      createEpic: () => 'bd-epic-1',
+      createEpic: () => ({ success: true, value: 'bd-epic-1' }),
     });
 
     // Use offMode to test filesystem-only behavior
@@ -98,7 +99,7 @@ describe('FeatureService flat layout', () => {
 
   it('lists features from canonical flat path excluding .worktrees', () => {
     const mockRepository = createMockRepository({
-      createEpic: (name) => `bd-${name}`,
+      createEpic: (name) => ({ success: true, value: `bd-${name}` }),
     });
 
     // Use offMode to test filesystem-only behavior
@@ -122,7 +123,7 @@ describe('FeatureService flat layout', () => {
 
   it('does not resolve features from legacy nested path', () => {
     const mockRepository = createMockRepository({
-      createEpic: () => 'bd-epic-1',
+      createEpic: () => ({ success: true, value: 'bd-epic-1' }),
     });
 
     const legacyPath = path.join(testRoot, 'docs', 'features', 'legacy-feature');
@@ -147,7 +148,7 @@ describe('FeatureService flat layout', () => {
 
   it('does not list legacy nested features directory entries', () => {
     const mockRepository = createMockRepository({
-      createEpic: () => 'bd-epic-1',
+      createEpic: () => ({ success: true, value: 'bd-epic-1' }),
     });
 
     // Create features at legacy locations
@@ -193,7 +194,7 @@ describe('FeatureService.create', () => {
 
   it('rolls back partial filesystem state when initialization fails after epic creation', () => {
     const mockRepository = createMockRepository({
-      createEpic: () => 'bd-epic-1',
+      createEpic: () => ({ success: true, value: 'bd-epic-1' }),
     });
 
     const originalMkdirSync = fs.mkdirSync;
@@ -489,6 +490,13 @@ describe('FeatureService beadsMode on', () => {
   it('uses BeadGateway for list when beadsMode is on', () => {
     const mockRepository = createMockRepository({
       createEpic: (_name: string, _priority: number) => ({ success: true, value: 'bd-epic-1' }),
+      listEpics: () => ({
+        success: true,
+        value: [
+          { id: 'bd-epic-1', title: 'feature-a', status: 'open', type: 'epic' },
+          { id: 'bd-epic-2', title: 'feature-b', status: 'open', type: 'epic' },
+        ],
+      }),
       getGateway: () =>
         ({
           createEpic: () => 'bd-epic-1',

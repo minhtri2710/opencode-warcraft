@@ -144,7 +144,14 @@ export class WorktreeTools {
         const attempt = (rawStatus?.workerSession?.attempt || 0) + 1;
         const idempotencyKey = `warcraft-${feature}-${task}-${attempt}`;
 
-        taskService.patchBackgroundFields(feature, task, { idempotencyKey });
+        try {
+          taskService.patchBackgroundFields(feature, task, { idempotencyKey });
+        } catch (error) {
+          const reason = error instanceof Error ? error.message : String(error);
+          console.warn(
+            `[warcraft] Failed to persist idempotency key for task '${task}' in feature '${feature}': ${reason}`,
+          );
+        }
 
         const contextContent = contextFiles.map((f) => f.content).join('\n\n');
         const previousTasksContent = previousTasks.map((t) => `- **${t.name}**: ${t.summary}`).join('\n');

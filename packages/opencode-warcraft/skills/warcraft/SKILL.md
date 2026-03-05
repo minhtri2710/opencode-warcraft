@@ -279,6 +279,13 @@ In this example, tasks 2 and 3 can run in parallel (both only depend on 1), whil
 warcraft_tasks_sync()
 ```
 
+Load `warcraft_skill("br")` before task execution to use the canonical `br` lifecycle commands:
+- `br ready --json` to pick unblocked work
+- `br update --actor "$ACTOR" <id> --status in_progress --claim` when starting
+- `br close --actor "$ACTOR" <id> --reason "..."` when completing
+- `br sync --flush-only` before committing `.beads/` changes
+
+
 ### Single Task Execution
 
 `warcraft_worktree_create` creates the worktree and returns delegation instructions with `delegationRequired: true` and a `taskToolCall` object:
@@ -392,6 +399,7 @@ If "Revise Plan":
 | Execute   | `warcraft_merge`                                           | Integrate task branch                      |
 | Execute   | `warcraft_batch_execute`                                   | Parallel task dispatch                     |
 | Execute   | `warcraft_status`                                          | Check workers/blockers                     |
+| Execute   | `warcraft_skill("br")`                                     | Load canonical `br` ready/claim/close/sync workflow |
 | Complete  | `warcraft_feature_complete`                                | Mark done                                  |
 | Any       | `warcraft_skill`                                           | Load skill on demand                       |
 | Any       | `warcraft_agents_md`                                       | Sync/init AGENTS.md                        |

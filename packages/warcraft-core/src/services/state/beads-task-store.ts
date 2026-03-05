@@ -5,7 +5,7 @@ import type { LockOptions } from '../../utils/json-lock.js';
 import { getTaskPath, getTaskReportPath, getTaskStatusPath } from '../../utils/paths.js';
 import { deriveTaskFolder, slugifyTaskName } from '../../utils/slug.js';
 import { encodeTaskState, taskStateFromTaskStatus } from '../beads/artifactSchemas.js';
-import { type BeadsRepository, isRepositoryInitFailure } from '../beads/BeadsRepository.js';
+import { type BeadsRepository, throwIfInitFailure } from '../beads/BeadsRepository.js';
 import { mapBeadStatusToTaskStatus } from '../beads/beadStatus.js';
 import type { TaskWithDeps } from '../taskDependencyGraph.js';
 import { computeRunnableAndBlocked } from '../taskDependencyGraph.js';
@@ -92,7 +92,7 @@ export class BeadsTaskStore implements TaskStore {
 
     const setTaskStateResult = this.repository.setTaskState(beadId, { ...statusWithBead, folder } as TaskStatus);
     if (setTaskStateResult.success === false) {
-      this.throwIfInitFailure(setTaskStateResult.error, `Failed to persist task state for '${beadId}'`);
+      throwIfInitFailure(setTaskStateResult.error, `Failed to persist task state for '${beadId}'`);
       throw new Error(`Failed to persist task state for '${beadId}': ${setTaskStateResult.error.message}`);
     }
 
@@ -201,7 +201,7 @@ export class BeadsTaskStore implements TaskStore {
       const epicBeadId = epicResult.value!;
       const listResult = this.repository.listTaskBeadsForEpic(epicBeadId);
       if (listResult.success === false) {
-        this.throwIfInitFailure(listResult.error, `Failed to list task beads for epic '${epicBeadId}'`);
+        throwIfInitFailure(listResult.error, `Failed to list task beads for epic '${epicBeadId}'`);
       }
       const taskBeads = listResult.success ? listResult.value : [];
       const sortedTaskBeads = [...taskBeads].sort((a, b) => a.title.localeCompare(b.title));
@@ -261,7 +261,7 @@ export class BeadsTaskStore implements TaskStore {
 
       return sortedTasks;
     } catch (error) {
-      this.throwIfInitFailure(error, `Failed to list tasks for feature '${featureName}'`);
+      throwIfInitFailure(error, `Failed to list tasks for feature '${featureName}'`);
       return [];
     }
   }
@@ -286,26 +286,19 @@ export class BeadsTaskStore implements TaskStore {
     this.repository.setTaskState(status.beadId, { ...status, folder } as TaskStatus);
 
     // Invalidate cache entry for the modified task
-    const featureTaskIndex = this.taskIndex.get(featureName);
-    if (featureTaskIndex) {
-      featureTaskIndex.delete(folder);
-    }
-    const featureBeadIdIndex = this.beadIdIndex.get(featureName);
-    if (featureBeadIdIndex) {
-      featureBeadIdIndex.delete(folder);
-    }
+    this.invalidateCacheEntry(featureName, folder);
 
     if (options?.syncBeadStatus && status.status) {
       try {
         this.repository.getGateway().syncTaskStatus(status.beadId, status.status);
       } catch (error) {
-        this.throwIfInitFailure(error, `[warcraft] Failed to sync bead status for '${status.beadId}'`);
+        throwIfInitFailure(error, `[warcraft] Failed to sync bead status for '${status.beadId}'`);
         const reason = error instanceof Error ? error.message : String(error);
         console.warn(`[warcraft] Failed to sync bead status for '${status.beadId}': ${reason}`);
       }
       const flushResult = this.repository.flushArtifacts();
       if (flushResult.success === false) {
-        this.throwIfInitFailure(
+        throwIfInitFailure(
           flushResult.error,
           `[warcraft] Failed to flush artifacts after syncing bead status for '${status.beadId}'`,
         );
@@ -351,14 +344,7 @@ export class BeadsTaskStore implements TaskStore {
     }
 
     // Invalidate cache entry for the patched task
-    const featureTaskIndex = this.taskIndex.get(featureName);
-    if (featureTaskIndex) {
-      featureTaskIndex.delete(folder);
-    }
-    const featureBeadIdIndex = this.beadIdIndex.get(featureName);
-    if (featureBeadIdIndex) {
-      featureBeadIdIndex.delete(folder);
-    }
+    this.invalidateCacheEntry(featureName, folder);
 
     return updated;
   }
@@ -370,14 +356,7 @@ export class BeadsTaskStore implements TaskStore {
     }
 
     // Invalidate cache entry for the deleted task
-    const featureTaskIndex = this.taskIndex.get(featureName);
-    if (featureTaskIndex) {
-      featureTaskIndex.delete(folder);
-    }
-    const featureBeadIdIndex = this.beadIdIndex.get(featureName);
-    if (featureBeadIdIndex) {
-      featureBeadIdIndex.delete(folder);
-    }
+    this.invalidateCacheEntry(featureName, folder);
   }
 
   writeArtifact(featureName: string, folder: string, kind: TaskArtifactKind, content: string): string {
@@ -386,10 +365,15 @@ export class BeadsTaskStore implements TaskStore {
       throw new Error(`Task '${folder}' does not have beadId`);
     }
 
-    this.repository.upsertTaskArtifact(status.beadId, kind, content);
+    const upsertResult = this.repository.upsertTaskArtifact(status.beadId, kind, content);
+    if (upsertResult.success === false) {
+      throwIfInitFailure(upsertResult.error, `[warcraft] Failed to write '${kind}' artifact for '${status.beadId}'`);
+      throw new Error(`Failed to write '${kind}' artifact for '${status.beadId}': ${upsertResult.error.message}`);
+    }
+
     const flushResult = this.repository.flushArtifacts();
     if (flushResult.success === false) {
-      this.throwIfInitFailure(
+      throwIfInitFailure(
         flushResult.error,
         `[warcraft] Failed to flush artifacts after writing '${kind}' for '${status.beadId}'`,
       );
@@ -400,7 +384,7 @@ export class BeadsTaskStore implements TaskStore {
   readArtifact(featureName: string, folder: string, kind: TaskArtifactKind): string | null {
     const importResult = this.repository.importArtifacts();
     if (importResult.success === false) {
-      this.throwIfInitFailure(importResult.error, `[warcraft] Failed to import artifacts before reading '${kind}'`);
+      throwIfInitFailure(importResult.error, `[warcraft] Failed to import artifacts before reading '${kind}'`);
     }
 
     const status = this.getRawStatus(featureName, folder);
@@ -410,7 +394,7 @@ export class BeadsTaskStore implements TaskStore {
 
     const readResult = this.repository.readTaskArtifact(status.beadId, kind);
     if (readResult.success === false) {
-      this.throwIfInitFailure(readResult.error, `[warcraft] Failed to read '${kind}' artifact for '${status.beadId}'`);
+      throwIfInitFailure(readResult.error, `[warcraft] Failed to read '${kind}' artifact for '${status.beadId}'`);
       return null;
     }
     return readResult.value;
@@ -534,7 +518,7 @@ export class BeadsTaskStore implements TaskStore {
         source: 'beads',
       };
     } catch (error) {
-      this.throwIfInitFailure(error, `[warcraft] Failed to get runnable tasks for feature '${featureName}'`);
+      throwIfInitFailure(error, `[warcraft] Failed to get runnable tasks for feature '${featureName}'`);
       const reason = error instanceof Error ? error.message : String(error);
       // Log at error level so issues are visible in agent output
       console.error(`[warcraft] Failed to get runnable tasks from beads: ${reason}`);
@@ -545,7 +529,7 @@ export class BeadsTaskStore implements TaskStore {
   flush(): void {
     const flushResult = this.repository.flushArtifacts();
     if (flushResult.success === false) {
-      this.throwIfInitFailure(flushResult.error, '[warcraft] Failed to flush bead artifacts');
+      throwIfInitFailure(flushResult.error, '[warcraft] Failed to flush bead artifacts');
     }
   }
 
@@ -682,7 +666,7 @@ export class BeadsTaskStore implements TaskStore {
   private readTaskState(beadId: string): TaskStatus | null {
     const result = this.repository.getTaskState(beadId);
     if (result.success === false) {
-      this.throwIfInitFailure(result.error, `[warcraft] Failed to read task state for bead '${beadId}'`);
+      throwIfInitFailure(result.error, `[warcraft] Failed to read task state for bead '${beadId}'`);
       return null;
     }
     if (!result.value) {
@@ -691,12 +675,15 @@ export class BeadsTaskStore implements TaskStore {
     return result.value;
   }
 
-  private throwIfInitFailure(error: unknown, context: string): void {
-    if (!isRepositoryInitFailure(error)) {
-      return;
+  private invalidateCacheEntry(featureName: string, folder: string): void {
+    const featureTaskIndex = this.taskIndex.get(featureName);
+    if (featureTaskIndex) {
+      featureTaskIndex.delete(folder);
     }
-    const reason = error instanceof Error ? error.message : String(error);
-    throw new Error(`${context}: ${reason}`);
+    const featureBeadIdIndex = this.beadIdIndex.get(featureName);
+    if (featureBeadIdIndex) {
+      featureBeadIdIndex.delete(folder);
+    }
   }
 
   // ---------------------------------------------------------------------------

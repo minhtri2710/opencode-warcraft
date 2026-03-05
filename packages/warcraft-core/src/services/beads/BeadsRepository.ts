@@ -96,6 +96,14 @@ export function isRepositoryInitFailure(error: unknown): boolean {
   return internalCode !== null && INIT_FAILURE_INTERNAL_CODES.has(internalCode);
 }
 
+export function throwIfInitFailure(error: unknown, context: string): void {
+  if (!isRepositoryInitFailure(error)) {
+    return;
+  }
+  const reason = error instanceof Error ? error.message : String(error);
+  throw new Error(`${context}: ${reason}`);
+}
+
 function extractInternalCodeFromMessage(message: string): string | null {
   const matched = message.match(INTERNAL_GATEWAY_CODE_PATTERN);
   return matched ? matched[1] : null;
@@ -869,6 +877,19 @@ export class BeadsRepository {
 
       const tasks = this.gateway.list({ type: 'task', parent: epicBeadId });
       return { success: true, value: tasks };
+    } catch (error) {
+      return {
+        success: false,
+        error: this.normalizeError(error),
+      };
+    }
+  }
+
+  listEpics(status?: 'open' | 'closed' | 'all'): Result<Array<{ id: string; title: string; status: string }>> {
+    try {
+      this.beforeRead();
+      const epics = this.gateway.list({ type: 'epic', status: status ?? 'all' });
+      return { success: true, value: epics };
     } catch (error) {
       return {
         success: false,

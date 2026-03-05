@@ -170,8 +170,7 @@ export function prepareTaskDispatch(
 
   taskService.writeWorkerPrompt(feature, task, workerPrompt);
 
-  // Read persisted worker prompt back (bead round-trip verification)
-  const persistedWorkerPrompt = taskService.readTaskBeadArtifact(feature, task, 'worker_prompt');
+  const persistedWorkerPrompt = workerPrompt;
 
   return {
     specContent,

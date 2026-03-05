@@ -61,6 +61,7 @@ describe('TaskService', () => {
   let childCounter = 0;
   const mockDescriptions: Map<string, string> = new Map();
   const mockCreatedTasks: Array<{ id: string; title: string; status: string }> = [];
+  const mockComments: Map<string, string[]> = new Map();
 
   beforeEach(() => {
     cleanup();
@@ -74,6 +75,7 @@ describe('TaskService', () => {
     childCounter = 0;
     mockDescriptions.clear();
     mockCreatedTasks.length = 0;
+    mockComments.clear();
     execFileSyncSpy = spyOn(child_process, 'execFileSync').mockImplementation((...execArgs: any[]) => {
       const [command, args] = execArgs;
       if (command !== 'br') {
@@ -93,6 +95,31 @@ describe('TaskService', () => {
         const title = argList[titleIdx] || `Task ${childCounter}`;
         mockCreatedTasks.push({ id: taskId, title, status: 'open' });
         return JSON.stringify({ id: taskId }) as any;
+      }
+      if (argList[0] === 'comments' && argList[1] === 'add') {
+        const beadId = argList[2] ?? '';
+        const body = argList[3] ?? '';
+        if (!mockComments.has(beadId)) {
+          mockComments.set(beadId, []);
+        }
+        if (argList[3] === '--file' && argList[4]) {
+          const fileBody = fs.readFileSync(argList[4], 'utf8');
+          mockComments.get(beadId)?.push(fileBody);
+        } else {
+          mockComments.get(beadId)?.push(body);
+        }
+        return '' as any;
+      }
+      if (argList[0] === 'comments' && argList[1] === 'list') {
+        const beadId = argList[2] ?? '';
+        const comments = mockComments.get(beadId) ?? [];
+        return JSON.stringify(
+          comments.map((body, index) => ({
+            id: `comment-${index + 1}`,
+            body,
+            timestamp: `2026-01-02T00:00:${String(index).padStart(2, '0')}Z`,
+          })),
+        ) as any;
       }
       if (argList[0] === 'update') {
         const descIdx = argList.indexOf('--description');
