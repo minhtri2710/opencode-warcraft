@@ -3,6 +3,8 @@ import * as child_process from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { formatSpecContent } from 'warcraft-core';
+import type { WorktreeToolsDependencies } from './worktree-tools.js';
+import { WorktreeTools } from './worktree-tools.js';
 
 const TEST_DIR = `/tmp/opencode-warcraft-worktree-tools-test-${process.pid}`;
 
@@ -51,6 +53,33 @@ function _setupTask(featureName: string, taskFolder: string, status: Record<stri
   fs.writeFileSync(path.join(taskPath, 'status.json'), JSON.stringify(taskStatus, null, 2));
 }
 
+/**
+ * Create minimal mock deps for WorktreeTools with configurable verificationModel.
+ */
+function createMergeDeps(overrides: Partial<WorktreeToolsDependencies> = {}): WorktreeToolsDependencies {
+  return {
+    featureService: {} as WorktreeToolsDependencies['featureService'],
+    planService: {} as WorktreeToolsDependencies['planService'],
+    taskService: {
+      get: () => ({ folder: '01-task', name: 'Task', status: 'done', origin: 'plan' as const }),
+      ...((overrides as Record<string, unknown>).taskServiceOverrides ?? {}),
+    } as unknown as WorktreeToolsDependencies['taskService'],
+    worktreeService: {
+      merge: async () => ({ success: true, sha: 'abc123', filesChanged: ['a.ts'] }),
+      ...((overrides as Record<string, unknown>).worktreeServiceOverrides ?? {}),
+    } as unknown as WorktreeToolsDependencies['worktreeService'],
+    contextService: { list: () => [] } as unknown as WorktreeToolsDependencies['contextService'],
+    validateTaskStatus: ((s: string) => s) as unknown as WorktreeToolsDependencies['validateTaskStatus'],
+    checkBlocked: () => ({ blocked: false }),
+    checkDependencies: () => ({ allowed: true }),
+    hasCompletionGateEvidence: () => true,
+    completionGates: ['build', 'test', 'lint'] as const,
+    verificationModel: 'tdd',
+    workflowGatesMode: 'warn',
+    ...overrides,
+  };
+}
+
 describe('WorktreeTools', () => {
   let execFileSyncSpy: ReturnType<typeof spyOn>;
   let childCounter = 0;
@@ -82,6 +111,173 @@ describe('WorktreeTools', () => {
   afterEach(() => {
     execFileSyncSpy.mockRestore();
     cleanup();
+  });
+});
+
+describe('mergeTaskTool verification defaults', () => {
+  const resolveFeature = () => 'test-feature';
+
+  /** Parse tool result JSON string into data object */
+  function parseToolResult(result: unknown): Record<string, unknown> {
+    const json = JSON.parse(result as string);
+    return json.data ?? json;
+  }
+
+  /** Create a mock execAsync that tracks calls and returns success */
+  function createMockExec(options: { shouldFail?: boolean; failOnCall?: number } = {}) {
+    let callCount = 0;
+    const calls: Array<{ command: string; options: { cwd: string; timeout: number } }> = [];
+
+    const mockExec = async (command: string, opts: { cwd: string; timeout: number }) => {
+      callCount++;
+      calls.push({ command, options: opts });
+
+      if (options.shouldFail || (options.failOnCall && callCount >= options.failOnCall)) {
+        const err = new Error('Command failed') as Error & { stdout: string; stderr: string };
+        err.stdout = 'FAIL src/test.ts';
+        err.stderr = 'Error: assertion failed';
+        throw err;
+      }
+      return { stdout: `${command} passed\n`, stderr: '' };
+    };
+
+    return { mockExec, getCalls: () => calls, getCallCount: () => callCount };
+  }
+
+  it('defaults verify to true in TDD verification model when verify not provided', async () => {
+    const { mockExec, getCallCount } = createMockExec();
+
+    const deps = createMergeDeps({ verificationModel: 'tdd', execAsync: mockExec });
+    const tools = new WorktreeTools(deps);
+    const mergeTool = tools.mergeTaskTool(resolveFeature);
+
+    const result = await mergeTool.execute(
+      { task: '01-task', strategy: 'merge', feature: 'test-feature' },
+      {} as never,
+    );
+
+    expect(getCallCount()).toBeGreaterThan(0);
+    const data = parseToolResult(result);
+    // The structured response should contain verification results
+    expect(data.verification).toBeDefined();
+    expect((data.verification as Record<string, unknown>).passed).toBe(true);
+  });
+
+  it('defaults verify to false in best-effort verification model when verify not provided', async () => {
+    const { mockExec, getCallCount } = createMockExec();
+
+    const deps = createMergeDeps({ verificationModel: 'best-effort', execAsync: mockExec });
+    const tools = new WorktreeTools(deps);
+    const mergeTool = tools.mergeTaskTool(resolveFeature);
+
+    const result = await mergeTool.execute(
+      { task: '01-task', strategy: 'merge', feature: 'test-feature' },
+      {} as never,
+    );
+
+    expect(getCallCount()).toBe(0);
+    const data = parseToolResult(result);
+    // Should not contain verification results
+    expect(data.verification).toBeUndefined();
+  });
+
+  it('allows explicit verify=false to override TDD default', async () => {
+    const { mockExec, getCallCount } = createMockExec();
+
+    const deps = createMergeDeps({ verificationModel: 'tdd', execAsync: mockExec });
+    const tools = new WorktreeTools(deps);
+    const mergeTool = tools.mergeTaskTool(resolveFeature);
+
+    const result = await mergeTool.execute(
+      { task: '01-task', strategy: 'merge', feature: 'test-feature', verify: false },
+      {} as never,
+    );
+
+    expect(getCallCount()).toBe(0);
+    const data = parseToolResult(result);
+    expect(data.verification).toBeUndefined();
+  });
+
+  it('allows explicit verify=true to override best-effort default', async () => {
+    const { mockExec, getCallCount } = createMockExec();
+
+    const deps = createMergeDeps({ verificationModel: 'best-effort', execAsync: mockExec });
+    const tools = new WorktreeTools(deps);
+    const mergeTool = tools.mergeTaskTool(resolveFeature);
+
+    const result = await mergeTool.execute(
+      { task: '01-task', strategy: 'merge', feature: 'test-feature', verify: true },
+      {} as never,
+    );
+
+    expect(getCallCount()).toBeGreaterThan(0);
+    const data = parseToolResult(result);
+    expect(data.verification).toBeDefined();
+    expect((data.verification as Record<string, unknown>).passed).toBe(true);
+  });
+
+  it('captures verification command output in response payload on success', async () => {
+    const { mockExec } = createMockExec();
+
+    const deps = createMergeDeps({ verificationModel: 'tdd', execAsync: mockExec });
+    const tools = new WorktreeTools(deps);
+    const mergeTool = tools.mergeTaskTool(resolveFeature);
+
+    const result = await mergeTool.execute(
+      { task: '01-task', strategy: 'merge', feature: 'test-feature' },
+      {} as never,
+    );
+
+    const data = parseToolResult(result);
+    const verification = data.verification as Record<string, unknown>;
+    expect(verification).toBeDefined();
+    expect(verification.passed).toBe(true);
+    // Output should be captured in the response
+    expect(verification.output).toBeDefined();
+    expect(typeof verification.output).toBe('string');
+  });
+
+  it('captures verification command output in response payload on failure', async () => {
+    const { mockExec } = createMockExec({ failOnCall: 2 });
+
+    const deps = createMergeDeps({ verificationModel: 'tdd', execAsync: mockExec });
+    const tools = new WorktreeTools(deps);
+    const mergeTool = tools.mergeTaskTool(resolveFeature);
+
+    const result = await mergeTool.execute(
+      { task: '01-task', strategy: 'merge', feature: 'test-feature' },
+      {} as never,
+    );
+
+    const data = parseToolResult(result);
+    const verification = data.verification as Record<string, unknown>;
+    expect(verification).toBeDefined();
+    expect(verification.passed).toBe(false);
+    expect(verification.output).toBeDefined();
+    expect(typeof verification.output).toBe('string');
+    expect((verification.output as string).length).toBeGreaterThan(0);
+  });
+
+  it('includes verification commands in response payload', async () => {
+    const { mockExec } = createMockExec();
+
+    const deps = createMergeDeps({ verificationModel: 'tdd', execAsync: mockExec });
+    const tools = new WorktreeTools(deps);
+    const mergeTool = tools.mergeTaskTool(resolveFeature);
+
+    const result = await mergeTool.execute(
+      { task: '01-task', strategy: 'merge', feature: 'test-feature' },
+      {} as never,
+    );
+
+    const data = parseToolResult(result);
+    const verification = data.verification as Record<string, unknown>;
+    expect(verification).toBeDefined();
+    // Should include the commands that were run
+    expect(verification.commands).toBeDefined();
+    const cmds = verification.commands as Record<string, string>;
+    expect(cmds.build).toBeDefined();
+    expect(cmds.test).toBeDefined();
   });
 });
 
