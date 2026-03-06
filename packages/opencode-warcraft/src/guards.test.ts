@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'bun:test';
+import type { StructuredVerification } from './guards.js';
 import {
   COMPLETION_GATES,
   COMPLETION_PASS_SIGNAL,
+  checkVerificationGates,
   hasCompletionGateEvidence,
   isPathInside,
   validateTaskStatus,
@@ -426,6 +428,135 @@ describe('guards.ts test suite', () => {
 
         expect(isPathInside(nodeModules, project)).toBe(true);
       });
+    });
+  });
+});
+
+// ============================================================================
+// checkVerificationGates tests
+// ============================================================================
+
+describe('checkVerificationGates', () => {
+  const gates = COMPLETION_GATES;
+  const regexEvidence = (summary: string, gate: string) => summary.includes(`${gate}: exit 0`);
+
+  describe('compat mode with full structured verification', () => {
+    it('passes when all gates have exitCode 0', () => {
+      const verification: StructuredVerification = {
+        build: { cmd: 'bun run build', exitCode: 0 },
+        test: { cmd: 'bun test', exitCode: 0 },
+        lint: { cmd: 'bun run lint', exitCode: 0 },
+      };
+      const result = checkVerificationGates(verification, '', gates, 'compat', regexEvidence);
+      expect(result.passed).toBe(true);
+      expect(result.missing).toEqual([]);
+      expect(result.usedRegexFallback).toBe(false);
+    });
+
+    it('fails when a gate has non-zero exitCode', () => {
+      const verification: StructuredVerification = {
+        build: { cmd: 'bun run build', exitCode: 0 },
+        test: { cmd: 'bun test', exitCode: 1 },
+        lint: { cmd: 'bun run lint', exitCode: 0 },
+      };
+      const result = checkVerificationGates(verification, '', gates, 'compat', regexEvidence);
+      expect(result.passed).toBe(false);
+      expect(result.missing).toEqual(['test']);
+      expect(result.usedRegexFallback).toBe(false);
+    });
+  });
+
+  describe('compat mode with partial structured + regex fallback', () => {
+    it('falls back to regex for missing structured gates', () => {
+      const verification: StructuredVerification = {
+        build: { cmd: 'bun run build', exitCode: 0 },
+        test: { cmd: 'bun test', exitCode: 0 },
+      };
+      const summary = 'lint: exit 0';
+      const result = checkVerificationGates(verification, summary, gates, 'compat', regexEvidence);
+      expect(result.passed).toBe(true);
+      expect(result.missing).toEqual([]);
+      expect(result.usedRegexFallback).toBe(true);
+    });
+
+    it('fails when regex fallback finds no evidence', () => {
+      const verification: StructuredVerification = {
+        build: { cmd: 'bun run build', exitCode: 0 },
+      };
+      const summary = 'no evidence here';
+      const result = checkVerificationGates(verification, summary, gates, 'compat', regexEvidence);
+      expect(result.passed).toBe(false);
+      expect(result.missing).toEqual(['test', 'lint']);
+      expect(result.usedRegexFallback).toBe(true);
+    });
+  });
+
+  describe('compat mode with no structured verification', () => {
+    it('uses regex for all gates', () => {
+      const summary = 'build: exit 0, test: exit 0, lint: exit 0';
+      const result = checkVerificationGates(undefined, summary, gates, 'compat', regexEvidence);
+      expect(result.passed).toBe(true);
+      expect(result.missing).toEqual([]);
+      expect(result.usedRegexFallback).toBe(true);
+    });
+
+    it('fails when regex finds no evidence', () => {
+      const result = checkVerificationGates(undefined, 'Did stuff', gates, 'compat', regexEvidence);
+      expect(result.passed).toBe(false);
+      expect(result.missing).toEqual(['build', 'test', 'lint']);
+      expect(result.usedRegexFallback).toBe(true);
+    });
+  });
+
+  describe('enforce mode', () => {
+    it('passes with full structured verification', () => {
+      const verification: StructuredVerification = {
+        build: { cmd: 'bun run build', exitCode: 0 },
+        test: { cmd: 'bun test', exitCode: 0 },
+        lint: { cmd: 'bun run lint', exitCode: 0 },
+      };
+      const result = checkVerificationGates(verification, '', gates, 'enforce', regexEvidence);
+      expect(result.passed).toBe(true);
+      expect(result.missing).toEqual([]);
+      expect(result.usedRegexFallback).toBe(false);
+    });
+
+    it('fails when structured data is missing even if regex would pass', () => {
+      const summary = 'build: exit 0, test: exit 0, lint: exit 0';
+      const result = checkVerificationGates(undefined, summary, gates, 'enforce', regexEvidence);
+      expect(result.passed).toBe(false);
+      expect(result.missing).toEqual(['build', 'test', 'lint']);
+      expect(result.usedRegexFallback).toBe(false);
+    });
+
+    it('fails when partial structured data is missing', () => {
+      const verification: StructuredVerification = {
+        build: { cmd: 'bun run build', exitCode: 0 },
+      };
+      const result = checkVerificationGates(
+        verification,
+        'test: exit 0, lint: exit 0',
+        gates,
+        'enforce',
+        regexEvidence,
+      );
+      expect(result.passed).toBe(false);
+      expect(result.missing).toEqual(['test', 'lint']);
+      expect(result.usedRegexFallback).toBe(false);
+    });
+  });
+
+  describe('structured wins over contradictory summary', () => {
+    it('structured exitCode 1 overrides regex pass', () => {
+      const verification: StructuredVerification = {
+        build: { cmd: 'bun run build', exitCode: 1, output: 'Compile error' },
+        test: { cmd: 'bun test', exitCode: 0 },
+        lint: { cmd: 'bun run lint', exitCode: 0 },
+      };
+      const summary = 'build: exit 0, test: exit 0, lint: exit 0';
+      const result = checkVerificationGates(verification, summary, gates, 'compat', regexEvidence);
+      expect(result.passed).toBe(false);
+      expect(result.missing).toEqual(['build']);
     });
   });
 });

@@ -270,6 +270,18 @@ export class ConfigService {
   }
 
   /**
+   * Get structured verification mode.
+   * Controls whether structured verification payload is required or optional.
+   * Defaults to 'compat' (structured preferred but regex fallback allowed).
+   */
+  getStructuredVerificationMode(): 'compat' | 'enforce' {
+    const config = this.get();
+    const mode = config.structuredVerificationMode;
+    if (mode === 'enforce') return 'enforce';
+    return 'compat';
+  }
+
+  /**
    * Get beads rollout mode.
    * Normalizes boolean values to strings and validates against valid modes.
    * Rejects legacy strings (dual-write, beads-primary) with validation error.

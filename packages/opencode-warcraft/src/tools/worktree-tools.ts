@@ -2,6 +2,8 @@ import { type ToolDefinition, tool } from '@opencode-ai/plugin';
 import { exec as execCb } from 'child_process';
 import { promisify } from 'util';
 import type { FeatureService, PlanService, TaskService, TaskStatusType, WorktreeService } from 'warcraft-core';
+import type { CompletionGate, StructuredVerification } from '../guards.js';
+import { checkVerificationGates } from '../guards.js';
 import type { BlockedResult } from '../types.js';
 import { toolError, toolSuccess } from '../types.js';
 import { calculatePayloadMeta, calculatePromptMeta, checkWarnings } from '../utils/prompt-observability.js';
@@ -10,8 +12,6 @@ import { DEFAULT_BUDGET, prepareTaskDispatch } from './task-dispatch.js';
 import { resolveFeatureInput, validateTaskInput } from './tool-input.js';
 
 const execAsync = promisify(execCb);
-
-type CompletionGate = 'build' | 'test' | 'lint';
 
 export interface WorktreeToolsDependencies {
   featureService: FeatureService;
@@ -28,6 +28,7 @@ export interface WorktreeToolsDependencies {
   completionGates: readonly CompletionGate[];
   verificationModel: 'tdd' | 'best-effort';
   workflowGatesMode: 'enforce' | 'warn';
+  structuredVerificationMode: 'compat' | 'enforce';
 }
 
 /**
@@ -257,6 +258,7 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
       completionGates,
       workflowGatesMode,
       verificationModel,
+      structuredVerificationMode,
     } = this.deps;
     return tool({
       description:
@@ -278,10 +280,40 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
           })
           .optional()
           .describe('Blocker info when status is blocked'),
+        verification: tool.schema
+          .object({
+            build: tool.schema
+              .object({
+                cmd: tool.schema.string().describe('Command that was run'),
+                exitCode: tool.schema.number().describe('Process exit code (0 = success)'),
+                output: tool.schema.string().optional().describe('Captured command output'),
+              })
+              .optional()
+              .describe('Build verification result'),
+            test: tool.schema
+              .object({
+                cmd: tool.schema.string().describe('Command that was run'),
+                exitCode: tool.schema.number().describe('Process exit code (0 = success)'),
+                output: tool.schema.string().optional().describe('Captured command output'),
+              })
+              .optional()
+              .describe('Test verification result'),
+            lint: tool.schema
+              .object({
+                cmd: tool.schema.string().describe('Command that was run'),
+                exitCode: tool.schema.number().describe('Process exit code (0 = success)'),
+                output: tool.schema.string().optional().describe('Captured command output'),
+              })
+              .optional()
+              .describe('Lint verification result'),
+          })
+          .optional()
+          .describe('Structured verification results (preferred over summary regex)'),
         feature: tool.schema.string().optional().describe('Feature name (defaults to detection or single feature)'),
       },
-      async execute({ task, summary, status = 'completed', blocker, feature: explicitFeature }) {
+      async execute({ task, summary, status = 'completed', blocker, verification, feature: explicitFeature }) {
         let missingGatesForWarn: string[] = [];
+        let verificationDiagnostics: string | undefined;
         validateTaskInput(task);
         const resolution = resolveFeatureInput(resolveFeature, explicitFeature);
         if (!resolution.ok) return toolError(resolution.error);
@@ -298,9 +330,15 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
           if (verificationModel === 'best-effort') {
             // Continue to commit — gates are deferred
           } else {
-            const missingGates = completionGates.filter((gate) => !hasCompletionGateEvidence(summary, gate));
+            const gateResult = checkVerificationGates(
+              verification as StructuredVerification | undefined,
+              summary,
+              completionGates,
+              structuredVerificationMode,
+              hasCompletionGateEvidence,
+            );
 
-            if (missingGates.length > 0) {
+            if (!gateResult.passed) {
               if (workflowGatesMode === 'enforce') {
                 return toolSuccess({
                   ok: false,
@@ -308,11 +346,17 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
                   status: 'needs_verification',
                   nextAction:
                     'Run build, test, and lint gates. Include pass signals in summary (e.g. "build: exit 0"). Then re-run warcraft_worktree_commit.',
-                  missingGates,
+                  missingGates: gateResult.missing,
                 });
               }
               // warn mode: proceed but note missing evidence
-              missingGatesForWarn = [...missingGates];
+              missingGatesForWarn = [...gateResult.missing];
+            }
+
+            // Emit diagnostics when regex fallback was used in compat mode
+            if (gateResult.usedRegexFallback && gateResult.passed) {
+              verificationDiagnostics =
+                'Verification passed via regex fallback. Prefer structured verification payload for reliability.';
             }
           }
         }
@@ -421,6 +465,13 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
           return toolSuccess({
             ...terminalResult,
             verificationNote: `Missing evidence for: ${missingGatesForWarn.join(', ')}. Verification recommended.`,
+          });
+        }
+
+        if (verificationDiagnostics) {
+          return toolSuccess({
+            ...terminalResult,
+            verificationDiagnostics,
           });
         }
 

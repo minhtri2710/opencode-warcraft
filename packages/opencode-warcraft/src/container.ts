@@ -263,6 +263,7 @@ To unblock: Remove ${blockedPath}`;
     completionGates: COMPLETION_GATES,
     workflowGatesMode: configService.getWorkflowGatesMode(),
     verificationModel: configService.getVerificationModel(),
+    structuredVerificationMode: configService.getStructuredVerificationMode(),
   });
   const batchTools = new BatchTools({
     featureService,

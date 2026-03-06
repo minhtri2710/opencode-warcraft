@@ -208,4 +208,6 @@ export interface WarcraftConfig {
   verificationModel?: 'tdd' | 'best-effort';
   /** Workflow gates mode: 'enforce' blocks commit without gate evidence; 'warn' (default) proceeds with a note. */
   workflowGatesMode?: 'enforce' | 'warn';
+  /** Structured verification mode: 'compat' (default) uses structured data when present, falls back to regex; 'enforce' requires structured payload for completion. */
+  structuredVerificationMode?: 'compat' | 'enforce';
 }
