@@ -398,3 +398,109 @@ describe('AGENTS.md best-effort verification', () => {
     expect(agentsMdContent).toContain('verificationModel');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Prompt snapshot invariants (lifecycle gates)
+// These tests guard structural anchors in agent prompts so that changes to
+// prompt templates don't silently drop critical sections. Each test verifies
+// the *presence* of a key phrase or section — not the exact wording — so
+// prompts can evolve without false negatives.
+// ---------------------------------------------------------------------------
+describe('prompt snapshot invariants (lifecycle gates)', () => {
+  const ALL_PROMPTS: Record<string, string> = {
+    khadgar: KHADGAR_PROMPT,
+    saurfang: SAURFANG_PROMPT,
+    mekkatorque: MEKKATORQUE_PROMPT,
+    brann: BRANN_PROMPT,
+    mimiron: MIMIRON_PROMPT,
+    algalon: ALGALON_PROMPT,
+  };
+
+  describe('structural anchors', () => {
+    it('every prompt is non-empty', () => {
+      for (const [name, prompt] of Object.entries(ALL_PROMPTS)) {
+        expect(prompt.length).toBeGreaterThan(0);
+      }
+    });
+
+    it('every prompt has a minimum length (guards against accidental truncation)', () => {
+      const MIN_PROMPT_LENGTH = 200;
+      for (const [name, prompt] of Object.entries(ALL_PROMPTS)) {
+        expect(prompt.length).toBeGreaterThan(MIN_PROMPT_LENGTH);
+      }
+    });
+
+    it('Khadgar contains delegation threshold section', () => {
+      expect(KHADGAR_PROMPT).toContain('Canonical Delegation Threshold');
+    });
+
+    it('Saurfang contains worker management instructions', () => {
+      expect(SAURFANG_PROMPT).toContain('warcraft_worktree_create');
+    });
+
+    it('Mekkatorque contains execution flow', () => {
+      expect(MEKKATORQUE_PROMPT).toContain('Execution Flow');
+      expect(MEKKATORQUE_PROMPT).toContain('warcraft_worktree_commit');
+    });
+
+    it('Brann contains research/exploration instructions', () => {
+      expect(BRANN_PROMPT).toContain('research');
+    });
+
+    it('Mimiron contains planning instructions', () => {
+      expect(MIMIRON_PROMPT).toContain('plan');
+    });
+
+    it('Algalon contains review/verdict instructions', () => {
+      expect(ALGALON_PROMPT).toContain('review');
+    });
+  });
+
+  describe('verification checklist presence', () => {
+    it('Mekkatorque prompt includes verification before completion', () => {
+      expect(MEKKATORQUE_PROMPT).toContain('Verify');
+    });
+
+    it('Saurfang prompt includes verification model awareness', () => {
+      const tddPrompt = buildSaurfangPrompt({ verificationModel: 'tdd' });
+      const bestEffortPrompt = buildSaurfangPrompt({ verificationModel: 'best-effort' });
+      // Both modes should mention verification
+      expect(tddPrompt).toContain('erif');
+      expect(bestEffortPrompt).toContain('erif');
+    });
+  });
+
+  describe('delegation sections', () => {
+    it('Khadgar explains task() blocking semantics', () => {
+      expect(KHADGAR_PROMPT).toContain('BLOCKING');
+    });
+
+    it('Saurfang explains worker spawning', () => {
+      expect(SAURFANG_PROMPT).toContain('warcraft_worktree_create');
+    });
+
+    it('Mekkatorque must NOT delegate (worker isolation)', () => {
+      expect(MEKKATORQUE_PROMPT).toContain('NEVER delegate');
+    });
+  });
+
+  describe('deterministic output', () => {
+    it('buildKhadgarPrompt produces identical output for same input', () => {
+      const a = buildKhadgarPrompt({ verificationModel: 'tdd' });
+      const b = buildKhadgarPrompt({ verificationModel: 'tdd' });
+      expect(a).toBe(b);
+    });
+
+    it('buildSaurfangPrompt produces identical output for same input', () => {
+      const a = buildSaurfangPrompt({ verificationModel: 'tdd' });
+      const b = buildSaurfangPrompt({ verificationModel: 'tdd' });
+      expect(a).toBe(b);
+    });
+
+    it('buildMekkatorquePrompt produces identical output for same input', () => {
+      const a = buildMekkatorquePrompt({ verificationModel: 'tdd' });
+      const b = buildMekkatorquePrompt({ verificationModel: 'tdd' });
+      expect(a).toBe(b);
+    });
+  });
+});

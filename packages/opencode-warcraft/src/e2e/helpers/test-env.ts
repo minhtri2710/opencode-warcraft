@@ -83,3 +83,17 @@ export function cleanupTempProjectRoot(root: string | null | undefined): void {
 
   fs.rmSync(root, { recursive: true, force: true });
 }
+
+/**
+ * Create a Warcraft config file specifying beads mode.
+ * Config is written to `~/.config/opencode/opencode_warcraft.json` relative to
+ * the provided `homeDir` (which should be set as `process.env.HOME` in the test).
+ */
+export function createBeadsModeConfig(homeDir: string, mode: 'on' | 'off'): void {
+  const configDir = path.join(homeDir, '.config', 'opencode');
+  fs.mkdirSync(configDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(configDir, 'opencode_warcraft.json'),
+    JSON.stringify({ beadsMode: mode }),
+  );
+}
