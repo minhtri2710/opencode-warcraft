@@ -17,8 +17,8 @@ export {
   writeJsonLocked,
   writeJsonLockedSync,
 } from './utils/json-lock.js';
+export type { ConsoleLoggerOptions, LogEntry, Logger, LogLevel, LogSink } from './utils/logger.js';
+export { createConsoleLogger, createNoopLogger, LOG_LEVELS } from './utils/logger.js';
 export * from './utils/paths.js';
 export * from './utils/shell.js';
 export * from './utils/slug.js';
-export type { ConsoleLoggerOptions, LogEntry, Logger, LogLevel, LogSink } from './utils/logger.js';
-export { createConsoleLogger, createNoopLogger, LOG_LEVELS } from './utils/logger.js';

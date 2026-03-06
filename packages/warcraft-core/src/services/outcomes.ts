@@ -71,10 +71,7 @@ export function worstSeverity(diagnostics: Diagnostic[]): OutcomeSeverity {
 }
 
 /** Append diagnostics to an existing outcome, recalculating severity */
-export function withDiagnostics<T>(
-  outcome: OperationOutcome<T>,
-  newDiagnostics: Diagnostic[],
-): OperationOutcome<T> {
+export function withDiagnostics<T>(outcome: OperationOutcome<T>, newDiagnostics: Diagnostic[]): OperationOutcome<T> {
   const allDiagnostics = [...outcome.diagnostics, ...newDiagnostics];
   const severity = worstSeverity(allDiagnostics);
   return { ...outcome, severity, diagnostics: allDiagnostics };

@@ -21,7 +21,7 @@
  */
 
 import { readdirSync, readFileSync } from 'fs';
-import { join, basename } from 'path';
+import { basename, join } from 'path';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -105,7 +105,9 @@ function validateScenario(filePath: string): Scenario {
 
   // Validate outcome
   if (rawMeta.expectedOutcome && !VALID_OUTCOMES.has(rawMeta.expectedOutcome)) {
-    errors.push(`Invalid expectedOutcome: "${rawMeta.expectedOutcome}" (must be one of: ${[...VALID_OUTCOMES].join(', ')})`);
+    errors.push(
+      `Invalid expectedOutcome: "${rawMeta.expectedOutcome}" (must be one of: ${[...VALID_OUTCOMES].join(', ')})`,
+    );
   }
 
   // Validate required sections

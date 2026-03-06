@@ -92,8 +92,5 @@ export function cleanupTempProjectRoot(root: string | null | undefined): void {
 export function createBeadsModeConfig(homeDir: string, mode: 'on' | 'off'): void {
   const configDir = path.join(homeDir, '.config', 'opencode');
   fs.mkdirSync(configDir, { recursive: true });
-  fs.writeFileSync(
-    path.join(configDir, 'opencode_warcraft.json'),
-    JSON.stringify({ beadsMode: mode }),
-  );
+  fs.writeFileSync(path.join(configDir, 'opencode_warcraft.json'), JSON.stringify({ beadsMode: mode }));
 }

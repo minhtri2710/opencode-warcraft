@@ -158,7 +158,9 @@ describeIfHostReady('e2e: lifecycle integration tests', () => {
       process.env.WARCRAFT_FEATURE = featureName;
 
       // Step 2: Write plan with dependency chain
-      const plan = makePlan('Lifecycle Feature', `### 1. First Task
+      const plan = makePlan(
+        'Lifecycle Feature',
+        `### 1. First Task
 
 - Create: src/first.ts
 
@@ -170,7 +172,8 @@ Create the first implementation file.
 
 - Modify: src/first.ts
 
-Modify the first implementation file.`);
+Modify the first implementation file.`,
+      );
 
       assertSuccess(
         (await hooks.tool!.warcraft_plan_write.execute({ content: plan, feature: featureName }, toolContext)) as string,
@@ -278,11 +281,14 @@ Modify the first implementation file.`);
       await ensureFeatureExists(hooks, featureName, toolContext);
       process.env.WARCRAFT_FEATURE = featureName;
 
-      const plan = makePlan('Blocked Resume Feature', `### 1. Blocking Task
+      const plan = makePlan(
+        'Blocked Resume Feature',
+        `### 1. Blocking Task
 
 - Create: src/blocking.ts
 
-Create a task that will be blocked by the worker needing clarification on the API design approach.`);
+Create a task that will be blocked by the worker needing clarification on the API design approach.`,
+      );
 
       assertSuccess(
         (await hooks.tool!.warcraft_plan_write.execute({ content: plan, feature: featureName }, toolContext)) as string,
@@ -374,11 +380,14 @@ Create a task that will be blocked by the worker needing clarification on the AP
       await ensureFeatureExists(hooks, featureName, toolContext);
       process.env.WARCRAFT_FEATURE = featureName;
 
-      const plan = makePlan('Failed Verification Feature', `### 1. Verification Task
+      const plan = makePlan(
+        'Failed Verification Feature',
+        `### 1. Verification Task
 
 - Create: src/verify.ts
 
-Create a task that will fail verification initially and then be retried with proper evidence. Tests the re-open workflow.`);
+Create a task that will fail verification initially and then be retried with proper evidence. Tests the re-open workflow.`,
+      );
 
       assertSuccess(
         (await hooks.tool!.warcraft_plan_write.execute({ content: plan, feature: featureName }, toolContext)) as string,
@@ -473,8 +482,11 @@ Create a task that will fail verification initially and then be retried with pro
       const artifactsPath = path.join(testRoot, '.beads', 'artifacts', featureName);
       expect(fs.existsSync(artifactsPath)).toBe(true);
 
-      const plan = makePlan('Beads On Feature', `### 1. Bead Task
-Do bead work`);
+      const plan = makePlan(
+        'Beads On Feature',
+        `### 1. Bead Task
+Do bead work`,
+      );
 
       assertSuccess(
         (await hooks.tool!.warcraft_plan_write.execute({ content: plan, feature: featureName }, toolContext)) as string,
