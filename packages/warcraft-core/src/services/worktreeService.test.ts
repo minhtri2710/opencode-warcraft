@@ -1313,6 +1313,206 @@ describe('WorktreeService.cleanup', () => {
 });
 
 // ============================================================================
+// listAll() Tests
+// ============================================================================
+
+describe('WorktreeService.listAll', () => {
+  it('returns WorktreeInfo with stale metadata for each worktree', async () => {
+    const service = createService('off');
+    const mockGit = createMockGit({
+      revparse: async () => 'list-all-sha',
+    });
+    (service as any).getGit = () => mockGit;
+
+    setupWorktreeDir(service, 'feat-a', '01-step');
+
+    const results = await service.listAll();
+
+    expect(results.length).toBe(1);
+    expect(results[0].feature).toBe('feat-a');
+    expect(results[0].step).toBe('01-step');
+    expect(results[0].commit).toBe('list-all-sha');
+    expect(results[0]).toHaveProperty('isStale');
+    expect(results[0]).toHaveProperty('lastCommitAge');
+    expect(results[0].isStale).toBe(false);
+  });
+
+  it('marks worktree as stale when git HEAD check fails', async () => {
+    const service = createService('off');
+    let callCount = 0;
+    const mockGit = createMockGit({
+      revparse: async () => {
+        callCount++;
+        if (callCount <= 1) {
+          throw new Error('not a git repository');
+        }
+        return 'valid-sha';
+      },
+    });
+    (service as any).getGit = () => mockGit;
+
+    setupWorktreeDir(service, 'feat-a', '01-stale');
+
+    const results = await service.listAll('feat-a');
+
+    expect(results.length).toBe(1);
+    expect(results[0].isStale).toBe(true);
+  });
+
+  it('filters by feature when provided', async () => {
+    const service = createService('off');
+    const mockGit = createMockGit({
+      revparse: async () => 'filtered-sha',
+    });
+    (service as any).getGit = () => mockGit;
+
+    setupWorktreeDir(service, 'feat-a', '01-step');
+    setupWorktreeDir(service, 'feat-b', '02-step');
+
+    const results = await service.listAll('feat-a');
+
+    expect(results.length).toBe(1);
+    expect(results[0].feature).toBe('feat-a');
+  });
+
+  it('returns empty array when no worktrees exist', async () => {
+    const service = createService('off');
+    const results = await service.listAll();
+    expect(results).toEqual([]);
+  });
+});
+
+// ============================================================================
+// prune() Tests
+// ============================================================================
+
+describe('WorktreeService.prune', () => {
+  it('dry-run returns list of stale worktrees without removing them', async () => {
+    const service = createService('off');
+    let callCount = 0;
+    let removeWasCalled = false;
+
+    const mockGit = createMockGit({
+      revparse: async () => {
+        callCount++;
+        if (callCount <= 1) {
+          throw new Error('not a git repository');
+        }
+        return 'valid-sha';
+      },
+      raw: async () => {
+        removeWasCalled = true;
+        return '';
+      },
+    });
+    (service as any).getGit = () => mockGit;
+
+    setupWorktreeDir(service, 'feat-a', '01-stale');
+
+    const result = await service.prune({ dryRun: true });
+
+    expect(result.wouldRemove.length).toBe(1);
+    expect(result.wouldRemove[0].feature).toBe('feat-a');
+    expect(result.wouldRemove[0].step).toBe('01-stale');
+    expect(result.removed).toEqual([]);
+    expect(removeWasCalled).toBe(false);
+  });
+
+  it('destructive mode removes stale worktrees when confirm is true', async () => {
+    const service = createService('off');
+    let callCount = 0;
+    const rawCalls: string[][] = [];
+
+    const mockGit = createMockGit({
+      revparse: async () => {
+        callCount++;
+        if (callCount <= 1) {
+          throw new Error('not a git repository');
+        }
+        return 'valid-sha';
+      },
+      raw: async (...args: any[]) => {
+        rawCalls.push(args.flat());
+        return '';
+      },
+    });
+    (service as any).getGit = () => mockGit;
+
+    const worktreesDir = (service as any).getWorktreesDir();
+    fs.mkdirSync(worktreesDir, { recursive: true });
+    setupWorktreeDir(service, 'feat-a', '01-stale');
+
+    const result = await service.prune({ dryRun: false, confirm: true });
+
+    expect(result.removed.length).toBe(1);
+    expect(result.removed[0]).toContain('01-stale');
+    expect(result.wouldRemove).toEqual([]);
+  });
+
+  it('destructive mode refuses to remove without confirm flag', async () => {
+    const service = createService('off');
+    let callCount = 0;
+
+    const mockGit = createMockGit({
+      revparse: async () => {
+        callCount++;
+        if (callCount <= 1) {
+          throw new Error('not a git repository');
+        }
+        return 'valid-sha';
+      },
+    });
+    (service as any).getGit = () => mockGit;
+
+    setupWorktreeDir(service, 'feat-a', '01-stale');
+
+    const result = await service.prune({ dryRun: false, confirm: false });
+
+    expect(result.removed).toEqual([]);
+    expect(result.wouldRemove.length).toBe(1);
+    expect(result.requiresConfirm).toBe(true);
+  });
+
+  it('filters by feature when provided', async () => {
+    const service = createService('off');
+    let callCount = 0;
+
+    const mockGit = createMockGit({
+      revparse: async () => {
+        callCount++;
+        if (callCount <= 2) {
+          throw new Error('not a git repository');
+        }
+        return 'valid-sha';
+      },
+    });
+    (service as any).getGit = () => mockGit;
+
+    setupWorktreeDir(service, 'feat-a', '01-stale');
+    setupWorktreeDir(service, 'feat-b', '02-stale');
+
+    const result = await service.prune({ dryRun: true, feature: 'feat-a' });
+
+    expect(result.wouldRemove.length).toBe(1);
+    expect(result.wouldRemove[0].feature).toBe('feat-a');
+  });
+
+  it('does not prune healthy worktrees', async () => {
+    const service = createService('off');
+    const mockGit = createMockGit({
+      revparse: async () => 'healthy-sha',
+    });
+    (service as any).getGit = () => mockGit;
+
+    setupWorktreeDir(service, 'feat-a', '01-step');
+
+    const result = await service.prune({ dryRun: true });
+
+    expect(result.wouldRemove).toEqual([]);
+  });
+});
+
+// ============================================================================
 // Integration Test: create → commit → merge flow (real git)
 // ============================================================================
 

@@ -16,6 +16,7 @@ export const WARCRAFT_TOOL_IDS = [
   'warcraft_worktree_create',
   'warcraft_worktree_commit',
   'warcraft_worktree_discard',
+  'warcraft_worktree_prune',
   'warcraft_merge',
   'warcraft_batch_execute',
   'warcraft_context_write',

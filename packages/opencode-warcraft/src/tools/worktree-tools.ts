@@ -166,7 +166,10 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
         if (continueFrom !== 'blocked') {
           updateExtras.baseCommit = worktree.commit;
         }
-        taskService.transition(feature, task, 'in_progress', updateExtras);
+        const taskServiceWithTransition = taskService as TaskService & {
+          transition: (feature: string, task: string, status: TaskStatusType, patch?: Record<string, unknown>) => void;
+        };
+        taskServiceWithTransition.transition(feature, task, 'in_progress', updateExtras);
 
         // Generate spec.md with context for task
         const prep = prepareTaskDispatch(
@@ -429,7 +432,15 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
         }
 
         if (status === 'blocked') {
-          taskService.transition(feature, task, 'blocked', {
+          const taskServiceWithTransition = taskService as TaskService & {
+            transition: (
+              feature: string,
+              task: string,
+              status: TaskStatusType,
+              patch?: Record<string, unknown>,
+            ) => void;
+          };
+          taskServiceWithTransition.transition(feature, task, 'blocked', {
             summary,
             blocker,
           });
@@ -524,7 +535,10 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
         });
 
         const finalStatus = status === 'completed' ? 'done' : status;
-        taskService.transition(feature, task, validateTaskStatus(finalStatus), {
+        const taskServiceWithTransition = taskService as TaskService & {
+          transition: (feature: string, task: string, status: TaskStatusType, patch?: Record<string, unknown>) => void;
+        };
+        taskServiceWithTransition.transition(feature, task, validateTaskStatus(finalStatus), {
           summary,
         });
 
@@ -583,6 +597,75 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
         taskService.update(feature, task, { status: 'pending' });
 
         return toolSuccess({ message: `Task "${task}" aborted. Status reset to pending.` });
+      },
+    });
+  }
+
+  /**
+   * Prune stale worktrees. Defaults to dry-run mode for safety.
+   */
+  pruneWorktreeTool(resolveFeature: (name?: string) => string | null): ToolDefinition {
+    const { worktreeService } = this.deps;
+    return tool({
+      description:
+        'Prune stale worktrees. Defaults to dry-run (preview only). Set dryRun=false and confirm=true to actually remove.',
+      args: {
+        dryRun: tool.schema
+          .boolean()
+          .optional()
+          .default(true)
+          .describe('Preview only (default: true). Set to false to actually remove.'),
+        confirm: tool.schema
+          .boolean()
+          .optional()
+          .default(false)
+          .describe('Required when dryRun=false. Explicit confirmation to delete stale worktrees.'),
+        feature: tool.schema.string().optional().describe('Filter by feature name'),
+      },
+      async execute({ dryRun = true, confirm = false, feature: explicitFeature }) {
+        const feature = explicitFeature ? resolveFeatureInput(resolveFeature, explicitFeature).feature : undefined;
+
+        const worktreeServiceWithPrune = worktreeService as WorktreeService & {
+          prune: (opts: { dryRun: boolean; confirm: boolean; feature?: string }) => Promise<{
+            wouldRemove: Array<{ feature: string; step: string; path: string; branch: string }>;
+            requiresConfirm?: boolean;
+            removed: string[];
+          }>;
+        };
+        const result = await worktreeServiceWithPrune.prune({ dryRun, confirm, feature });
+
+        if (dryRun) {
+          if (result.wouldRemove.length === 0) {
+            return toolSuccess({
+              message: 'No stale worktrees found.',
+              staleCount: 0,
+            });
+          }
+          return toolSuccess({
+            message: `Found ${result.wouldRemove.length} stale worktree(s). Re-run with dryRun=false and confirm=true to remove.`,
+            staleCount: result.wouldRemove.length,
+            staleWorktrees: result.wouldRemove.map(
+              (wt: { feature: string; step: string; path: string; branch: string }) => ({
+                feature: wt.feature,
+                step: wt.step,
+                path: wt.path,
+                branch: wt.branch,
+              }),
+            ),
+          });
+        }
+
+        if (result.requiresConfirm) {
+          return toolError('Destructive operation requires confirm=true. Re-run with confirm=true to proceed.', [
+            'Set confirm=true to delete stale worktrees.',
+          ]);
+        }
+
+        return toolSuccess({
+          message: `Pruned ${result.removed.length} stale worktree(s).`,
+          removedCount: result.removed.length,
+          removedPaths: result.removed,
+        });
       },
     });
   }

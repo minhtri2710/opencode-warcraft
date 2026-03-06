@@ -5,6 +5,7 @@ import type {
   ContextService,
   FeatureService,
   PlanService,
+  StaleWorktreeInfo,
   TaskService,
   WorktreeService,
 } from 'warcraft-core';
@@ -121,6 +122,22 @@ export class ContextTools {
         const pendingTasks = tasksSummary.filter((t: { status: string }) => t.status === 'pending');
         const inProgressTasks = tasksSummary.filter((t: { status: string }) => t.status === 'in_progress');
         const doneTasks = tasksSummary.filter((t: { status: string }) => t.status === 'done');
+
+        // Detect stale worktrees for hygiene warnings
+        const allWorktrees = await worktreeService.listAll(featureName);
+        const staleWorktrees = allWorktrees.filter((wt: StaleWorktreeInfo) => wt.isStale);
+        const staleWarning =
+          staleWorktrees.length > 0
+            ? {
+                count: staleWorktrees.length,
+                message: `${staleWorktrees.length} stale worktree(s) detected. Run warcraft_worktree_prune to review and clean up.`,
+                worktrees: staleWorktrees.map((wt: StaleWorktreeInfo) => ({
+                  feature: wt.feature,
+                  step: wt.step,
+                  path: wt.path,
+                })),
+              }
+            : null;
 
         const { runnable, blocked: blockedBy } = taskService.computeRunnableStatus(featureName);
         const triageByTask: Record<string, { summary: string; source: string }> = {};
@@ -244,6 +261,7 @@ export class ContextTools {
             fileCount: contextFiles.length,
             files: contextSummary,
           },
+          worktreeHygiene: staleWarning,
           nextAction: getNextAction(planStatus, tasksSummary, runnable),
         });
       },
