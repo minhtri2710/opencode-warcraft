@@ -13,6 +13,11 @@ export interface WorktreeInfo {
   step: string;
 }
 
+export interface StaleWorktreeInfo extends WorktreeInfo {
+  isStale: boolean;
+  lastCommitAge: number | null;
+}
+
 export interface DiffResult {
   hasDiff: boolean;
   diffContent: string;
@@ -47,6 +52,18 @@ export interface WorktreeConfig {
   baseDir: string;
   warcraftDir: string;
   gitFactory: GitClientFactory;
+}
+
+export interface PruneOptions {
+  dryRun: boolean;
+  confirm?: boolean;
+  feature?: string;
+}
+
+export interface PruneResult {
+  wouldRemove: StaleWorktreeInfo[];
+  removed: string[];
+  requiresConfirm?: boolean;
 }
 
 export class WorktreeService {
@@ -363,6 +380,88 @@ export class WorktreeService {
     }
 
     return results;
+  }
+
+  async listAll(feature?: string): Promise<StaleWorktreeInfo[]> {
+    const worktreesDir = this.getWorktreesDir();
+    const results: StaleWorktreeInfo[] = [];
+
+    try {
+      const features = feature ? [feature] : await fs.readdir(worktreesDir);
+
+      for (const feat of features) {
+        const featurePath = path.join(worktreesDir, feat);
+        const stat = await fs.stat(featurePath).catch((): null => null);
+
+        if (!stat?.isDirectory()) continue;
+
+        const steps = await fs.readdir(featurePath).catch((): string[] => []);
+
+        for (const step of steps) {
+          const stepPath = path.join(featurePath, step);
+          const stepStat = await fs.stat(stepPath).catch((): null => null);
+          if (!stepStat?.isDirectory()) continue;
+
+          const branchName = this.getBranchName(feat, step);
+          let isStale = false;
+          let commit = '';
+          let lastCommitAge: number | null = null;
+
+          try {
+            const worktreeGit = this.getGit(stepPath);
+            commit = await worktreeGit.revparse(['HEAD']);
+            // Compute age from directory mtime as a proxy
+            lastCommitAge = Date.now() - stepStat.mtimeMs;
+          } catch {
+            isStale = true;
+          }
+
+          results.push({
+            path: stepPath,
+            branch: branchName,
+            commit,
+            feature: feat,
+            step,
+            isStale,
+            lastCommitAge,
+          });
+        }
+      }
+    } catch {
+      /* intentional */
+    }
+
+    return results;
+  }
+
+  async prune(options: PruneOptions): Promise<PruneResult> {
+    const staleWorktrees = (await this.listAll(options.feature)).filter((wt) => wt.isStale);
+
+    if (options.dryRun) {
+      return {
+        wouldRemove: staleWorktrees,
+        removed: [],
+      };
+    }
+
+    if (!options.confirm) {
+      return {
+        wouldRemove: staleWorktrees,
+        removed: [],
+        requiresConfirm: true,
+      };
+    }
+
+    const removed: string[] = [];
+    for (const wt of staleWorktrees) {
+      await this.remove(wt.feature, wt.step, false);
+      removed.push(wt.path);
+    }
+
+    return {
+      wouldRemove: [],
+      removed,
+    };
   }
 
   async cleanup(feature?: string): Promise<{ removed: string[]; pruned: boolean }> {

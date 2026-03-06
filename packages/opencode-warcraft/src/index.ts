@@ -178,6 +178,7 @@ const plugin: Plugin = async (ctx) => {
       warcraft_worktree_commit: container.worktreeTools.commitWorktreeTool(container.resolveFeature),
       warcraft_worktree_discard: container.worktreeTools.discardWorktreeTool(container.resolveFeature),
       warcraft_merge: container.worktreeTools.mergeTaskTool(container.resolveFeature),
+      warcraft_worktree_prune: container.worktreeTools.pruneWorktreeTool(container.resolveFeature),
       warcraft_batch_execute: container.batchTools.batchExecuteTool(container.resolveFeature),
       warcraft_context_write: container.contextTools.writeContextTool(container.resolveFeature),
       warcraft_status: container.contextTools.getStatusTool(container.resolveFeature),

@@ -56,6 +56,9 @@ export type {
   CommitResult,
   DiffResult,
   MergeResult,
+  PruneOptions,
+  PruneResult,
+  StaleWorktreeInfo,
   WorktreeConfig,
   WorktreeInfo,
 } from './worktreeService.js';

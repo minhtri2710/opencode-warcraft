@@ -1,7 +1,14 @@
 import { type ToolDefinition, tool } from '@opencode-ai/plugin';
 import { exec as execCb } from 'child_process';
 import { promisify } from 'util';
-import type { FeatureService, PlanService, TaskService, TaskStatusType, WorktreeService } from 'warcraft-core';
+import type {
+  FeatureService,
+  PlanService,
+  StaleWorktreeInfo,
+  TaskService,
+  TaskStatusType,
+  WorktreeService,
+} from 'warcraft-core';
 import type { BlockedResult } from '../types.js';
 import { toolError, toolSuccess } from '../types.js';
 import { calculatePayloadMeta, calculatePromptMeta, checkWarnings } from '../utils/prompt-observability.js';
@@ -451,6 +458,66 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
         taskService.update(feature, task, { status: 'pending' });
 
         return toolSuccess({ message: `Task "${task}" aborted. Status reset to pending.` });
+      },
+    });
+  }
+
+  /**
+   * Prune stale worktrees. Defaults to dry-run mode for safety.
+   */
+  pruneWorktreeTool(resolveFeature: (name?: string) => string | null): ToolDefinition {
+    const { worktreeService } = this.deps;
+    return tool({
+      description:
+        'Prune stale worktrees. Defaults to dry-run (preview only). Set dryRun=false and confirm=true to actually remove.',
+      args: {
+        dryRun: tool.schema
+          .boolean()
+          .optional()
+          .default(true)
+          .describe('Preview only (default: true). Set to false to actually remove.'),
+        confirm: tool.schema
+          .boolean()
+          .optional()
+          .default(false)
+          .describe('Required when dryRun=false. Explicit confirmation to delete stale worktrees.'),
+        feature: tool.schema.string().optional().describe('Filter by feature name'),
+      },
+      async execute({ dryRun = true, confirm = false, feature: explicitFeature }) {
+        const feature = explicitFeature ? resolveFeatureInput(resolveFeature, explicitFeature).feature : undefined;
+
+        const result = await worktreeService.prune({ dryRun, confirm, feature });
+
+        if (dryRun) {
+          if (result.wouldRemove.length === 0) {
+            return toolSuccess({
+              message: 'No stale worktrees found.',
+              staleCount: 0,
+            });
+          }
+          return toolSuccess({
+            message: `Found ${result.wouldRemove.length} stale worktree(s). Re-run with dryRun=false and confirm=true to remove.`,
+            staleCount: result.wouldRemove.length,
+            staleWorktrees: result.wouldRemove.map((wt: StaleWorktreeInfo) => ({
+              feature: wt.feature,
+              step: wt.step,
+              path: wt.path,
+              branch: wt.branch,
+            })),
+          });
+        }
+
+        if (result.requiresConfirm) {
+          return toolError('Destructive operation requires confirm=true. Re-run with confirm=true to proceed.', [
+            'Set confirm=true to delete stale worktrees.',
+          ]);
+        }
+
+        return toolSuccess({
+          message: `Pruned ${result.removed.length} stale worktree(s).`,
+          removedCount: result.removed.length,
+          removedPaths: result.removed,
+        });
       },
     });
   }
