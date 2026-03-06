@@ -9,7 +9,12 @@ import { getVerificationCommandsForCwd } from '../utils/runtime-commands.js';
 import { DEFAULT_BUDGET, prepareTaskDispatch } from './task-dispatch.js';
 import { resolveFeatureInput, validateTaskInput } from './tool-input.js';
 
-const execAsync = promisify(execCb);
+const defaultExecAsync = promisify(execCb);
+
+export type ExecAsyncFn = (
+  command: string,
+  options: { cwd: string; timeout: number },
+) => Promise<{ stdout: string; stderr: string }>;
 
 type CompletionGate = 'build' | 'test' | 'lint';
 
@@ -28,6 +33,8 @@ export interface WorktreeToolsDependencies {
   completionGates: readonly CompletionGate[];
   verificationModel: 'tdd' | 'best-effort';
   workflowGatesMode: 'enforce' | 'warn';
+  /** Injectable exec function for testing. Defaults to promisified child_process.exec. */
+  execAsync?: ExecAsyncFn;
 }
 
 /**
@@ -460,7 +467,8 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
    */
   mergeTaskTool(resolveFeature: (name?: string) => string | null): ToolDefinition {
     // Capture deps in closure to avoid 'this' binding issues
-    const { taskService, worktreeService } = this.deps;
+    const { taskService, worktreeService, verificationModel, execAsync: injectedExec } = this.deps;
+    const execAsync = injectedExec ?? defaultExecAsync;
     return tool({
       description: 'Merge completed task branch into current branch (explicit integration)',
       args: {
@@ -473,10 +481,11 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
         verify: tool.schema
           .boolean()
           .optional()
-          .default(false)
-          .describe('Run build+test after merge to verify integration'),
+          .describe(
+            'Run build+test after merge to verify integration. Defaults to true in TDD mode, false in best-effort.',
+          ),
       },
-      async execute({ task, strategy = 'merge', feature: explicitFeature, verify = false }) {
+      async execute({ task, strategy = 'merge', feature: explicitFeature, verify }) {
         validateTaskInput(task);
         const resolution = resolveFeatureInput(resolveFeature, explicitFeature);
         if (!resolution.ok) return toolError(resolution.error);
@@ -502,24 +511,37 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
           message: `Task "${task}" merged successfully using ${strategy} strategy.\nCommit: ${result.sha}\nFiles changed: ${result.filesChanged?.length || 0}`,
         };
 
-        if (verify) {
+        // Default verify based on verificationModel: true for TDD, false for best-effort
+        const effectiveVerify = verify ?? verificationModel === 'tdd';
+
+        if (effectiveVerify) {
           const execOpts = { cwd: process.cwd(), timeout: 300_000 };
           const cmds = getVerificationCommandsForCwd(execOpts.cwd);
+          const outputs: string[] = [];
           try {
-            await execAsync(cmds.build, execOpts);
-            await execAsync(cmds.test, execOpts);
+            const buildResult = await execAsync(cmds.build, execOpts);
+            outputs.push(buildResult.stdout || '', buildResult.stderr || '');
+            const testResult = await execAsync(cmds.test, execOpts);
+            outputs.push(testResult.stdout || '', testResult.stderr || '');
+            const output = outputs.filter(Boolean).join('\n').trim();
             return toolSuccess({
               ...mergeResult,
-              verification: { passed: true },
+              verification: {
+                passed: true,
+                output: output || 'Verification passed',
+                commands: { build: cmds.build, test: cmds.test },
+              },
             });
           } catch (err: unknown) {
             const execErr = err as { stdout?: string; stderr?: string; message?: string };
-            const output = [execErr.stdout, execErr.stderr].filter(Boolean).join('\n');
+            const errorOutput = [execErr.stdout, execErr.stderr].filter(Boolean).join('\n');
+            const allOutput = [...outputs, errorOutput].filter(Boolean).join('\n').trim();
             return toolSuccess({
               ...mergeResult,
               verification: {
                 passed: false,
-                output: output || execErr.message || 'Verification failed',
+                output: allOutput || execErr.message || 'Verification failed',
+                commands: { build: cmds.build, test: cmds.test },
               },
             });
           }
