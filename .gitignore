@@ -8,6 +8,7 @@
 
 # warcraft worker worktrees are local scratch checkouts
 .beads/artifacts/.worktrees/
+docs/.worktrees/
 
 
 node_modules/
