@@ -7,7 +7,6 @@ import {
   buildEffectiveDependencies,
   type ConfigService,
   ContextService,
-  createConsoleLogger,
   createEventLogger,
   createStores,
   createWorktreeService,
@@ -15,7 +14,6 @@ import {
   type EventLogger,
   FeatureService,
   getFeaturePath,
-  type Logger,
   PlanService,
   TaskService,
   type WorktreeService,
@@ -48,7 +46,6 @@ export interface WarcraftContainer {
   agentsMdService: AgentsMdService;
   configService: ConfigService;
   bvTriageService: BvTriageService;
-  logger: Logger;
   eventLogger: EventLogger;
   builtinMcps: ReturnType<typeof createBuiltinMcps>;
   filteredSkills: ReturnType<typeof getFilteredSkills>;
@@ -79,12 +76,8 @@ export function createWarcraftContainer(directory: string, configService: Config
   const beadsMode = configService.getBeadsMode();
   const repository = new BeadsRepository(directory, {}, beadsMode);
   const stores = createStores(directory, beadsMode, repository);
-  const logger = createConsoleLogger({ minLevel: 'info' });
-  const eventLogger = createEventLogger(directory);
   const planService = new PlanService(directory, stores.planStore, beadsMode);
-  const taskService = new TaskService(directory, stores.taskStore, beadsMode, logger, {
-    strictTaskTransitions: configService.isStrictTaskTransitionsEnabled(),
-  });
+  const taskService = new TaskService(directory, stores.taskStore, beadsMode);
   const featureService = new FeatureService(directory, stores.featureStore, planService, beadsMode, taskService);
   const contextService = new ContextService(directory, configService);
   const agentsMdService = new AgentsMdService(directory, contextService);
@@ -93,6 +86,7 @@ export function createWarcraftContainer(directory: string, configService: Config
   const builtinMcps = createBuiltinMcps(disabledMcps);
   const filteredSkills = getFilteredSkills(disabledSkills);
   const worktreeService = createWorktreeService(directory);
+  const eventLogger = createEventLogger(directory);
 
   // Initialize BV Triage Service with explicit state ownership
   const bvTriageService = new BvTriageService(directory, configService.getBeadsMode() !== 'off');
@@ -243,10 +237,6 @@ To unblock: Remove ${blockedPath}`;
     return { allowed: true };
   };
 
-  // --- Unified dispatch config ---
-  const unifiedDispatchEnabled = configService.isUnifiedDispatchEnabled();
-  const lockDir = path.join(directory, '.beads', 'artifacts', '.locks');
-
   // --- Tool modules ---
 
   const featureTools = new FeatureTools({ featureService });
@@ -263,6 +253,7 @@ To unblock: Remove ${blockedPath}`;
     taskService,
     workflowGatesMode: configService.getWorkflowGatesMode(),
     validateTaskStatus,
+    eventLogger,
   });
   const worktreeTools = new WorktreeTools({
     featureService,
@@ -277,10 +268,7 @@ To unblock: Remove ${blockedPath}`;
     completionGates: COMPLETION_GATES,
     workflowGatesMode: configService.getWorkflowGatesMode(),
     verificationModel: configService.getVerificationModel(),
-    structuredVerificationMode: configService.getStructuredVerificationMode(),
     eventLogger,
-    unifiedDispatchEnabled,
-    lockDir,
   });
   const batchTools = new BatchTools({
     featureService,
@@ -292,8 +280,6 @@ To unblock: Remove ${blockedPath}`;
     checkDependencies,
     parallelExecution,
     verificationModel: configService.getVerificationModel(),
-    unifiedDispatchEnabled,
-    lockDir,
   });
   const contextTools = new ContextTools({
     featureService,
@@ -316,7 +302,6 @@ To unblock: Remove ${blockedPath}`;
     agentsMdService,
     configService,
     bvTriageService,
-    logger,
     eventLogger,
     builtinMcps,
     filteredSkills,

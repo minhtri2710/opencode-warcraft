@@ -1,23 +1,24 @@
 import { type ToolDefinition, tool } from '@opencode-ai/plugin';
 import { exec as execCb } from 'child_process';
 import { promisify } from 'util';
-import type { FeatureService, PlanService, TaskService, TaskStatusType, WorktreeService } from 'warcraft-core';
-import type { CompletionGate, StructuredVerification } from '../guards.js';
-import { checkVerificationGates } from '../guards.js';
+import type {
+  EventLogger,
+  FeatureService,
+  PlanService,
+  TaskService,
+  TaskStatusType,
+  WorktreeService,
+} from 'warcraft-core';
 import type { BlockedResult } from '../types.js';
 import { toolError, toolSuccess } from '../types.js';
 import { calculatePayloadMeta, calculatePromptMeta, checkWarnings } from '../utils/prompt-observability.js';
 import { getVerificationCommandsForCwd } from '../utils/runtime-commands.js';
-import { type DispatchOneTaskServices, dispatchOneTask } from './dispatch-task.js';
 import { DEFAULT_BUDGET, prepareTaskDispatch } from './task-dispatch.js';
 import { resolveFeatureInput, validateTaskInput } from './tool-input.js';
 
-const defaultExecAsync = promisify(execCb);
+const execAsync = promisify(execCb);
 
-export type ExecAsyncFn = (
-  command: string,
-  options: { cwd: string; timeout: number },
-) => Promise<{ stdout: string; stderr: string }>;
+type CompletionGate = 'build' | 'test' | 'lint';
 
 export interface WorktreeToolsDependencies {
   featureService: FeatureService;
@@ -34,17 +35,7 @@ export interface WorktreeToolsDependencies {
   completionGates: readonly CompletionGate[];
   verificationModel: 'tdd' | 'best-effort';
   workflowGatesMode: 'enforce' | 'warn';
-  /** Structured verification mode: 'compat' keeps regex fallback; 'enforce' requires structured payload. */
-  structuredVerificationMode: 'compat' | 'enforce';
-  eventLogger?: {
-    emit: (event: { type: string; feature: string; task: string; details?: Record<string, unknown> }) => void;
-  };
-  /** When true, use unified dispatchOneTask path with per-task lock. */
-  unifiedDispatchEnabled?: boolean;
-  /** Directory for per-task dispatch locks (required when unifiedDispatchEnabled is true). */
-  lockDir?: string;
-  /** Injectable exec function for testing. Defaults to promisified child_process.exec. */
-  execAsync?: ExecAsyncFn;
+  eventLogger: EventLogger;
 }
 
 /**
@@ -67,8 +58,6 @@ export class WorktreeTools {
       worktreeService,
       verificationModel,
       eventLogger,
-      unifiedDispatchEnabled,
-      lockDir,
     } = this.deps;
     return tool({
       description: 'Create worktree and begin work on task. Spawns Mekkatorque worker automatically.',
@@ -108,57 +97,6 @@ export class WorktreeTools {
           }
         }
 
-        // --- Unified dispatch path (gated by flag) ---
-        if (unifiedDispatchEnabled) {
-          const unifiedServices: DispatchOneTaskServices = {
-            taskService,
-            planService,
-            contextService,
-            worktreeService,
-            checkBlocked,
-            checkDependencies,
-            verificationModel,
-            lockDir,
-          };
-          const dispatchResult = await dispatchOneTask(
-            { feature, task, continueFrom: continueFrom as 'blocked' | undefined, decision },
-            unifiedServices,
-          );
-          if (!dispatchResult.success) {
-            return toolError(dispatchResult.error || 'Dispatch failed');
-          }
-
-          const agent = dispatchResult.agent;
-          const taskToolPrompt = dispatchResult.taskToolCall!.prompt;
-          const taskToolInstructions = `## Delegation Required
-
-Use OpenCode's built-in \`task\` tool to spawn a Mekkatorque (Worker/Coder) worker.
-
-\`\`\`
-task({
-  subagent_type: "${agent}",
-  description: "Warcraft: ${task}",
-  prompt: "${taskToolPrompt}"
-})
-\`\`\`
-
-The worker prompt is passed inline in \`taskToolCall.prompt\`.
-
-`;
-
-          return toolSuccess({
-            worktreePath: dispatchResult.worktreePath,
-            branch: dispatchResult.branch,
-            mode: 'delegate',
-            agent,
-            delegationRequired: true,
-            taskPromptMode: 'opencode-inline',
-            taskToolCall: dispatchResult.taskToolCall,
-            instructions: taskToolInstructions,
-          });
-        }
-
-        // --- Legacy dispatch path ---
         // Check if we're continuing from blocked - reuse existing worktree
         let worktree: Awaited<ReturnType<typeof worktreeService.create>>;
         if (continueFrom === 'blocked') {
@@ -169,14 +107,11 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
           worktree = await worktreeService.create(feature, task);
         }
 
-        const updateExtras: { baseCommit?: string } = {};
+        const updatePayload: Record<string, unknown> = { status: 'in_progress' };
         if (continueFrom !== 'blocked') {
-          updateExtras.baseCommit = worktree.commit;
+          updatePayload.baseCommit = worktree.commit;
         }
-        const taskServiceWithTransition = taskService as TaskService & {
-          transition: (feature: string, task: string, status: TaskStatusType, patch?: Record<string, unknown>) => void;
-        };
-        taskServiceWithTransition.transition(feature, task, 'in_progress', updateExtras);
+        taskService.update(feature, task, updatePayload);
 
         // Generate spec.md with context for task
         const prep = prepareTaskDispatch(
@@ -227,9 +162,6 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
             `[warcraft] Failed to persist idempotency key for task '${task}' in feature '${feature}': ${reason}`,
           );
         }
-
-        // Emit dispatch event for operational observability
-        eventLogger?.emit({ type: 'dispatch', feature, task, details: { attempt, agent } });
 
         const contextContent = contextFiles.map((f) => f.content).join('\n\n');
         const previousTasksContent = previousTasks.map((t) => `- **${t.name}**: ${t.summary}`).join('\n');
@@ -299,6 +231,14 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
 
         const allWarnings = [...sizeWarnings, ...budgetWarnings];
 
+        // Emit dispatch event for trust metrics tracking
+        eventLogger.emit({
+          type: 'dispatch',
+          feature,
+          task,
+          details: { agent, continueFrom: continueFrom || null },
+        });
+
         return toolSuccess({
           ...responseBase,
           promptMeta,
@@ -334,7 +274,6 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
       completionGates,
       workflowGatesMode,
       verificationModel,
-      structuredVerificationMode,
       eventLogger,
     } = this.deps;
     return tool({
@@ -357,40 +296,10 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
           })
           .optional()
           .describe('Blocker info when status is blocked'),
-        verification: tool.schema
-          .object({
-            build: tool.schema
-              .object({
-                cmd: tool.schema.string().describe('Command that was run'),
-                exitCode: tool.schema.number().describe('Process exit code (0 = success)'),
-                output: tool.schema.string().optional().describe('Captured command output'),
-              })
-              .optional()
-              .describe('Build verification result'),
-            test: tool.schema
-              .object({
-                cmd: tool.schema.string().describe('Command that was run'),
-                exitCode: tool.schema.number().describe('Process exit code (0 = success)'),
-                output: tool.schema.string().optional().describe('Captured command output'),
-              })
-              .optional()
-              .describe('Test verification result'),
-            lint: tool.schema
-              .object({
-                cmd: tool.schema.string().describe('Command that was run'),
-                exitCode: tool.schema.number().describe('Process exit code (0 = success)'),
-                output: tool.schema.string().optional().describe('Captured command output'),
-              })
-              .optional()
-              .describe('Lint verification result'),
-          })
-          .optional()
-          .describe('Structured verification results (preferred over summary regex)'),
         feature: tool.schema.string().optional().describe('Feature name (defaults to detection or single feature)'),
       },
-      async execute({ task, summary, status = 'completed', blocker, verification, feature: explicitFeature }) {
+      async execute({ task, summary, status = 'completed', blocker, feature: explicitFeature }) {
         let missingGatesForWarn: string[] = [];
-        let verificationDiagnostics: string | undefined;
         validateTaskInput(task);
         const resolution = resolveFeatureInput(resolveFeature, explicitFeature);
         if (!resolution.ok) return toolError(resolution.error);
@@ -407,15 +316,9 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
           if (verificationModel === 'best-effort') {
             // Continue to commit — gates are deferred
           } else {
-            const gateResult = checkVerificationGates(
-              verification as StructuredVerification | undefined,
-              summary,
-              completionGates,
-              structuredVerificationMode,
-              hasCompletionGateEvidence,
-            );
+            const missingGates = completionGates.filter((gate) => !hasCompletionGateEvidence(summary, gate));
 
-            if (!gateResult.passed) {
+            if (missingGates.length > 0) {
               if (workflowGatesMode === 'enforce') {
                 return toolSuccess({
                   ok: false,
@@ -423,41 +326,27 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
                   status: 'needs_verification',
                   nextAction:
                     'Run build, test, and lint gates. Include pass signals in summary (e.g. "build: exit 0"). Then re-run warcraft_worktree_commit.',
-                  missingGates: gateResult.missing,
+                  missingGates,
                 });
               }
               // warn mode: proceed but note missing evidence
-              missingGatesForWarn = [...gateResult.missing];
-            }
-
-            // Emit diagnostics when regex fallback was used in compat mode
-            if (gateResult.usedRegexFallback && gateResult.passed) {
-              verificationDiagnostics =
-                'Verification passed via regex fallback. Prefer structured verification payload for reliability.';
+              missingGatesForWarn = [...missingGates];
             }
           }
         }
 
         if (status === 'blocked') {
-          const taskServiceWithTransition = taskService as TaskService & {
-            transition: (
-              feature: string,
-              task: string,
-              status: TaskStatusType,
-              patch?: Record<string, unknown>,
-            ) => void;
-          };
-          taskServiceWithTransition.transition(feature, task, 'blocked', {
+          taskService.update(feature, task, {
+            status: 'blocked',
             summary,
             blocker,
           });
 
-          // Emit blocked event for operational observability
-          eventLogger?.emit({
+          eventLogger.emit({
             type: 'blocked',
             feature,
             task,
-            details: { reason: blocker?.reason },
+            details: { reason: blocker?.reason, summary },
           });
 
           const worktree = await worktreeService.get(feature, task);
@@ -533,20 +422,18 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
           );
         }
 
-        // Emit commit event for operational observability
-        eventLogger?.emit({
+        const finalStatus = status === 'completed' ? 'done' : status;
+        taskService.update(feature, task, {
+          status: validateTaskStatus(finalStatus),
+          summary,
+        });
+
+        // Emit commit event for trust metrics tracking
+        eventLogger.emit({
           type: 'commit',
           feature,
           task,
-          details: { status, sha: commitResult.sha },
-        });
-
-        const finalStatus = status === 'completed' ? 'done' : status;
-        const taskServiceWithTransition = taskService as TaskService & {
-          transition: (feature: string, task: string, status: TaskStatusType, patch?: Record<string, unknown>) => void;
-        };
-        taskServiceWithTransition.transition(feature, task, validateTaskStatus(finalStatus), {
-          summary,
+          details: { status, finalStatus, sha: commitResult.sha },
         });
 
         const worktree = await worktreeService.get(feature, task);
@@ -567,13 +454,6 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
           return toolSuccess({
             ...terminalResult,
             verificationNote: `Missing evidence for: ${missingGatesForWarn.join(', ')}. Verification recommended.`,
-          });
-        }
-
-        if (verificationDiagnostics) {
-          return toolSuccess({
-            ...terminalResult,
-            verificationDiagnostics,
           });
         }
 
@@ -609,81 +489,11 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
   }
 
   /**
-   * Prune stale worktrees. Defaults to dry-run mode for safety.
-   */
-  pruneWorktreeTool(resolveFeature: (name?: string) => string | null): ToolDefinition {
-    const { worktreeService } = this.deps;
-    return tool({
-      description:
-        'Prune stale worktrees. Defaults to dry-run (preview only). Set dryRun=false and confirm=true to actually remove.',
-      args: {
-        dryRun: tool.schema
-          .boolean()
-          .optional()
-          .default(true)
-          .describe('Preview only (default: true). Set to false to actually remove.'),
-        confirm: tool.schema
-          .boolean()
-          .optional()
-          .default(false)
-          .describe('Required when dryRun=false. Explicit confirmation to delete stale worktrees.'),
-        feature: tool.schema.string().optional().describe('Filter by feature name'),
-      },
-      async execute({ dryRun = true, confirm = false, feature: explicitFeature }) {
-        const feature = explicitFeature ? resolveFeatureInput(resolveFeature, explicitFeature).feature : undefined;
-
-        const worktreeServiceWithPrune = worktreeService as WorktreeService & {
-          prune: (opts: { dryRun: boolean; confirm: boolean; feature?: string }) => Promise<{
-            wouldRemove: Array<{ feature: string; step: string; path: string; branch: string }>;
-            requiresConfirm?: boolean;
-            removed: string[];
-          }>;
-        };
-        const result = await worktreeServiceWithPrune.prune({ dryRun, confirm, feature });
-
-        if (dryRun) {
-          if (result.wouldRemove.length === 0) {
-            return toolSuccess({
-              message: 'No stale worktrees found.',
-              staleCount: 0,
-            });
-          }
-          return toolSuccess({
-            message: `Found ${result.wouldRemove.length} stale worktree(s). Re-run with dryRun=false and confirm=true to remove.`,
-            staleCount: result.wouldRemove.length,
-            staleWorktrees: result.wouldRemove.map(
-              (wt: { feature: string; step: string; path: string; branch: string }) => ({
-                feature: wt.feature,
-                step: wt.step,
-                path: wt.path,
-                branch: wt.branch,
-              }),
-            ),
-          });
-        }
-
-        if (result.requiresConfirm) {
-          return toolError('Destructive operation requires confirm=true. Re-run with confirm=true to proceed.', [
-            'Set confirm=true to delete stale worktrees.',
-          ]);
-        }
-
-        return toolSuccess({
-          message: `Pruned ${result.removed.length} stale worktree(s).`,
-          removedCount: result.removed.length,
-          removedPaths: result.removed,
-        });
-      },
-    });
-  }
-
-  /**
    * Merge completed task branch into current branch (explicit integration)
    */
   mergeTaskTool(resolveFeature: (name?: string) => string | null): ToolDefinition {
     // Capture deps in closure to avoid 'this' binding issues
-    const { taskService, worktreeService, eventLogger, verificationModel, execAsync: injectedExec } = this.deps;
-    const execAsync = injectedExec ?? defaultExecAsync;
+    const { taskService, worktreeService } = this.deps;
     return tool({
       description: 'Merge completed task branch into current branch (explicit integration)',
       args: {
@@ -696,11 +506,10 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
         verify: tool.schema
           .boolean()
           .optional()
-          .describe(
-            'Run build+test after merge to verify integration. Defaults to true in TDD mode, false in best-effort.',
-          ),
+          .default(false)
+          .describe('Run build+test after merge to verify integration'),
       },
-      async execute({ task, strategy = 'merge', feature: explicitFeature, verify }) {
+      async execute({ task, strategy = 'merge', feature: explicitFeature, verify = false }) {
         validateTaskInput(task);
         const resolution = resolveFeatureInput(resolveFeature, explicitFeature);
         if (!resolution.ok) return toolError(resolution.error);
@@ -726,45 +535,24 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
           message: `Task "${task}" merged successfully using ${strategy} strategy.\nCommit: ${result.sha}\nFiles changed: ${result.filesChanged?.length || 0}`,
         };
 
-        // Emit merge event for operational observability
-        eventLogger?.emit({
-          type: 'merge',
-          feature,
-          task,
-          details: { strategy, sha: result.sha },
-        });
-
-        // Default verify based on verificationModel: true for TDD, false for best-effort
-        const effectiveVerify = verify ?? verificationModel === 'tdd';
-
-        if (effectiveVerify) {
+        if (verify) {
           const execOpts = { cwd: process.cwd(), timeout: 300_000 };
           const cmds = getVerificationCommandsForCwd(execOpts.cwd);
-          const outputs: string[] = [];
           try {
-            const buildResult = await execAsync(cmds.build, execOpts);
-            outputs.push(buildResult.stdout || '', buildResult.stderr || '');
-            const testResult = await execAsync(cmds.test, execOpts);
-            outputs.push(testResult.stdout || '', testResult.stderr || '');
-            const output = outputs.filter(Boolean).join('\n').trim();
+            await execAsync(cmds.build, execOpts);
+            await execAsync(cmds.test, execOpts);
             return toolSuccess({
               ...mergeResult,
-              verification: {
-                passed: true,
-                output: output || 'Verification passed',
-                commands: { build: cmds.build, test: cmds.test },
-              },
+              verification: { passed: true },
             });
           } catch (err: unknown) {
             const execErr = err as { stdout?: string; stderr?: string; message?: string };
-            const errorOutput = [execErr.stdout, execErr.stderr].filter(Boolean).join('\n');
-            const allOutput = [...outputs, errorOutput].filter(Boolean).join('\n').trim();
+            const output = [execErr.stdout, execErr.stderr].filter(Boolean).join('\n');
             return toolSuccess({
               ...mergeResult,
               verification: {
                 passed: false,
-                output: allOutput || execErr.message || 'Verification failed',
-                commands: { build: cmds.build, test: cmds.test },
+                output: output || execErr.message || 'Verification failed',
               },
             });
           }

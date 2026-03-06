@@ -22,8 +22,8 @@ export { ConfigService } from './configService.js';
 export { ContextService } from './contextService.js';
 export type { SandboxConfig } from './dockerSandboxService.js';
 export { DockerSandboxService } from './dockerSandboxService.js';
-export type { EventLogger, WarcraftEvent, WarcraftEventType } from './event-logger.js';
-export { createEventLogger, createNoopEventLogger, WARCRAFT_EVENT_TYPES } from './event-logger.js';
+export type { EventLogger, TrustMetrics, WarcraftEvent, WarcraftEventType } from './event-logger.js';
+export { computeTrustMetrics, createEventLogger, createNoopEventLogger, WARCRAFT_EVENT_TYPES } from './event-logger.js';
 export { FeatureService } from './featureService.js';
 export * from './outcomes.js';
 export * from './planGates/index.js';
@@ -50,24 +50,14 @@ export {
   FilesystemPlanStore,
   FilesystemTaskStore,
 } from './state/index.js';
-export {
-  ALLOWED_TRANSITIONS,
-  InvalidTransitionError,
-  isTransitionAllowed,
-  validateTransition,
-} from './task-state-machine.js';
 export type { RunnableBlockedResult, TaskWithDeps } from './taskDependencyGraph.js';
 export { buildEffectiveDependencies, computeRunnableAndBlocked } from './taskDependencyGraph.js';
-export type { TaskServiceOptions } from './taskService.js';
 export { TaskService } from './taskService.js';
 export type {
   ApplyResult,
   CommitResult,
   DiffResult,
   MergeResult,
-  PruneOptions,
-  PruneResult,
-  StaleWorktreeInfo,
   WorktreeConfig,
   WorktreeInfo,
 } from './worktreeService.js';

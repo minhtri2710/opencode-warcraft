@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import * as child_process from 'child_process';
 import * as fs from 'fs';
 import type { FeatureService, PlanService, TaskService, TaskStatusType } from 'warcraft-core';
+import { createNoopEventLogger } from 'warcraft-core';
 import { TaskTools } from './task-tools';
 
 const TEST_DIR = `/tmp/opencode-warcraft-task-tools-test-${process.pid}`;
@@ -82,6 +83,7 @@ describe('TaskTools', () => {
       taskService: mockTaskService as unknown as TaskService,
       workflowGatesMode: 'warn',
       validateTaskStatus,
+      eventLogger: createNoopEventLogger(),
     });
     execFileSyncSpy = spyOn(child_process, 'execFileSync').mockReturnValue('' as unknown as Buffer);
   });
