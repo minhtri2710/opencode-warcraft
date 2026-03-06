@@ -239,6 +239,9 @@ To unblock: Remove ${blockedPath}`;
 
   // --- Tool modules ---
 
+  const unifiedDispatchEnabled = configService.isUnifiedDispatchEnabled();
+  const lockDir = path.join(directory, '.beads', '.locks');
+
   const featureTools = new FeatureTools({ featureService });
   const planTools = new PlanTools({
     featureService,
@@ -268,7 +271,10 @@ To unblock: Remove ${blockedPath}`;
     completionGates: COMPLETION_GATES,
     workflowGatesMode: configService.getWorkflowGatesMode(),
     verificationModel: configService.getVerificationModel(),
+    structuredVerificationMode: configService.getStructuredVerificationMode(),
     eventLogger,
+    unifiedDispatchEnabled,
+    lockDir,
   });
   const batchTools = new BatchTools({
     featureService,
@@ -280,6 +286,8 @@ To unblock: Remove ${blockedPath}`;
     checkDependencies,
     parallelExecution,
     verificationModel: configService.getVerificationModel(),
+    unifiedDispatchEnabled,
+    lockDir,
   });
   const contextTools = new ContextTools({
     featureService,
