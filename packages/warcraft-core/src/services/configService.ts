@@ -302,6 +302,16 @@ export class ConfigService {
     return 'on';
   }
 
+  /**
+   * Check if unified dispatch path is enabled.
+   * When true, both single-task and batch dispatch use the same dispatchOneTask function.
+   * Defaults to false for backward compatibility.
+   */
+  isUnifiedDispatchEnabled(): boolean {
+    const config = this.get();
+    return config.unifiedDispatchEnabled === true;
+  }
+
   private mergeAgents(
     currentAgents: WarcraftConfig['agents'],
     updateAgents: WarcraftConfig['agents'] | undefined,

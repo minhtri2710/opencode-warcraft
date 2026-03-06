@@ -6,6 +6,7 @@ import type { BlockedResult } from '../types.js';
 import { toolError, toolSuccess } from '../types.js';
 import { calculatePayloadMeta, calculatePromptMeta, checkWarnings } from '../utils/prompt-observability.js';
 import { getVerificationCommandsForCwd } from '../utils/runtime-commands.js';
+import { type DispatchOneTaskServices, dispatchOneTask } from './dispatch-task.js';
 import { DEFAULT_BUDGET, prepareTaskDispatch } from './task-dispatch.js';
 import { resolveFeatureInput, validateTaskInput } from './tool-input.js';
 
@@ -28,6 +29,10 @@ export interface WorktreeToolsDependencies {
   completionGates: readonly CompletionGate[];
   verificationModel: 'tdd' | 'best-effort';
   workflowGatesMode: 'enforce' | 'warn';
+  /** When true, use unified dispatchOneTask path with per-task lock. */
+  unifiedDispatchEnabled?: boolean;
+  /** Directory for per-task dispatch locks (required when unifiedDispatchEnabled is true). */
+  lockDir?: string;
 }
 
 /**
@@ -49,6 +54,9 @@ export class WorktreeTools {
       contextService,
       worktreeService,
       verificationModel,
+      unifiedDispatchEnabled,
+      lockDir,
+      featureService,
     } = this.deps;
     return tool({
       description: 'Create worktree and begin work on task. Spawns Mekkatorque worker automatically.',
@@ -88,6 +96,57 @@ export class WorktreeTools {
           }
         }
 
+        // --- Unified dispatch path (gated by flag) ---
+        if (unifiedDispatchEnabled) {
+          const unifiedServices: DispatchOneTaskServices = {
+            taskService,
+            planService,
+            contextService,
+            worktreeService,
+            checkBlocked,
+            checkDependencies,
+            verificationModel,
+            lockDir,
+          };
+          const dispatchResult = await dispatchOneTask(
+            { feature, task, continueFrom: continueFrom as 'blocked' | undefined, decision },
+            unifiedServices,
+          );
+          if (!dispatchResult.success) {
+            return toolError(dispatchResult.error || 'Dispatch failed');
+          }
+
+          const agent = dispatchResult.agent;
+          const taskToolPrompt = dispatchResult.taskToolCall!.prompt;
+          const taskToolInstructions = `## Delegation Required
+
+Use OpenCode's built-in \`task\` tool to spawn a Mekkatorque (Worker/Coder) worker.
+
+\`\`\`
+task({
+  subagent_type: "${agent}",
+  description: "Warcraft: ${task}",
+  prompt: "${taskToolPrompt}"
+})
+\`\`\`
+
+The worker prompt is passed inline in \`taskToolCall.prompt\`.
+
+`;
+
+          return toolSuccess({
+            worktreePath: dispatchResult.worktreePath,
+            branch: dispatchResult.branch,
+            mode: 'delegate',
+            agent,
+            delegationRequired: true,
+            taskPromptMode: 'opencode-inline',
+            taskToolCall: dispatchResult.taskToolCall,
+            instructions: taskToolInstructions,
+          });
+        }
+
+        // --- Legacy dispatch path ---
         // Check if we're continuing from blocked - reuse existing worktree
         let worktree: Awaited<ReturnType<typeof worktreeService.create>>;
         if (continueFrom === 'blocked') {

@@ -733,3 +733,37 @@ describe('ConfigService.getWorkflowGatesMode', () => {
     }
   });
 });
+
+describe('ConfigService.isUnifiedDispatchEnabled', () => {
+  it('defaults to false when config is missing', () => {
+    const service = new ConfigService();
+    expect(service.isUnifiedDispatchEnabled()).toBe(false);
+  });
+
+  it('returns true when explicitly set in config', () => {
+    const service = new ConfigService();
+    const configPath = service.getPath();
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    fs.writeFileSync(configPath, JSON.stringify({ unifiedDispatchEnabled: true }));
+    const svc = new ConfigService();
+    expect(svc.isUnifiedDispatchEnabled()).toBe(true);
+  });
+
+  it('returns false when explicitly set to false', () => {
+    const service = new ConfigService();
+    const configPath = service.getPath();
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    fs.writeFileSync(configPath, JSON.stringify({ unifiedDispatchEnabled: false }));
+    const svc = new ConfigService();
+    expect(svc.isUnifiedDispatchEnabled()).toBe(false);
+  });
+
+  it('returns false for non-boolean values', () => {
+    const service = new ConfigService();
+    const configPath = service.getPath();
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    fs.writeFileSync(configPath, JSON.stringify({ unifiedDispatchEnabled: 'yes' }));
+    const svc = new ConfigService();
+    expect(svc.isUnifiedDispatchEnabled()).toBe(false);
+  });
+});

@@ -208,4 +208,6 @@ export interface WarcraftConfig {
   verificationModel?: 'tdd' | 'best-effort';
   /** Workflow gates mode: 'enforce' blocks commit without gate evidence; 'warn' (default) proceeds with a note. */
   workflowGatesMode?: 'enforce' | 'warn';
+  /** Enable unified dispatch path for single and batch task execution. Default: false. */
+  unifiedDispatchEnabled?: boolean;
 }
