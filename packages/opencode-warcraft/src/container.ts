@@ -7,11 +7,15 @@ import {
   buildEffectiveDependencies,
   type ConfigService,
   ContextService,
+  createEventLogger,
+  createConsoleLogger,
   createStores,
   createWorktreeService,
   detectContext,
+  type EventLogger,
   FeatureService,
   getFeaturePath,
+  type Logger,
   PlanService,
   TaskService,
   type WorktreeService,
@@ -44,6 +48,8 @@ export interface WarcraftContainer {
   agentsMdService: AgentsMdService;
   configService: ConfigService;
   bvTriageService: BvTriageService;
+  logger: Logger;
+  eventLogger: EventLogger;
   builtinMcps: ReturnType<typeof createBuiltinMcps>;
   filteredSkills: ReturnType<typeof getFilteredSkills>;
   resolveFeature: (explicit?: string) => string | null;
@@ -73,8 +79,10 @@ export function createWarcraftContainer(directory: string, configService: Config
   const beadsMode = configService.getBeadsMode();
   const repository = new BeadsRepository(directory, {}, beadsMode);
   const stores = createStores(directory, beadsMode, repository);
+  const logger = createConsoleLogger({ minLevel: 'info' });
+  const eventLogger = createEventLogger(directory);
   const planService = new PlanService(directory, stores.planStore, beadsMode);
-  const taskService = new TaskService(directory, stores.taskStore, beadsMode);
+  const taskService = new TaskService(directory, stores.taskStore, beadsMode, logger);
   const featureService = new FeatureService(directory, stores.featureStore, planService, beadsMode, taskService);
   const contextService = new ContextService(directory, configService);
   const agentsMdService = new AgentsMdService(directory, contextService);
@@ -263,6 +271,7 @@ To unblock: Remove ${blockedPath}`;
     completionGates: COMPLETION_GATES,
     workflowGatesMode: configService.getWorkflowGatesMode(),
     verificationModel: configService.getVerificationModel(),
+    eventLogger,
   });
   const batchTools = new BatchTools({
     featureService,
@@ -296,6 +305,8 @@ To unblock: Remove ${blockedPath}`;
     agentsMdService,
     configService,
     bvTriageService,
+    logger,
+    eventLogger,
     builtinMcps,
     filteredSkills,
     resolveFeature,

@@ -69,3 +69,31 @@ export function worstSeverity(diagnostics: Diagnostic[]): OutcomeSeverity {
   if (diagnostics.some((d) => d.severity === 'degraded')) return 'degraded';
   return 'ok';
 }
+
+/** Append diagnostics to an existing outcome, recalculating severity */
+export function withDiagnostics<T>(
+  outcome: OperationOutcome<T>,
+  newDiagnostics: Diagnostic[],
+): OperationOutcome<T> {
+  const allDiagnostics = [...outcome.diagnostics, ...newDiagnostics];
+  const severity = worstSeverity(allDiagnostics);
+  return { ...outcome, severity, diagnostics: allDiagnostics };
+}
+
+/** Create a diagnostic from an error (Error instance, string, or unknown) */
+export function fromError(
+  code: string,
+  error: unknown,
+  severity: OutcomeSeverity = 'degraded',
+  context?: Record<string, unknown>,
+): Diagnostic {
+  const message = error instanceof Error ? error.message : String(error);
+  return diagnostic(code, message, severity, context);
+}
+
+/** Merge multiple outcomes into one, combining all diagnostics and taking worst severity */
+export function collectOutcomes(outcomes: OperationOutcome<unknown>[]): OperationOutcome<void> {
+  const allDiagnostics = outcomes.flatMap((o) => o.diagnostics);
+  const severity = worstSeverity(allDiagnostics);
+  return { severity, value: undefined, diagnostics: allDiagnostics };
+}

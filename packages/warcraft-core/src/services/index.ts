@@ -22,6 +22,8 @@ export { ConfigService } from './configService.js';
 export { ContextService } from './contextService.js';
 export type { SandboxConfig } from './dockerSandboxService.js';
 export { DockerSandboxService } from './dockerSandboxService.js';
+export type { EventLogger, WarcraftEvent, WarcraftEventType } from './event-logger.js';
+export { createEventLogger, createNoopEventLogger, WARCRAFT_EVENT_TYPES } from './event-logger.js';
 export { FeatureService } from './featureService.js';
 export * from './outcomes.js';
 export * from './planGates/index.js';

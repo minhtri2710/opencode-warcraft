@@ -1,7 +1,14 @@
 import { type ToolDefinition, tool } from '@opencode-ai/plugin';
 import { exec as execCb } from 'child_process';
 import { promisify } from 'util';
-import type { FeatureService, PlanService, TaskService, TaskStatusType, WorktreeService } from 'warcraft-core';
+import type {
+  EventLogger,
+  FeatureService,
+  PlanService,
+  TaskService,
+  TaskStatusType,
+  WorktreeService,
+} from 'warcraft-core';
 import type { BlockedResult } from '../types.js';
 import { toolError, toolSuccess } from '../types.js';
 import { calculatePayloadMeta, calculatePromptMeta, checkWarnings } from '../utils/prompt-observability.js';
@@ -28,6 +35,7 @@ export interface WorktreeToolsDependencies {
   completionGates: readonly CompletionGate[];
   verificationModel: 'tdd' | 'best-effort';
   workflowGatesMode: 'enforce' | 'warn';
+  eventLogger?: EventLogger;
 }
 
 /**
@@ -39,7 +47,7 @@ export class WorktreeTools {
   /**
    * Create worktree and begin work on task. Spawns Mekkatorque worker automatically.
    */
-  createWorktreeTool(resolveFeature: (name?: string) => string | null): ToolDefinition {
+   createWorktreeTool(resolveFeature: (name?: string) => string | null): ToolDefinition {
     // Capture deps in closure to avoid 'this' binding issues
     const {
       checkBlocked,
@@ -49,6 +57,7 @@ export class WorktreeTools {
       contextService,
       worktreeService,
       verificationModel,
+      eventLogger,
     } = this.deps;
     return tool({
       description: 'Create worktree and begin work on task. Spawns Mekkatorque worker automatically.',
@@ -154,6 +163,9 @@ export class WorktreeTools {
           );
         }
 
+        // Emit dispatch event for operational observability
+        eventLogger?.emit({ type: 'dispatch', feature, task, details: { attempt, agent } });
+
         const contextContent = contextFiles.map((f) => f.content).join('\n\n');
         const previousTasksContent = previousTasks.map((t) => `- **${t.name}**: ${t.summary}`).join('\n');
         const promptMeta = calculatePromptMeta({
@@ -257,6 +269,7 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
       completionGates,
       workflowGatesMode,
       verificationModel,
+      eventLogger,
     } = this.deps;
     return tool({
       description:
@@ -322,6 +335,14 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
             status: 'blocked',
             summary,
             blocker,
+          });
+
+          // Emit blocked event for operational observability
+          eventLogger?.emit({
+            type: 'blocked',
+            feature,
+            task,
+            details: { reason: blocker?.reason },
           });
 
           const worktree = await worktreeService.get(feature, task);
@@ -397,6 +418,14 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
           );
         }
 
+        // Emit commit event for operational observability
+        eventLogger?.emit({
+          type: 'commit',
+          feature,
+          task,
+          details: { status, sha: commitResult.sha },
+        });
+
         const finalStatus = status === 'completed' ? 'done' : status;
         taskService.update(feature, task, {
           status: validateTaskStatus(finalStatus),
@@ -460,7 +489,7 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
    */
   mergeTaskTool(resolveFeature: (name?: string) => string | null): ToolDefinition {
     // Capture deps in closure to avoid 'this' binding issues
-    const { taskService, worktreeService } = this.deps;
+    const { taskService, worktreeService, eventLogger } = this.deps;
     return tool({
       description: 'Merge completed task branch into current branch (explicit integration)',
       args: {
@@ -501,6 +530,14 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
         const mergeResult = {
           message: `Task "${task}" merged successfully using ${strategy} strategy.\nCommit: ${result.sha}\nFiles changed: ${result.filesChanged?.length || 0}`,
         };
+
+        // Emit merge event for operational observability
+        eventLogger?.emit({
+          type: 'merge',
+          feature,
+          task,
+          details: { strategy, sha: result.sha },
+        });
 
         if (verify) {
           const execOpts = { cwd: process.cwd(), timeout: 300_000 };
