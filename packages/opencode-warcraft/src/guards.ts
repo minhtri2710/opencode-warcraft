@@ -18,6 +18,8 @@ const VALID_TASK_STATUSES = new Set<string>([
 
 export const COMPLETION_GATES = ['build', 'test', 'lint'] as const;
 
+export type CompletionGate = (typeof COMPLETION_GATES)[number];
+
 export const COMPLETION_PASS_SIGNAL =
   /\b(exit(?:\s+code)?\s*0|pass(?:ed|es)?|success(?:ful|fully)?|succeed(?:ed|s)?|ok)\b/i;
 
@@ -56,6 +58,70 @@ export function hasCompletionGateEvidence(summary: string, gate: (typeof COMPLET
     const gatePattern = new RegExp(`\\b${escapeRegExp(gate)}s?\\b`, 'i');
     return gatePattern.test(line) && COMPLETION_PASS_SIGNAL.test(line);
   });
+}
+
+// ============================================================================
+// Structured Verification Types & Gate Logic
+// ============================================================================
+
+/** Structured result for a single verification gate (build, test, lint). */
+export interface GateVerification {
+  /** Command that was run (e.g., 'bun run build') */
+  cmd: string;
+  /** Process exit code (0 = success) */
+  exitCode: number;
+  /** Optional captured output */
+  output?: string;
+}
+
+/** Structured verification payload for all gates. */
+export type StructuredVerification = {
+  [K in CompletionGate]?: GateVerification;
+};
+
+/**
+ * Check verification gates using structured data (preferred) with regex fallback.
+ *
+ * - When structured verification data exists for a gate, it takes precedence.
+ * - In 'compat' mode, missing structured gates fall back to regex on summary.
+ * - In 'enforce' mode, missing structured gates are treated as missing (no fallback).
+ *
+ * @returns Object with passed boolean, missing gates, and whether regex fallback was used.
+ */
+export function checkVerificationGates(
+  verification: StructuredVerification | undefined,
+  summary: string,
+  gates: readonly CompletionGate[],
+  mode: 'compat' | 'enforce',
+  hasEvidence: (summary: string, gate: CompletionGate) => boolean,
+): { passed: boolean; missing: CompletionGate[]; usedRegexFallback: boolean } {
+  const missing: CompletionGate[] = [];
+  let usedRegexFallback = false;
+
+  for (const gate of gates) {
+    // Prefer structured verification
+    if (verification?.[gate]) {
+      if (verification[gate].exitCode !== 0) {
+        missing.push(gate);
+      }
+      continue;
+    }
+
+    // No structured data for this gate
+    if (mode === 'enforce') {
+      // Enforce mode: no fallback, gate is missing
+      missing.push(gate);
+      continue;
+    }
+
+    // Compat mode: fall back to regex on summary
+    usedRegexFallback = true;
+    if (!hasEvidence(summary, gate)) {
+      missing.push(gate);
+    }
+  }
+
+  return { passed: missing.length === 0, missing, usedRegexFallback };
 }
 
 export function isPathInside(candidatePath: string, parentPath: string): boolean {

@@ -143,7 +143,12 @@ ${verify}
 warcraft_worktree_commit({
   task: "current-task",
   summary: "Implemented X. Tests pass. build: exit 0, test: exit 0, lint: exit 0",
-  status: "completed"
+  status: "completed",
+  verification: {
+    build: { cmd: "bun run build", exitCode: 0 },
+    test: { cmd: "bun test", exitCode: 0 },
+    lint: { cmd: "bun run lint", exitCode: 0 }
+  }
 })
 \`\`\`
 
