@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
-import { detectContext, findProjectRoot, getFeatureData, listFeatures } from './detection.js';
+import { detectContext, findProjectRoot } from './detection.js';
 
 const TEST_DIR = `/tmp/warcraft-detection-test-${process.pid}`;
 
@@ -118,93 +118,6 @@ describe('detection utilities', () => {
       expect(result.isWorktree).toBe(true);
       expect(result.feature).toBe('feat');
       expect(result.task).toBe('task');
-    });
-  });
-
-  describe('listFeatures', () => {
-    it('returns empty array when no features exist', () => {
-      const result = listFeatures(TEST_DIR);
-
-      expect(result).toEqual([]);
-    });
-
-    it('lists feature directories with feature.json', () => {
-      // listFeatures delegates to listFeatureDirectories which checks for directories
-      // under the warcraft path (default: docs/)
-      const docsPath = path.join(TEST_DIR, 'docs');
-      fs.mkdirSync(path.join(docsPath, 'feat-1'), { recursive: true });
-      fs.mkdirSync(path.join(docsPath, 'feat-2'), { recursive: true });
-      // listFeatureDirectories looks for directories, not necessarily feature.json
-      const result = listFeatures(TEST_DIR);
-
-      expect(result).toContain('feat-1');
-      expect(result).toContain('feat-2');
-      expect(result).toHaveLength(2);
-    });
-
-    it('excludes .worktrees directory', () => {
-      const docsPath = path.join(TEST_DIR, 'docs');
-      fs.mkdirSync(path.join(docsPath, 'real-feature'), { recursive: true });
-      fs.mkdirSync(path.join(docsPath, '.worktrees'), { recursive: true });
-
-      const result = listFeatures(TEST_DIR);
-
-      expect(result).toContain('real-feature');
-      expect(result).not.toContain('.worktrees');
-    });
-
-    it('excludes dot-prefixed directories', () => {
-      const docsPath = path.join(TEST_DIR, 'docs');
-      fs.mkdirSync(path.join(docsPath, 'visible-feat'), { recursive: true });
-      fs.mkdirSync(path.join(docsPath, '.hidden'), { recursive: true });
-
-      const result = listFeatures(TEST_DIR);
-
-      expect(result).toContain('visible-feat');
-      expect(result).not.toContain('.hidden');
-    });
-
-    it('excludes files (only lists directories)', () => {
-      const docsPath = path.join(TEST_DIR, 'docs');
-      fs.mkdirSync(path.join(docsPath, 'dir-feature'), { recursive: true });
-      fs.mkdirSync(docsPath, { recursive: true });
-      fs.writeFileSync(path.join(docsPath, 'file.txt'), 'not a feature');
-
-      const result = listFeatures(TEST_DIR);
-
-      expect(result).toEqual(['dir-feature']);
-    });
-  });
-
-  describe('getFeatureData', () => {
-    it('returns parsed feature.json when it exists', () => {
-      const featurePath = path.join(TEST_DIR, 'docs', 'my-feat');
-      fs.mkdirSync(featurePath, { recursive: true });
-      const featureData = {
-        name: 'my-feat',
-        epicBeadId: 'bd-123',
-        status: 'planning',
-        createdAt: '2025-01-01T00:00:00Z',
-      };
-      fs.writeFileSync(path.join(featurePath, 'feature.json'), JSON.stringify(featureData));
-
-      const result = getFeatureData(TEST_DIR, 'my-feat');
-
-      expect(result).toEqual(featureData);
-    });
-
-    it('returns null when feature.json does not exist', () => {
-      const result = getFeatureData(TEST_DIR, 'nonexistent-feature');
-
-      expect(result).toBeNull();
-    });
-
-    it('throws SyntaxError for malformed feature.json', () => {
-      const featurePath = path.join(TEST_DIR, 'docs', 'bad-feat');
-      fs.mkdirSync(featurePath, { recursive: true });
-      fs.writeFileSync(path.join(featurePath, 'feature.json'), '{ invalid }');
-
-      expect(() => getFeatureData(TEST_DIR, 'bad-feat')).toThrow(SyntaxError);
     });
   });
 

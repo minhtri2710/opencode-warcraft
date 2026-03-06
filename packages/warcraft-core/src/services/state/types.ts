@@ -6,7 +6,7 @@
  * from domain services.
  */
 
-import type { FeatureJson, FeatureStatusType, PlanComment, TaskInfo, TaskStatus } from '../../types.js';
+import type { FeatureJson, FeatureStatusType, TaskInfo, TaskStatus } from '../../types.js';
 import type { LockOptions } from '../../utils/json-lock.js';
 import type { BackgroundPatchFields, RunnableTasksResult } from '../taskService.js';
 
@@ -144,45 +144,36 @@ export interface TaskStore {
 // ============================================================================
 
 /**
- * PlanStore abstracts plan approval state and comment persistence.
+ * PlanStore abstracts plan approval state persistence.
  *
  * Plan file reading/writing is always filesystem-based (both modes write plan.md).
- * This interface covers the mode-specific approval/comment storage.
+ * This interface covers the mode-specific approval storage.
  *
- * - BeadsPlanStore: stores approval in bead artifacts, comments in bead artifacts
- * - FilesystemPlanStore: stores approval in feature.json, comments in feature.json
+ * - BeadsPlanStore: approval via epic label + description equality
+ * - FilesystemPlanStore: approval via hash in feature.json
  */
 export interface PlanStore {
   /**
    * Store plan approval.
    * @param featureName - Feature name
-   * @param planContent - Full plan content (for snapshot)
-   * @param planHash - SHA-256 hash of plan content
+   * @param planContent - Full plan content
    * @param timestamp - ISO timestamp of approval
    * @param sessionId - Optional session that approved
    */
-  approve(featureName: string, planContent: string, planHash: string, timestamp: string, sessionId?: string): void;
+  approve(featureName: string, planContent: string, timestamp: string, sessionId?: string): void;
 
   /**
    * Check if the plan is currently approved.
-   * Compares stored hash against the current plan content hash.
+   * @param featureName - Feature name
+   * @param planContent - Current plan content for comparison
    */
-  isApproved(featureName: string, currentPlanHash: string): boolean;
+  isApproved(featureName: string, planContent: string): boolean;
 
   /** Revoke plan approval (e.g., when plan content changes). */
   revokeApproval(featureName: string): void;
 
-  /** Get structured plan comments. */
-  getComments(featureName: string): PlanComment[];
-
-  /** Replace all plan comments. */
-  setComments(featureName: string, comments: PlanComment[]): void;
-
   /** Sync plan content to external store (bead description). No-op for filesystem. */
   syncPlanDescription(featureName: string, content: string): void;
-
-  /** Sync a plan comment to external store. No-op for filesystem. */
-  syncPlanComment(featureName: string, comment: PlanComment): void;
 }
 
 // ============================================================================

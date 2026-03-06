@@ -2755,4 +2755,71 @@ Second task description.
       expect(() => strictService.transition(featureName, '01-test-task', 'blocked')).toThrow(InvalidTransitionError);
     });
   });
+
+  describe('sync() - secondary title matching prevents duplicates', () => {
+    it('reconciles existing task by planTitle when folder mismatches (off-mode)', () => {
+      const featureName = 'test-feature';
+      const featurePath = path.join(TEST_DIR, 'docs', featureName);
+      fs.mkdirSync(featurePath, { recursive: true });
+
+      // Plan expects tasks: "01-setup-environment" and "02-build-feature"
+      const planContent = [
+        '# Plan',
+        '',
+        '### 1. Setup Environment',
+        '',
+        '**Depends on**: none',
+        '',
+        'Setup task.',
+        '',
+        '### 2. Build Feature',
+        '',
+        '**Depends on**: 1',
+        '',
+        'Build task.',
+        '',
+      ].join('\n');
+      fs.writeFileSync(path.join(featurePath, 'plan.md'), planContent);
+
+      // Simulate existing tasks with DIFFERENT folders than what the plan derives,
+      // as if task_state.folder was missing and list() used title-sort-based numbering.
+      // Plan expects: 01-setup-environment, 02-build-feature
+      // Existing has: 01-build-feature, 02-setup-environment (alphabetical title sort)
+      const offStores = createStores(PROJECT_ROOT, 'off', createRepository('off'));
+      const offService = new TaskService(PROJECT_ROOT, offStores.taskStore, 'off');
+
+      // Create tasks on disk with mismatched folders but matching planTitles
+      const task1Path = path.join(featurePath, 'tasks', '01-build-feature');
+      const task2Path = path.join(featurePath, 'tasks', '02-setup-environment');
+      fs.mkdirSync(task1Path, { recursive: true });
+      fs.mkdirSync(task2Path, { recursive: true });
+
+      fs.writeFileSync(
+        path.join(task1Path, 'status.json'),
+        JSON.stringify({
+          status: 'pending',
+          origin: 'plan',
+          planTitle: 'Build Feature',
+        }),
+      );
+      fs.writeFileSync(
+        path.join(task2Path, 'status.json'),
+        JSON.stringify({
+          status: 'pending',
+          origin: 'plan',
+          planTitle: 'Setup Environment',
+        }),
+      );
+
+      // previewSync: plan tasks don't match existing folders, but planTitles match.
+      // Without secondary matching, this would create 2 new tasks + remove 2 existing = duplicates.
+      // With secondary matching, the existing tasks are reconciled by title.
+      const result = offService.previewSync(featureName);
+
+      // Both existing tasks should be kept (reconciled by title), none created or removed
+      expect(result.created.length).toBe(0);
+      expect(result.removed.length).toBe(0);
+      expect(result.kept.length).toBe(2);
+    });
+  });
 });

@@ -47,15 +47,26 @@ export function createNoopLogger(): Logger {
 
 /** Default console sink that writes to stderr */
 function defaultConsoleSink(entry: LogEntry): void {
-  const prefix = `[warcraft] [${entry.level.toUpperCase()}]`;
-  const contextStr = entry.context ? ` ${JSON.stringify(entry.context)}` : '';
-  const line = `${prefix} ${entry.message}${contextStr}`;
-  if (entry.level === 'error') {
-    console.error(line);
-  } else if (entry.level === 'warn') {
-    console.warn(line);
-  } else {
-    console.log(line);
+  try {
+    const prefix = `[warcraft] [${entry.level.toUpperCase()}]`;
+    let contextStr = '';
+    if (entry.context) {
+      try {
+        contextStr = ` ${JSON.stringify(entry.context)}`;
+      } catch {
+        contextStr = ' [context unserializable]';
+      }
+    }
+    const line = `${prefix} ${entry.message}${contextStr}`;
+    if (entry.level === 'error') {
+      console.error(line);
+    } else if (entry.level === 'warn') {
+      console.warn(line);
+    } else {
+      console.log(line);
+    }
+  } catch {
+    // Logger must never throw
   }
 }
 
@@ -73,7 +84,11 @@ export function createConsoleLogger(options?: ConsoleLoggerOptions): Logger {
       timestamp: new Date().toISOString(),
       context,
     };
-    sink(entry);
+    try {
+      sink(entry);
+    } catch {
+      // Sink failures must never propagate to callers
+    }
   }
 
   return {

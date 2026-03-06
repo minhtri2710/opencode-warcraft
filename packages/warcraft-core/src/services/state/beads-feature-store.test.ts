@@ -40,12 +40,13 @@ describe('BeadsFeatureStore fail-fast behavior', () => {
     expect(store.get('test-feature')).toBeNull();
   });
 
-  it('throws from save() when writing feature state fails with initialization-class error', () => {
+  it('save() writes feature.json without calling setFeatureState', () => {
+    const projectRoot = createTempProjectRoot();
     const repository = {
-      setFeatureState: () => ({ success: false as const, error: initFailure() }),
+      getEpicByFeatureName: () => ({ success: true as const, value: 'epic-1' }),
     };
 
-    const store = new BeadsFeatureStore(createTempProjectRoot(), repository as any);
+    const store = new BeadsFeatureStore(projectRoot, repository as any);
     const feature: FeatureJson = {
       name: 'test-feature',
       epicBeadId: 'epic-1',
@@ -53,6 +54,7 @@ describe('BeadsFeatureStore fail-fast behavior', () => {
       createdAt: new Date().toISOString(),
     };
 
-    expect(() => store.save(feature)).toThrow('Failed to write feature state');
+    // save() should not throw — it just writes feature.json locally
+    expect(() => store.save(feature)).not.toThrow();
   });
 });

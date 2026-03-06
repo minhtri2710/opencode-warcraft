@@ -5,7 +5,6 @@ import * as os from 'os';
 import * as path from 'path';
 import type { BeadsRepository } from './beads/BeadsRepository.js';
 import { FeatureService } from './featureService';
-import { PlanService } from './planService.js';
 import { createStores } from './state/index.js';
 import { TaskService } from './taskService.js';
 
@@ -46,19 +45,22 @@ function createMockRepository(overrides: Partial<BeadsRepository> = {}): BeadsRe
         getRobotPlan: () => ({ success: false, error: new Error('Not implemented') }),
       }) as any,
     getEpicByFeatureName: () => ({ success: true, value: 'bd-epic-1' }),
-    getFeatureState: () => ({ success: true, value: null }),
-    setFeatureState: () => ({ success: true, value: undefined }),
     getTaskState: () => ({ success: true, value: null }),
     setTaskState: () => ({ success: true, value: undefined }),
-    getPlanDescription: () => null,
+    getPlanDescription: () => ({ success: true, value: null }),
     setPlanDescription: () => ({ success: true, value: undefined }),
-    getPlanApproval: () => null,
-    setPlanApproval: () => ({ success: true, value: undefined }),
-    getApprovedPlan: () => null,
-    setApprovedPlan: () => ({ success: true, value: undefined }),
-    getPlanComments: () => [],
-    setPlanComments: () => ({ success: true, value: undefined }),
-    appendPlanComment: () => ({ success: true, value: undefined }),
+    hasWorkflowLabel: () => ({ success: true, value: false }),
+    removeWorkflowLabel: () => ({ success: true, value: undefined }),
+    createTask: () => ({ success: true, value: 'bd-task-1' }),
+    syncTaskStatus: () => ({ success: true, value: undefined }),
+    listDependencies: () => ({ success: true, value: [] }),
+    addDependency: () => ({ success: true, value: undefined }),
+    removeDependency: () => ({ success: true, value: undefined }),
+    getComments: () => ({ success: true, value: [] }),
+    appendComment: () => ({ success: true, value: undefined }),
+    recordAuditEvent: () => {},
+    getAuditLog: () => [],
+    getBeadToon: () => ({ success: true, value: '' }),
     upsertTaskArtifact: () => ({ success: true, value: undefined }),
     readTaskArtifact: () => ({ success: true, value: null }),
     listTaskBeadsForEpic: () => [],
@@ -81,8 +83,7 @@ describe('FeatureService flat layout', () => {
 
     // Use offMode to test filesystem-only behavior
     const stores = createStores(testRoot, 'off', mockRepository);
-    const planService = new PlanService(testRoot, stores.planStore, 'off');
-    const service = new FeatureService(testRoot, stores.featureStore, planService, 'off');
+    const service = new FeatureService(testRoot, stores.featureStore, 'off');
     const feature = service.create('my-feature');
 
     // Feature should be created at docs/<feature> (flat)
@@ -104,8 +105,7 @@ describe('FeatureService flat layout', () => {
 
     // Use offMode to test filesystem-only behavior
     const stores = createStores(testRoot, 'off', mockRepository);
-    const planService = new PlanService(testRoot, stores.planStore, 'off');
-    const service = new FeatureService(testRoot, stores.featureStore, planService, 'off');
+    const service = new FeatureService(testRoot, stores.featureStore, 'off');
     service.create('feature-a');
     service.create('feature-b');
 
@@ -139,8 +139,7 @@ describe('FeatureService flat layout', () => {
     );
 
     const stores = createStores(testRoot, 'off', mockRepository);
-    const planService = new PlanService(testRoot, stores.planStore, 'off');
-    const service = new FeatureService(testRoot, stores.featureStore, planService, 'off');
+    const service = new FeatureService(testRoot, stores.featureStore, 'off');
 
     expect(service.get('legacy-feature')).toBeNull();
     expect(fs.existsSync(legacyPath)).toBe(true);
@@ -166,8 +165,7 @@ describe('FeatureService flat layout', () => {
 
     // Use offMode to test filesystem-only behavior
     const stores = createStores(testRoot, 'off', mockRepository);
-    const planService = new PlanService(testRoot, stores.planStore, 'off');
-    const service = new FeatureService(testRoot, stores.featureStore, planService, 'off');
+    const service = new FeatureService(testRoot, stores.featureStore, 'off');
 
     // Listing now scans canonical flat artifacts only.
     const list = service.list();
@@ -183,8 +181,7 @@ describe('FeatureService.create', () => {
 
     // Use onMode to test that bead creation failure prevents filesystem creation
     const stores = createStores(testRoot, 'on', failingRepository);
-    const planService = new PlanService(testRoot, stores.planStore, 'on');
-    const service = new FeatureService(testRoot, stores.featureStore, planService, 'on');
+    const service = new FeatureService(testRoot, stores.featureStore, 'on');
 
     expect(() => service.create('my-feature')).toThrow('epic create failed');
 
@@ -211,8 +208,8 @@ describe('FeatureService.create', () => {
 
     try {
       const stores = createStores(testRoot, 'on', mockRepository);
-      const planService = new PlanService(testRoot, stores.planStore);
-      const service = new FeatureService(testRoot, stores.featureStore, planService);
+
+      const service = new FeatureService(testRoot, stores.featureStore);
       expect(() => service.create('my-feature')).toThrow(/Failed to initialize feature/);
     } finally {
       mkdirSpy.mockRestore();
@@ -228,8 +225,8 @@ describe('FeatureService.create', () => {
     });
 
     const stores = createStores(testRoot, 'off', mockRepository);
-    const planService = new PlanService(testRoot, stores.planStore, 'off');
-    const service = new FeatureService(testRoot, stores.featureStore, planService, 'off');
+
+    const service = new FeatureService(testRoot, stores.featureStore, 'off');
 
     const results = await Promise.allSettled([
       Promise.resolve().then(() => service.create('race-feature')),
@@ -256,8 +253,8 @@ describe('FeatureService.create', () => {
     });
 
     const stores = createStores(testRoot, 'on', mockRepository);
-    const planService = new PlanService(testRoot, stores.planStore, 'on');
-    const service = new FeatureService(testRoot, stores.featureStore, planService, 'on');
+
+    const service = new FeatureService(testRoot, stores.featureStore, 'on');
 
     const results = await Promise.allSettled([
       Promise.resolve().then(() => service.create('race-feature')),
@@ -289,8 +286,8 @@ describe('FeatureService.complete', () => {
     });
 
     const stores = createStores(testRoot, 'on', mockRepository);
-    const planService = new PlanService(testRoot, stores.planStore, 'on');
-    const service = new FeatureService(testRoot, stores.featureStore, planService, 'on');
+
+    const service = new FeatureService(testRoot, stores.featureStore, 'on');
     const feature = service.create('my-feature');
     const completed = service.complete('my-feature');
 
@@ -309,8 +306,8 @@ describe('FeatureService.complete', () => {
     });
 
     const stores = createStores(testRoot, 'off', mockRepository);
-    const planService = new PlanService(testRoot, stores.planStore, 'off');
-    const service = new FeatureService(testRoot, stores.featureStore, planService, 'off');
+
+    const service = new FeatureService(testRoot, stores.featureStore, 'off');
     const _feature = service.create('my-feature');
     service.complete('my-feature');
 
@@ -329,8 +326,8 @@ describe('FeatureService beadsMode off', () => {
     });
 
     const stores = createStores(testRoot, 'off', mockRepository);
-    const planService = new PlanService(testRoot, stores.planStore, 'off');
-    const service = new FeatureService(testRoot, stores.featureStore, planService, 'off');
+
+    const service = new FeatureService(testRoot, stores.featureStore, 'off');
     const feature = service.create('my-feature');
 
     // Should not call createEpic when beadsMode is off
@@ -354,8 +351,8 @@ describe('FeatureService beadsMode off', () => {
     const execSpy = spyOn(childProcess, 'execFileSync');
 
     const stores = createStores(testRoot, 'off', mockRepository);
-    const planService = new PlanService(testRoot, stores.planStore, 'off');
-    const service = new FeatureService(testRoot, stores.featureStore, planService, 'off');
+
+    const service = new FeatureService(testRoot, stores.featureStore, 'off');
     service.create('my-feature');
 
     // Reset spy after setup to only count get() calls
@@ -379,8 +376,8 @@ describe('FeatureService beadsMode off', () => {
     const execSpy = spyOn(childProcess, 'execFileSync');
 
     const stores = createStores(testRoot, 'off', mockRepository);
-    const planService = new PlanService(testRoot, stores.planStore, 'off');
-    const service = new FeatureService(testRoot, stores.featureStore, planService, 'off');
+
+    const service = new FeatureService(testRoot, stores.featureStore, 'off');
     service.create('feature-a');
     service.create('feature-b');
 
@@ -408,8 +405,8 @@ describe('FeatureService beadsMode on', () => {
     });
 
     const stores = createStores(testRoot, 'on', mockRepository);
-    const planService = new PlanService(testRoot, stores.planStore, 'on');
-    const service = new FeatureService(testRoot, stores.featureStore, planService, 'on');
+
+    const service = new FeatureService(testRoot, stores.featureStore, 'on');
     const feature = service.create('my-feature');
 
     expect(createEpicCalls).toHaveLength(1);
@@ -439,8 +436,8 @@ describe('FeatureService beadsMode on', () => {
     });
 
     const stores = createStores(testRoot, 'on', mockRepository);
-    const planService = new PlanService(testRoot, stores.planStore, 'on');
-    const service = new FeatureService(testRoot, stores.featureStore, planService, 'on');
+
+    const service = new FeatureService(testRoot, stores.featureStore, 'on');
 
     // Create the feature
     service.create('my-feature');
@@ -450,41 +447,6 @@ describe('FeatureService beadsMode on', () => {
     expect(feature).not.toBeNull();
     expect(feature?.name).toBe('my-feature');
     expect(feature?.epicBeadId).toBe('bd-epic-1');
-  });
-
-  it('maps in-progress epic bead status to executing when feature_state artifact is absent', () => {
-    const mockRepository = createMockRepository({
-      createEpic: (_name: string, _priority: number) => ({ success: true, value: 'bd-epic-1' }),
-      getGateway: () =>
-        ({
-          createEpic: () => 'bd-epic-1',
-          closeBead: () => {},
-          flushArtifacts: () => {},
-          readArtifact: () => null,
-          upsertArtifact: () => {},
-          readDescription: () => null,
-          updateDescription: () => {},
-          addComment: () => {},
-          addLabel: () => {},
-          list: () => [],
-          show: () => ({
-            id: 'bd-epic-1',
-            title: 'my-feature',
-            status: 'in_progress',
-            created_at: '2024-01-01T00:00:00Z',
-          }),
-        }) as any,
-      getFeatureState: () => ({ success: true, value: null }),
-    });
-
-    const stores = createStores(testRoot, 'on', mockRepository);
-    const planService = new PlanService(testRoot, stores.planStore, 'on');
-    const service = new FeatureService(testRoot, stores.featureStore, planService, 'on');
-    service.create('my-feature');
-
-    const feature = service.get('my-feature');
-    expect(feature).not.toBeNull();
-    expect(feature?.status).toBe('executing');
   });
 
   it('uses BeadGateway for list when beadsMode is on', () => {
@@ -517,8 +479,8 @@ describe('FeatureService beadsMode on', () => {
     });
 
     const stores = createStores(testRoot, 'on', mockRepository);
-    const planService = new PlanService(testRoot, stores.planStore, 'on');
-    const service = new FeatureService(testRoot, stores.featureStore, planService, 'on');
+
+    const service = new FeatureService(testRoot, stores.featureStore, 'on');
 
     // List features (uses BeadGateway directly)
     const list = service.list();
@@ -539,8 +501,8 @@ describe('FeatureService beadsMode on', () => {
     });
 
     const stores = createStores(testRoot, 'on', mockRepository);
-    const planService = new PlanService(testRoot, stores.planStore, 'on');
-    const service = new FeatureService(testRoot, stores.featureStore, planService, 'on');
+
+    const service = new FeatureService(testRoot, stores.featureStore, 'on');
 
     const feature = service.get('non-existent');
     expect(feature).toBeNull();
@@ -586,9 +548,9 @@ describe('FeatureService getTasks folder stability', () => {
     });
 
     const stores = createStores(testRoot, 'on', mockRepository);
-    const planService = new PlanService(testRoot, stores.planStore, 'on');
+
     const taskService = new TaskService(testRoot, stores.taskStore, 'on');
-    const service = new FeatureService(testRoot, stores.featureStore, planService, 'on', taskService);
+    const service = new FeatureService(testRoot, stores.featureStore, 'on', taskService);
     service.create('my-feature');
 
     // First call to getTasks generates and persists folders
@@ -638,9 +600,9 @@ describe('FeatureService getTasks folder stability', () => {
     });
 
     const stores = createStores(testRoot, 'on', mockRepository);
-    const planService = new PlanService(testRoot, stores.planStore, 'on');
+
     const taskService = new TaskService(testRoot, stores.taskStore, 'on');
-    const service = new FeatureService(testRoot, stores.featureStore, planService, 'on', taskService);
+    const service = new FeatureService(testRoot, stores.featureStore, 'on', taskService);
     service.create('my-feature');
 
     const tasks = taskService.list('my-feature');
@@ -655,8 +617,8 @@ describe('FeatureService getTasks folder stability', () => {
 describe('FeatureService.patchMetadata', () => {
   it('ignores immutable fields and warns when callers attempt to overwrite them', () => {
     const stores = createStores(testRoot, 'off', createMockRepository());
-    const planService = new PlanService(testRoot, stores.planStore, 'off');
-    const service = new FeatureService(testRoot, stores.featureStore, planService, 'off');
+
+    const service = new FeatureService(testRoot, stores.featureStore, 'off');
     const created = service.create('immutable-fields');
 
     const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
@@ -682,8 +644,8 @@ describe('FeatureService.patchMetadata', () => {
 
   it('updates mutable metadata fields without warning', () => {
     const stores = createStores(testRoot, 'off', createMockRepository());
-    const planService = new PlanService(testRoot, stores.planStore, 'off');
-    const service = new FeatureService(testRoot, stores.featureStore, planService, 'off');
+
+    const service = new FeatureService(testRoot, stores.featureStore, 'off');
     service.create('mutable-fields');
 
     const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});

@@ -7,7 +7,7 @@ import type { TaskStatusType } from '../../types.js';
 const TRANSIENT_LABELS: readonly string[] = ['blocked', 'failed', 'partial', 'cancelled'];
 
 export type TaskBeadAction =
-  | { type: 'close' }
+  | { type: 'close'; removeLabels?: string[] }
   | { type: 'claim'; removeLabels?: string[] }
   | { type: 'unclaim'; removeLabels?: string[] }
   | { type: 'defer'; label: TaskStatusType; removeLabels?: string[] };
@@ -26,7 +26,8 @@ export type TaskBeadAction =
  */
 export function getTaskBeadActions(status: TaskStatusType): TaskBeadAction[] {
   if (status === 'done') {
-    return [{ type: 'close' }];
+    // Closing must also clean up any transient labels from prior states
+    return [{ type: 'close', removeLabels: [...TRANSIENT_LABELS] }];
   }
 
   if (status === 'in_progress') {

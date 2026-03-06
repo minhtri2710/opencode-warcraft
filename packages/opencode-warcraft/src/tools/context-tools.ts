@@ -185,7 +185,7 @@ export class ContextTools {
             return 'Write or revise plan with warcraft_plan_write, then get approval';
           }
           if (planStatus === 'review') {
-            return 'Wait for plan approval or revise based on comments';
+            return 'Await plan approval or revise the plan';
           }
           if (tasks.length === 0) {
             return 'Generate tasks from plan with warcraft_tasks_sync';

@@ -123,6 +123,15 @@ describe('WorktreeService helpers', () => {
     expect(statusPath).toBe(v2);
   });
 
+  it('returns canonical off-mode status path even in on-mode service', async () => {
+    const service = createService('on');
+    // Status path must always resolve via off-mode (docs) regardless of service beadsMode
+    const expected = path.join(testRoot, 'docs', 'feat', 'tasks', '01-task', 'status.json');
+
+    const statusPath = await (service as any).getStepStatusPath('feat', '01-task');
+    expect(statusPath).toBe(expected);
+  });
+
   it('revertFromSavedDiff applies the saved patch file path in reverse', async () => {
     const service = createService('off');
     const diffPath = path.join(testRoot, 'saved.patch');
@@ -171,6 +180,18 @@ describe('WorktreeService helpers', () => {
     const service = createService('off');
     const branch = (service as any).getBranchName('my-feature', '01-setup');
     expect(branch).toBe('warcraft/my-feature/01-setup');
+  });
+
+  it('uses on-mode worktree dir when constructed with on mode', () => {
+    const service = createService('on');
+    const worktreesDir = (service as any).getWorktreesDir();
+    expect(worktreesDir).toBe(path.join(testRoot, '.beads', 'artifacts', '.worktrees'));
+  });
+
+  it('uses off-mode worktree dir when constructed with off mode', () => {
+    const service = createService('off');
+    const worktreesDir = (service as any).getWorktreesDir();
+    expect(worktreesDir).toBe(path.join(testRoot, 'docs', '.worktrees'));
   });
 });
 

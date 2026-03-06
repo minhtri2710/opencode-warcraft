@@ -4,7 +4,6 @@ import { fileExists, readJson } from '../../utils/fs.js';
 import type { LockOptions } from '../../utils/json-lock.js';
 import { getTaskPath, getTaskReportPath, getTaskStatusPath } from '../../utils/paths.js';
 import { deriveTaskFolder, slugifyTaskName } from '../../utils/slug.js';
-import { encodeTaskState, taskStateFromTaskStatus } from '../beads/artifactSchemas.js';
 import { type BeadsRepository, throwIfInitFailure } from '../beads/BeadsRepository.js';
 import { mapBeadStatusToTaskStatus } from '../beads/beadStatus.js';
 import type { TaskWithDeps } from '../taskDependencyGraph.js';
@@ -93,7 +92,11 @@ export class BeadsTaskStore implements TaskStore {
     }
     const epicBeadId = epicResult.value!;
 
-    const beadId = this.repository.getGateway().createTask(title, epicBeadId, priority);
+    const createResult = this.repository.createTask(title, epicBeadId, priority);
+    if (createResult.success === false) {
+      throw new Error(`Failed to create task bead: ${createResult.error.message}`);
+    }
+    const beadId = createResult.value;
     const statusWithBead: TaskStatus = { ...status, beadId };
 
     const setTaskStateResult = this.repository.setTaskState(beadId, { ...statusWithBead, folder } as TaskStatus);
@@ -289,18 +292,20 @@ export class BeadsTaskStore implements TaskStore {
     // Get previous status for audit trail
     const prevStatus = this.readTaskState(status.beadId)?.status ?? 'pending';
 
-    this.repository.setTaskState(status.beadId, { ...status, folder } as TaskStatus);
+    const setResult = this.repository.setTaskState(status.beadId, { ...status, folder } as TaskStatus);
+    if (setResult.success === false) {
+      throwIfInitFailure(setResult.error, `Failed to persist task state for '${status.beadId}'`);
+      console.warn(`[warcraft] Failed to persist task state for '${status.beadId}': ${setResult.error.message}`);
+    }
 
     // Invalidate cache entry for the modified task
     this.invalidateCacheEntry(featureName, folder);
 
     if (options?.syncBeadStatus && status.status) {
-      try {
-        this.repository.getGateway().syncTaskStatus(status.beadId, status.status);
-      } catch (error) {
-        throwIfInitFailure(error, `[warcraft] Failed to sync bead status for '${status.beadId}'`);
-        const reason = error instanceof Error ? error.message : String(error);
-        console.warn(`[warcraft] Failed to sync bead status for '${status.beadId}': ${reason}`);
+      const syncResult = this.repository.syncTaskStatus(status.beadId, status.status);
+      if (syncResult.success === false) {
+        throwIfInitFailure(syncResult.error, `[warcraft] Failed to sync bead status for '${status.beadId}'`);
+        console.warn(`[warcraft] Failed to sync bead status for '${status.beadId}': ${syncResult.error.message}`);
       }
       const flushResult = this.repository.flushArtifacts();
       if (flushResult.success === false) {
@@ -343,9 +348,13 @@ export class BeadsTaskStore implements TaskStore {
     }
 
     if (status.beadId) {
-      const artifact = taskStateFromTaskStatus({ ...updated, folder } as TaskStatus);
-      const encoded = encodeTaskState(artifact);
-      this.repository.getGateway().upsertArtifact(status.beadId, 'task_state', encoded);
+      const setResult = this.repository.setTaskState(status.beadId, { ...updated, folder } as TaskStatus);
+      if (setResult.success === false) {
+        throwIfInitFailure(setResult.error, `[warcraft] Failed to persist background patch for '${status.beadId}'`);
+        console.warn(
+          `[warcraft] Failed to persist background patch for '${status.beadId}': ${setResult.error.message}`,
+        );
+      }
 
       // Flush to ensure parity with save() - background patches must be persisted
       const flushResult = this.repository.flushArtifacts();
@@ -364,6 +373,20 @@ export class BeadsTaskStore implements TaskStore {
   }
 
   delete(featureName: string, folder: string): void {
+    // Canonical: close the bead to prevent resurrection as phantom pending task
+    const beadId = this.resolveBeadId(featureName, folder);
+    if (beadId) {
+      try {
+        this.repository.closeBead(beadId);
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        console.warn(
+          `[warcraft] Failed to close bead '${beadId}' during delete of '${folder}' (best-effort): ${reason}`,
+        );
+      }
+    }
+
+    // Local shadow cleanup
     const taskPath = getTaskPath(this.projectRoot, featureName, folder);
     if (fileExists(taskPath)) {
       fs.rmSync(taskPath, { recursive: true });
@@ -555,7 +578,6 @@ export class BeadsTaskStore implements TaskStore {
    * Idempotent: reads existing edges, computes desired edges, adds missing, removes stale.
    */
   syncDependencies(featureName: string): void {
-    const gateway = this.repository.getGateway();
     const tasks = this.list(featureName);
 
     // Build folder→beadId map
@@ -597,13 +619,13 @@ export class BeadsTaskStore implements TaskStore {
       // Read existing dependency edges per-task via bead graph queries
       for (const task of tasks) {
         if (!task.beadId) continue;
-        try {
-          const depOutput = gateway.listDependencies(task.beadId);
-          for (const dep of depOutput) {
-            existingEdges.add(`${task.beadId}->${dep.id}`);
-          }
-        } catch {
+        const depResult = this.repository.listDependencies(task.beadId);
+        if (depResult.success === false) {
           // Task may not have dependencies yet — that's fine
+          continue;
+        }
+        for (const dep of depResult.value) {
+          existingEdges.add(`${task.beadId}->${dep.id}`);
         }
       }
     } catch {
@@ -614,11 +636,9 @@ export class BeadsTaskStore implements TaskStore {
     for (const edge of desiredEdges) {
       if (!existingEdges.has(edge)) {
         const [taskBeadId, depBeadId] = edge.split('->');
-        try {
-          gateway.addDependency(taskBeadId, depBeadId);
-        } catch (error) {
-          const reason = error instanceof Error ? error.message : String(error);
-          console.warn(`[warcraft] Failed to add dependency ${taskBeadId} -> ${depBeadId}: ${reason}`);
+        const addResult = this.repository.addDependency(taskBeadId, depBeadId);
+        if (addResult.success === false) {
+          console.warn(`[warcraft] Failed to add dependency ${taskBeadId} -> ${depBeadId}: ${addResult.error.message}`);
         }
       }
     }
@@ -627,17 +647,18 @@ export class BeadsTaskStore implements TaskStore {
     for (const edge of existingEdges) {
       if (!desiredEdges.has(edge)) {
         const [taskBeadId, depBeadId] = edge.split('->');
-        try {
-          gateway.removeDependency(taskBeadId, depBeadId);
-        } catch (error) {
-          const reason = error instanceof Error ? error.message : String(error);
-          console.warn(`[warcraft] Failed to remove dependency ${taskBeadId} -> ${depBeadId}: ${reason}`);
+        const removeResult = this.repository.removeDependency(taskBeadId, depBeadId);
+        if (removeResult.success === false) {
+          console.warn(
+            `[warcraft] Failed to remove dependency ${taskBeadId} -> ${depBeadId}: ${removeResult.error.message}`,
+          );
         }
       }
     }
 
     // Advisory cycle detection via bv --robot-insights (non-blocking)
     try {
+      // TODO: elevate to repository method
       const viewerGateway = this.repository.getViewerGateway();
       const health = viewerGateway.getHealth();
       if (health.available) {
@@ -658,6 +679,16 @@ export class BeadsTaskStore implements TaskStore {
   // ---------------------------------------------------------------------------
   // Private helpers
   // ---------------------------------------------------------------------------
+
+  private resolveBeadId(featureName: string, folder: string): string | undefined {
+    const featureBeadIdIndex = this.beadIdIndex.get(featureName);
+    if (featureBeadIdIndex) {
+      const cached = featureBeadIdIndex.get(folder);
+      if (cached) return cached;
+    }
+    const task = this.findTaskByFolder(featureName, folder);
+    return task?.beadId;
+  }
 
   private findTaskByFolder(featureName: string, folder: string): TaskInfo | null {
     try {
@@ -735,18 +766,26 @@ export class BeadsTaskStore implements TaskStore {
    * Flush a single transition comment to the bead.
    * Swallows errors to ensure audit failures never block operations.
    */
-  private flushSingleTransition(transition: TransitionEvent): void {
+  private flushSingleTransition(transition: TransitionEvent): boolean {
     try {
       const commentBody = `[warcraft:transition] ${transition.from} → ${transition.to} | ${transition.timestamp} | ${transition.summary ?? ''}`;
-      this.repository.appendComment(transition.beadId, commentBody.trim());
-      // Mark the journal entry as acknowledged after successful comment write
+      const result = this.repository.appendComment(transition.beadId, commentBody.trim());
+      if (result.success === false) {
+        console.warn(
+          `[warcraft] Failed to append transition comment for '${transition.beadId}': ${result.error.message}`,
+        );
+        return false;
+      }
+      // Mark the journal entry as acknowledged only after confirmed comment write
       if (transition.journalSeq != null) {
         this.journal.markCommentWritten(transition.journalSeq);
       }
+      return true;
     } catch (error) {
       // Audit failures must never block status changes
       const reason = error instanceof Error ? error.message : String(error);
       console.warn(`[warcraft] Failed to append transition comment for '${transition.beadId}': ${reason}`);
+      return false;
     }
   }
 
@@ -755,11 +794,14 @@ export class BeadsTaskStore implements TaskStore {
    * Called after batch operations to ensure all transitions are recorded.
    */
   flushTransitionAudit(): void {
-    // Process each pending transition
+    // Process each pending transition, retaining failures for later retry
+    const retained: TransitionEvent[] = [];
     for (const transition of this.pendingTransitions) {
-      this.flushSingleTransition(transition);
+      const success = this.flushSingleTransition(transition);
+      if (!success) {
+        retained.push(transition);
+      }
     }
-    // Clear pending transitions after flushing
-    this.pendingTransitions = [];
+    this.pendingTransitions = retained;
   }
 }

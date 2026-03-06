@@ -23,24 +23,25 @@ describe('BeadsPlanStore fail-fast behavior', () => {
 
     const store = new BeadsPlanStore(createTempProjectRoot(), repository as any);
 
-    expect(() => store.approve('test-feature', '# Plan', 'a'.repeat(64), new Date().toISOString())).toThrow(
+    expect(() => store.approve('test-feature', '# Plan', new Date().toISOString())).toThrow(
       'Failed to resolve epic for feature',
     );
   });
 
-  it('throws from approve() when setPlanApproval fails with initialization-class error', () => {
+  it('throws from approve() when setPlanDescription fails with initialization-class error', () => {
     const repository = {
       getEpicByFeatureName: () => ({ success: true as const, value: 'epic-1' }),
-      setPlanApproval: () => ({ success: false as const, error: initFailure() }),
-      setApprovedPlan: () => ({ success: true as const, value: undefined }),
+      setPlanDescription: () => ({ success: false as const, error: initFailure() }),
+      getPlanDescription: () => ({ success: true as const, value: null }),
       addWorkflowLabel: () => ({ success: true as const, value: undefined }),
-      setFeatureState: () => ({ success: true as const, value: undefined }),
+      removeWorkflowLabel: () => ({ success: true as const, value: undefined }),
+      hasWorkflowLabel: () => ({ success: true as const, value: false }),
     };
 
     const store = new BeadsPlanStore(createTempProjectRoot(), repository as any);
 
-    expect(() => store.approve('test-feature', '# Plan', 'a'.repeat(64), new Date().toISOString())).toThrow(
-      'Failed to set plan approval',
+    expect(() => store.approve('test-feature', '# Plan', new Date().toISOString())).toThrow(
+      'Failed to sync plan description during approval',
     );
   });
 

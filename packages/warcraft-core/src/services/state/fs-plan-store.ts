@@ -1,4 +1,5 @@
-import type { FeatureJson, PlanComment } from '../../types.js';
+import * as crypto from 'crypto';
+import type { FeatureJson } from '../../types.js';
 import { readJson } from '../../utils/fs.js';
 import { updateJsonLockedSync } from '../../utils/json-lock.js';
 import { getFeatureJsonPath } from '../../utils/paths.js';
@@ -6,20 +7,24 @@ import type { PlanStore } from './types.js';
 
 type FeatureJsonWithPlanState = FeatureJson & {
   planApprovalHash?: string;
-  planComments?: PlanComment[];
 };
+
+function computePlanHash(content: string): string {
+  return crypto.createHash('sha256').update(content, 'utf-8').digest('hex');
+}
 
 /**
  * PlanStore backed by local feature.json (beadsMode='off').
  *
- * All approval state and comments are stored in feature.json.
+ * All approval state is stored in feature.json via SHA-256 hash comparison.
  * No bead interaction whatsoever.
  */
 export class FilesystemPlanStore implements PlanStore {
   constructor(private readonly projectRoot: string) {}
 
-  approve(featureName: string, _planContent: string, planHash: string, timestamp: string, _sessionId?: string): void {
+  approve(featureName: string, planContent: string, timestamp: string, _sessionId?: string): void {
     const filePath = getFeatureJsonPath(this.projectRoot, featureName, 'off');
+    const planHash = computePlanHash(planContent);
     updateJsonLockedSync<FeatureJsonWithPlanState>(
       filePath,
       (current) => ({
@@ -32,7 +37,7 @@ export class FilesystemPlanStore implements PlanStore {
     );
   }
 
-  isApproved(featureName: string, currentPlanHash: string): boolean {
+  isApproved(featureName: string, planContent: string): boolean {
     const feature = readJson<FeatureJsonWithPlanState>(getFeatureJsonPath(this.projectRoot, featureName, 'off'));
     if (!feature || feature.status !== 'approved') {
       return false;
@@ -40,7 +45,8 @@ export class FilesystemPlanStore implements PlanStore {
     if (!feature.planApprovalHash) {
       return false;
     }
-    return feature.planApprovalHash === currentPlanHash;
+    const currentHash = computePlanHash(planContent);
+    return feature.planApprovalHash === currentHash;
   }
 
   revokeApproval(featureName: string): void {
@@ -58,28 +64,7 @@ export class FilesystemPlanStore implements PlanStore {
     );
   }
 
-  getComments(featureName: string): PlanComment[] {
-    const feature = readJson<FeatureJsonWithPlanState>(getFeatureJsonPath(this.projectRoot, featureName, 'off'));
-    return feature?.planComments ?? [];
-  }
-
-  setComments(featureName: string, comments: PlanComment[]): void {
-    const filePath = getFeatureJsonPath(this.projectRoot, featureName, 'off');
-    updateJsonLockedSync<FeatureJsonWithPlanState>(
-      filePath,
-      (current) => {
-        if (!current) return current;
-        return { ...current, planComments: comments };
-      },
-      {} as FeatureJsonWithPlanState,
-    );
-  }
-
   syncPlanDescription(_featureName: string, _content: string): void {
-    // No-op: filesystem mode has no external store to sync to.
-  }
-
-  syncPlanComment(_featureName: string, _comment: PlanComment): void {
     // No-op: filesystem mode has no external store to sync to.
   }
 }

@@ -41,7 +41,6 @@ export interface WorktreeToolsDependencies {
   verificationModel: 'tdd' | 'best-effort';
   workflowGatesMode: 'enforce' | 'warn';
   structuredVerificationMode?: 'compat' | 'enforce';
-  unifiedDispatchEnabled?: boolean;
   lockDir?: string;
   execAsync?: ExecAsyncFn;
   eventLogger: EventLogger;
@@ -611,6 +610,7 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
               ...mergeResult,
               verification: {
                 passed: false,
+                commands: { build: cmds.build, test: cmds.test },
                 output: output || execErr.message || 'Verification failed',
               },
             });

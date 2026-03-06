@@ -78,14 +78,14 @@ export function createWarcraftContainer(directory: string, configService: Config
   const stores = createStores(directory, beadsMode, repository);
   const planService = new PlanService(directory, stores.planStore, beadsMode);
   const taskService = new TaskService(directory, stores.taskStore, beadsMode);
-  const featureService = new FeatureService(directory, stores.featureStore, planService, beadsMode, taskService);
+  const featureService = new FeatureService(directory, stores.featureStore, beadsMode, taskService);
   const contextService = new ContextService(directory, configService);
   const agentsMdService = new AgentsMdService(directory, contextService);
   const disabledMcps = configService.getDisabledMcps();
   const disabledSkills = configService.getDisabledSkills();
   const builtinMcps = createBuiltinMcps(disabledMcps);
   const filteredSkills = getFilteredSkills(disabledSkills);
-  const worktreeService = createWorktreeService(directory);
+  const worktreeService = createWorktreeService(directory, beadsMode);
   const eventLogger = createEventLogger(directory);
 
   // Initialize BV Triage Service with explicit state ownership
@@ -239,7 +239,6 @@ To unblock: Remove ${blockedPath}`;
 
   // --- Tool modules ---
 
-  const unifiedDispatchEnabled = configService.isUnifiedDispatchEnabled();
   const lockDir = path.join(directory, '.beads', '.locks');
 
   const featureTools = new FeatureTools({ featureService });
@@ -273,7 +272,6 @@ To unblock: Remove ${blockedPath}`;
     verificationModel: configService.getVerificationModel(),
     structuredVerificationMode: configService.getStructuredVerificationMode(),
     eventLogger,
-    unifiedDispatchEnabled,
     lockDir,
   });
   const batchTools = new BatchTools({
@@ -286,7 +284,6 @@ To unblock: Remove ${blockedPath}`;
     checkDependencies,
     parallelExecution,
     verificationModel: configService.getVerificationModel(),
-    unifiedDispatchEnabled,
     lockDir,
   });
   const contextTools = new ContextTools({

@@ -3,7 +3,7 @@
  */
 
 import { beforeEach, describe, expect, it, spyOn } from 'bun:test';
-import type { FeatureJson, PlanComment, TaskStatus } from '../../types.js';
+import type { TaskStatus } from '../../types.js';
 import type { AuditEntry, AuditRecordParams } from './BeadGateway.types.js';
 import { BeadGatewayError } from './BeadGateway.types.js';
 import { BeadsRepository } from './BeadsRepository.js';
@@ -83,7 +83,12 @@ class MockBeadGateway {
     if (this.throwOn === 'show') {
       throw new Error('Failed to show bead');
     }
-    return { id: beadId, title: 'Test Bead', description: this.descriptions.get(beadId) || '' };
+    return {
+      id: beadId,
+      title: 'Test Bead',
+      description: this.descriptions.get(beadId) || '',
+      labels: this.labels.get(beadId) || [],
+    };
   }
 
   showToon(beadId: string): string {
@@ -158,6 +163,17 @@ class MockBeadGateway {
       throw new Error('Failed to retrieve audit log');
     }
     return this.auditLogEntries;
+  }
+
+  removeLabel(beadId: string, label: string): void {
+    if (this.throwOn === 'removeLabel') {
+      throw new Error('Failed to remove label');
+    }
+    const existing = this.labels.get(beadId) || [];
+    this.labels.set(
+      beadId,
+      existing.filter((l) => l !== label),
+    );
   }
 }
 
@@ -266,52 +282,6 @@ describe('BeadsRepository', () => {
     });
   });
 
-  describe('Feature State Operations', () => {
-    const mockFeatureJson: FeatureJson = {
-      name: 'test-feature',
-      epicBeadId: 'epic-123',
-      status: 'planning',
-      createdAt: '2024-01-01T00:00:00.000Z',
-    };
-
-    it('should get feature state', () => {
-      const artifact = {
-        schemaVersion: 1,
-        name: 'test-feature',
-        status: 'planning' as const,
-        createdAt: '2024-01-01T00:00:00.000Z',
-      };
-      mockGateway.artifacts.set('epic-123', {
-        feature_state: JSON.stringify(artifact),
-      });
-
-      const result = repository.getFeatureState('epic-123');
-      expect(result.success).toBe(true);
-      // @ts-expect-error - type narrowing in test
-      expect(result.value).not.toBeNull();
-      // @ts-expect-error - type narrowing in test
-      expect(result.value?.name).toBe('test-feature');
-    });
-
-    it('should return null when feature state not found', () => {
-      const result = repository.getFeatureState('epic-999');
-      expect(result.success).toBe(true);
-      // @ts-expect-error - type narrowing in test
-      expect(result.value).toBeNull();
-    });
-
-    it('should set feature state', () => {
-      const result = repository.setFeatureState('epic-123', mockFeatureJson);
-      expect(result.success).toBe(true);
-    });
-
-    it('should handle feature state read failures', () => {
-      mockGateway.throwOn = 'readArtifact';
-      const result = repository.getFeatureState('epic-123');
-      expect(result.success).toBe(false);
-    });
-  });
-
   describe('Task State Operations', () => {
     const mockTaskStatus: TaskStatus = {
       schemaVersion: 1,
@@ -367,91 +337,6 @@ describe('BeadsRepository', () => {
       expect(result.success).toBe(true);
       // @ts-expect-error - type narrowing in test
       expect(result.value).toBe('# Test Plan');
-    });
-
-    it('should get plan approval', () => {
-      const approval = {
-        schemaVersion: 1,
-        hash: 'abc123',
-        approvedAt: '2024-01-01T00:00:00.000Z',
-      };
-      mockGateway.artifacts.set('epic-123', {
-        plan_approval: JSON.stringify(approval),
-      });
-
-      const result = repository.getPlanApproval('epic-123');
-      expect(result.success).toBe(true);
-      // @ts-expect-error - type narrowing in test
-      expect(result.value).not.toBeNull();
-      // @ts-expect-error - type narrowing in test
-      expect(result.value?.hash).toBe('abc123');
-    });
-
-    it('should set plan approval', () => {
-      const result = repository.setPlanApproval('epic-123', 'hash-456', '2024-01-01T00:00:00.000Z');
-      expect(result.success).toBe(true);
-    });
-
-    it('should get approved plan', () => {
-      const approvedPlan = {
-        schemaVersion: 1,
-        content: '# Approved Plan',
-        snapshotAt: '2024-01-01T00:00:00.000Z',
-        contentHash: 'sha-256',
-      };
-      mockGateway.artifacts.set('epic-123', {
-        approved_plan: JSON.stringify(approvedPlan),
-      });
-
-      const result = repository.getApprovedPlan('epic-123');
-      expect(result.success).toBe(true);
-      // @ts-expect-error - type narrowing in test
-      expect(result.value).toBe('# Approved Plan');
-    });
-
-    it('should set approved plan', () => {
-      const result = repository.setApprovedPlan('epic-123', '# Plan', 'sha-256');
-      expect(result.success).toBe(true);
-    });
-
-    it('should append plan comment', () => {
-      const result = repository.appendPlanComment('epic-123', 'Test comment');
-      expect(result.success).toBe(true);
-      expect(mockGateway.comments).toContain('Test comment');
-    });
-
-    it('should get plan comments', () => {
-      const comments: PlanComment[] = [
-        {
-          id: '1',
-          line: 10,
-          body: 'Test comment',
-          author: 'user',
-          timestamp: '2024-01-01T00:00:00.000Z',
-        },
-      ];
-      mockGateway.artifacts.set('epic-123', {
-        plan_comments: JSON.stringify({ schemaVersion: 1, comments }),
-      });
-
-      const result = repository.getPlanComments('epic-123');
-      expect(result.success).toBe(true);
-      // @ts-expect-error - type narrowing in test
-      expect(result.value).toEqual(comments);
-    });
-
-    it('should set plan comments', () => {
-      const comments: PlanComment[] = [
-        {
-          id: '1',
-          line: 10,
-          body: 'New comment',
-          author: 'user',
-          timestamp: '2024-01-01T00:00:00.000Z',
-        },
-      ];
-      const result = repository.setPlanComments('epic-123', comments);
-      expect(result.success).toBe(true);
     });
   });
 
@@ -530,6 +415,45 @@ describe('BeadsRepository', () => {
       const labels = mockGateway.labels.get('epic-123') || [];
       expect(labels).toContain('approved');
     });
+
+    it('should return true when label exists via hasWorkflowLabel', () => {
+      mockGateway.labels.set('epic-123', ['approved', 'in_progress']);
+      const result = repository.hasWorkflowLabel('epic-123', 'approved');
+      expect(result.success).toBe(true);
+      // @ts-expect-error - type narrowing in test
+      expect(result.value).toBe(true);
+    });
+
+    it('should return false when label does not exist via hasWorkflowLabel', () => {
+      mockGateway.labels.set('epic-123', ['in_progress']);
+      const result = repository.hasWorkflowLabel('epic-123', 'approved');
+      expect(result.success).toBe(true);
+      // @ts-expect-error - type narrowing in test
+      expect(result.value).toBe(false);
+    });
+
+    it('should return false when bead has no labels via hasWorkflowLabel', () => {
+      const result = repository.hasWorkflowLabel('epic-123', 'approved');
+      expect(result.success).toBe(true);
+      // @ts-expect-error - type narrowing in test
+      expect(result.value).toBe(false);
+    });
+
+    it('should remove workflow label via removeWorkflowLabel', () => {
+      mockGateway.labels.set('epic-123', ['approved', 'in_progress']);
+      const result = repository.removeWorkflowLabel('epic-123', 'approved');
+      expect(result.success).toBe(true);
+      const labels = mockGateway.labels.get('epic-123') || [];
+      expect(labels).not.toContain('approved');
+      expect(labels).toContain('in_progress');
+    });
+
+    it('should swallow errors on removeWorkflowLabel (best-effort)', () => {
+      mockGateway.throwOn = 'removeLabel';
+      const result = repository.removeWorkflowLabel('epic-123', 'approved');
+      // Best-effort: returns success even on failure
+      expect(result.success).toBe(true);
+    });
   });
 
   describe('Robot Plan', () => {
@@ -563,7 +487,7 @@ describe('BeadsRepository', () => {
   describe('Error Normalization', () => {
     it('should normalize gateway errors', () => {
       mockGateway.throwOn = 'readArtifact';
-      const result = repository.getFeatureState('epic-123');
+      const result = repository.getTaskState('task-123');
       expect(result.success).toBe(false);
       if (result.success === false) {
         expect(result.error.code).toBe('gateway_error');
@@ -580,7 +504,7 @@ describe('BeadsRepository', () => {
         );
       };
 
-      const result = repository.getFeatureState('epic-123');
+      const result = repository.getTaskState('task-123');
       expect(result.success).toBe(false);
       if (result.success === false) {
         expect(result.error.code).toBe('gateway_error');

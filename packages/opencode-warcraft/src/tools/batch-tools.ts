@@ -3,7 +3,7 @@ import type { FeatureService, PlanService, TaskService, WorktreeService } from '
 import type { BlockedResult } from '../types.js';
 import { toolError, toolSuccess } from '../types.js';
 import { type DispatchOneTaskServices, dispatchOneTask } from './dispatch-task.js';
-import { fetchSharedDispatchData, prepareTaskDispatch } from './task-dispatch.js';
+import { fetchSharedDispatchData } from './task-dispatch.js';
 import { resolveFeatureInput, validateTaskInput } from './tool-input.js';
 
 export interface BatchToolsDependencies {
@@ -21,9 +21,7 @@ export interface BatchToolsDependencies {
     maxConcurrency?: number;
   };
   verificationModel: 'tdd' | 'best-effort';
-  /** Enable unified dispatch path for single and batch task execution. */
-  unifiedDispatchEnabled: boolean;
-  /** Directory for per-task dispatch locks (required when unifiedDispatchEnabled is true). */
+  /** Directory for per-task dispatch locks. */
   lockDir?: string;
 }
 
@@ -107,7 +105,6 @@ export class BatchTools {
       checkBlocked,
       checkDependencies,
       verificationModel,
-      unifiedDispatchEnabled,
       lockDir,
     } = this.deps;
     const parallelPolicy = resolveParallelPolicy(this.deps.parallelExecution);
@@ -226,73 +223,17 @@ export class BatchTools {
         });
 
         const dispatchTask = async (task: string): Promise<TaskDispatchResult> => {
-          // --- Unified dispatch path (gated by flag) ---
-          if (unifiedDispatchEnabled) {
-            const unifiedServices: DispatchOneTaskServices = {
-              taskService,
-              planService,
-              contextService,
-              worktreeService,
-              checkBlocked,
-              checkDependencies,
-              verificationModel,
-              lockDir,
-            };
-            return dispatchOneTask({ feature, task }, unifiedServices, shared);
-          }
-
-          // --- Legacy dispatch path ---
-          const taskInfo = taskService.get(feature, task);
-          if (!taskInfo) {
-            return { task, success: false, agent: 'mekkatorque', error: 'Task not found' };
-          }
-
-          try {
-            const worktree = await worktreeService.create(feature, task);
-
-            taskService.update(feature, task, {
-              status: 'in_progress',
-              baseCommit: worktree.commit,
-            });
-
-            const prep = prepareTaskDispatch(
-              {
-                feature,
-                task,
-                taskInfo,
-                worktree,
-              },
-              { planService, taskService, contextService, verificationModel },
-              shared,
-            );
-
-            if (!prep.persistedWorkerPrompt || prep.persistedWorkerPrompt.trim().length === 0) {
-              return {
-                task,
-                success: false,
-                agent: 'mekkatorque',
-                error: 'Failed to persist worker prompt',
-              };
-            }
-
-            const agent = 'mekkatorque';
-
-            return {
-              task,
-              success: true,
-              worktreePath: worktree.path,
-              branch: worktree.branch,
-              agent,
-              taskToolCall: {
-                subagent_type: agent,
-                description: `Warcraft: ${task}`,
-                prompt: prep.persistedWorkerPrompt,
-              },
-            };
-          } catch (error) {
-            const reason = error instanceof Error ? error.message : String(error);
-            return { task, success: false, agent: 'mekkatorque', error: reason };
-          }
+          const unifiedServices: DispatchOneTaskServices = {
+            taskService,
+            planService,
+            contextService,
+            worktreeService,
+            checkBlocked,
+            checkDependencies,
+            verificationModel,
+            lockDir,
+          };
+          return dispatchOneTask({ feature, task }, unifiedServices, shared);
         };
 
         const dispatched =

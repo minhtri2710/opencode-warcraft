@@ -103,6 +103,9 @@ During execution, call \`warcraft_status\` periodically to:
 - Get reminded of next actions
 `;
 
+let cachedStatusHint: { hint: string; featureName: string; expiresAt: number } | null = null;
+const STATUS_HINT_TTL_MS = 30_000;
+
 // ============================================================================
 // Plugin Entry Point — Thin wiring layer
 // ============================================================================
@@ -130,21 +133,22 @@ const plugin: Plugin = async (ctx) => {
         output.system.push(WARCRAFT_SYSTEM_PROMPT);
       }
 
-      // Dynamic status hint: ALWAYS inject (small, changes per turn)
+      // Dynamic status hint: cached with TTL to avoid redundant lookups
+      const now = Date.now();
       const activeFeature = container.resolveFeature();
-      if (activeFeature) {
+      if (cachedStatusHint && now < cachedStatusHint.expiresAt && activeFeature === cachedStatusHint.featureName) {
+        output.system.push(cachedStatusHint.hint);
+      } else if (activeFeature) {
         const info = container.featureService.getInfo(activeFeature);
         if (info) {
           let statusHint = `\n### Current Warcraft Status\n`;
           statusHint += `**Active Feature**: ${info.name} (${info.status})\n`;
           statusHint += `**Progress**: ${info.tasks.filter((t) => t.status === 'done').length}/${info.tasks.length} tasks\n`;
-
-          if (info.commentCount > 0) {
-            statusHint += `**Comments**: ${info.commentCount} unresolved - address with warcraft_plan_read\n`;
-          }
-
+          cachedStatusHint = { hint: statusHint, featureName: activeFeature, expiresAt: now + STATUS_HINT_TTL_MS };
           output.system.push(statusHint);
         }
+      } else {
+        cachedStatusHint = null;
       }
     },
 

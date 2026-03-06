@@ -31,13 +31,13 @@ export class PlanTools {
   constructor(private readonly deps: PlanToolsDependencies) {}
 
   /**
-   * Write plan.md (clears existing comments)
+   * Write plan.md for the feature
    */
   writePlanTool(resolveFeature: (name?: string) => string | null): ToolDefinition {
     // Capture deps in closure to avoid 'this' binding issues
     const { captureSession, planService, updateFeatureMetadata } = this.deps;
     return tool({
-      description: 'Write plan.md (clears existing comments)',
+      description: 'Write plan.md for the feature',
       args: {
         content: tool.schema.string().describe('Plan markdown content'),
         feature: tool.schema.string().optional().describe('Feature name (defaults to detection or single feature)'),
@@ -57,19 +57,19 @@ export class PlanTools {
         updateFeatureMetadata(feature, {
           workflowPath: detectWorkflowPath(content),
         });
-        return toolSuccess({ message: `Plan written to ${planPath}. Comments cleared for fresh review.` });
+        return toolSuccess({ message: `Plan written to ${planPath}.` });
       },
     });
   }
 
   /**
-   * Read plan.md and user comments
+   * Read plan.md content and approval status
    */
   readPlanTool(resolveFeature: (name?: string) => string | null): ToolDefinition {
     // Capture deps in closure to avoid 'this' binding issues
     const { captureSession, planService } = this.deps;
     return tool({
-      description: 'Read plan.md and user comments',
+      description: 'Read plan.md content and approval status',
       args: {
         feature: tool.schema.string().optional().describe('Feature name (defaults to detection or single feature)'),
       },
@@ -101,11 +101,6 @@ export class PlanTools {
         if (!resolution.ok) return toolError(resolution.error);
         const feature = resolution.feature;
         captureSession(feature, toolContext);
-        const comments = planService.getComments(feature);
-        if (comments.length > 0) {
-          return toolError(`Cannot approve - ${comments.length} unresolved comment(s). Address them first.`);
-        }
-
         const planResult = planService.read(feature);
         if (!planResult) {
           return toolError('No plan.md found');
@@ -116,7 +111,7 @@ export class PlanTools {
           return toolError(formatPlanReviewChecklistIssues(checklistResult.issues));
         }
 
-        planService.approve(feature);
+        planService.approve(feature, undefined, planResult.content);
         updateFeatureMetadata(feature, {
           workflowPath: detectWorkflowPath(planResult.content),
           reviewChecklistVersion: checklistResult.ok ? 'v1' : undefined,

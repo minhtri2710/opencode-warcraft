@@ -3,88 +3,19 @@
  */
 
 import { describe, expect, it } from 'bun:test';
-import type { FeatureJson, PlanComment, TaskStatus } from '../../types.js';
+import type { TaskStatus } from '../../types.js';
 import {
-  decodeApprovedPlan,
-  decodeFeatureState,
-  decodePlanApproval,
-  decodePlanComments,
   decodeTaskReport,
   decodeTaskState,
   decodeWorkerPrompt,
-  encodeApprovedPlan,
-  encodeFeatureState,
-  encodePlanApproval,
-  encodePlanComments,
   encodeTaskReport,
   encodeTaskState,
   encodeWorkerPrompt,
-  featureStateFromFeatureJson,
-  featureStateToFeatureJson,
   taskStateFromTaskStatus,
   taskStateToTaskStatus,
 } from './artifactSchemas.js';
 
 describe('artifactSchemas', () => {
-  describe('FeatureStateArtifact', () => {
-    it('should encode and decode feature state', () => {
-      const original = {
-        schemaVersion: 1,
-        name: 'test-feature',
-        status: 'planning' as const,
-        createdAt: '2024-01-01T00:00:00.000Z',
-        approvedAt: '2024-01-02T00:00:00.000Z',
-        workflowPath: 'standard' as const,
-        ticket: 'TICKET-123',
-      };
-
-      const encoded = encodeFeatureState(original);
-      const decoded = decodeFeatureState(encoded);
-
-      expect(decoded).toEqual(original);
-    });
-
-    it('should migrate legacy feature state', () => {
-      const legacy = JSON.stringify({
-        name: 'legacy-feature',
-        status: 'executing',
-        createdAt: '2024-01-01T00:00:00.000Z',
-      });
-
-      const decoded = decodeFeatureState(legacy);
-
-      expect(decoded).not.toBeNull();
-      expect(decoded?.schemaVersion).toBe(1);
-      expect(decoded?.name).toBe('legacy-feature');
-      expect(decoded?.status).toBe('executing');
-    });
-
-    it('should return null for invalid feature state', () => {
-      expect(decodeFeatureState(null)).toBeNull();
-      expect(decodeFeatureState('')).toBeNull();
-      expect(decodeFeatureState('invalid json')).toBeNull();
-    });
-
-    it('should convert between FeatureJson and FeatureStateArtifact', () => {
-      const featureJson: FeatureJson = {
-        name: 'test-feature',
-        epicBeadId: 'epic-123',
-        status: 'approved',
-        createdAt: '2024-01-01T00:00:00.000Z',
-        approvedAt: '2024-01-02T00:00:00.000Z',
-      };
-
-      const artifact = featureStateFromFeatureJson(featureJson);
-      expect(artifact.schemaVersion).toBe(1);
-      expect(artifact.name).toBe(featureJson.name);
-      expect(artifact.status).toBe(featureJson.status);
-
-      const partial = featureStateToFeatureJson(artifact);
-      expect(partial.name).toBe(featureJson.name);
-      expect(partial.status).toBe(featureJson.status);
-    });
-  });
-
   describe('TaskStateArtifact', () => {
     it('should encode and decode task state', () => {
       const original = {
@@ -149,136 +80,6 @@ describe('artifactSchemas', () => {
       const converted = taskStateToTaskStatus(artifact);
       expect(converted.status).toBe(taskStatus.status);
       expect(converted.origin).toBe(taskStatus.origin);
-    });
-  });
-
-  describe('PlanApprovalArtifact', () => {
-    it('should encode and decode plan approval', () => {
-      const original = {
-        schemaVersion: 1,
-        hash: 'abc123def456',
-        approvedAt: '2024-01-01T00:00:00.000Z',
-        approvedBySession: 'session-789',
-      };
-
-      const encoded = encodePlanApproval(original);
-      const decoded = decodePlanApproval(encoded);
-
-      expect(decoded).toEqual(original);
-    });
-
-    it('should migrate legacy plan approval', () => {
-      const legacy = JSON.stringify({
-        hash: 'legacy-hash',
-        approvedAt: '2024-01-01T00:00:00.000Z',
-      });
-
-      const decoded = decodePlanApproval(legacy);
-
-      expect(decoded).not.toBeNull();
-      expect(decoded?.schemaVersion).toBe(1);
-      expect(decoded?.hash).toBe('legacy-hash');
-    });
-
-    it('should return null for invalid plan approval', () => {
-      expect(decodePlanApproval(null)).toBeNull();
-      expect(decodePlanApproval('')).toBeNull();
-      expect(decodePlanApproval('{}')).toBeNull(); // Missing required fields
-    });
-  });
-
-  describe('ApprovedPlanArtifact', () => {
-    it('should encode and decode approved plan', () => {
-      const original = {
-        schemaVersion: 1,
-        content: '# Plan\n\nThis is the plan content.',
-        snapshotAt: '2024-01-01T00:00:00.000Z',
-        contentHash: 'sha256-123',
-      };
-
-      const encoded = encodeApprovedPlan(original);
-      const decoded = decodeApprovedPlan(encoded);
-
-      expect(decoded).toEqual(original);
-    });
-
-    it('should migrate legacy approved plan', () => {
-      const legacy = JSON.stringify({
-        content: '# Legacy Plan\n\nContent here',
-      });
-
-      const decoded = decodeApprovedPlan(legacy);
-
-      expect(decoded).not.toBeNull();
-      expect(decoded?.schemaVersion).toBe(1);
-      expect(decoded?.content).toBe('# Legacy Plan\n\nContent here');
-    });
-
-    it('should return null for invalid approved plan', () => {
-      expect(decodeApprovedPlan(null)).toBeNull();
-      expect(decodeApprovedPlan('')).toBeNull();
-      expect(decodeApprovedPlan('{}')).toBeNull();
-    });
-  });
-
-  describe('PlanCommentsArtifact', () => {
-    const comments: PlanComment[] = [
-      {
-        id: '1',
-        line: 10,
-        body: 'First comment',
-        author: 'user1',
-        timestamp: '2024-01-01T00:00:00.000Z',
-      },
-      {
-        id: '2',
-        line: 20,
-        body: 'Second comment',
-        author: 'user2',
-        timestamp: '2024-01-02T00:00:00.000Z',
-      },
-    ];
-
-    it('should encode and decode plan comments', () => {
-      const original = {
-        schemaVersion: 1,
-        comments,
-      };
-
-      const encoded = encodePlanComments(original);
-      const decoded = decodePlanComments(encoded);
-
-      expect(decoded).toEqual(original);
-    });
-
-    it('should migrate legacy plan comments with threads key', () => {
-      const legacy = JSON.stringify({
-        threads: comments,
-      });
-
-      const decoded = decodePlanComments(legacy);
-
-      expect(decoded).not.toBeNull();
-      expect(decoded?.schemaVersion).toBe(1);
-      expect(decoded?.comments).toEqual(comments);
-    });
-
-    it('should migrate legacy plan comments with comments key', () => {
-      const legacy = JSON.stringify({
-        comments,
-      });
-
-      const decoded = decodePlanComments(legacy);
-
-      expect(decoded).not.toBeNull();
-      expect(decoded?.schemaVersion).toBe(1);
-      expect(decoded?.comments).toEqual(comments);
-    });
-
-    it('should return null for invalid plan comments', () => {
-      expect(decodePlanComments(null)).toBeNull();
-      expect(decodePlanComments('')).toBeNull();
-      expect(decodePlanComments('{}')).toBeNull();
     });
   });
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import type { LogEntry, Logger, LogLevel } from './logger.js';
+import type { LogEntry } from './logger.js';
 import { createConsoleLogger, createNoopLogger, LOG_LEVELS } from './logger.js';
 
 describe('Logger', () => {
@@ -95,6 +95,37 @@ describe('Logger', () => {
 
       expect(entries).toHaveLength(1);
       expect(entries[0].level).toBe('info');
+    });
+  });
+
+  describe('non-throwing guarantees', () => {
+    it('does not throw when sink throws', () => {
+      const logger = createConsoleLogger({
+        sink: () => {
+          throw new Error('sink exploded');
+        },
+      });
+
+      expect(() => logger.info('test')).not.toThrow();
+      expect(() => logger.error('test', { key: 'val' })).not.toThrow();
+    });
+
+    it('handles circular references in context gracefully', () => {
+      const entries: LogEntry[] = [];
+      const _logger = createConsoleLogger({
+        minLevel: 'debug',
+        sink: (entry) => entries.push(entry),
+      });
+
+      // Default sink uses JSON.stringify which would throw on circular refs.
+      // But with a custom sink, the context passes through directly.
+      // Test the default sink path indirectly by verifying no throw.
+      const defaultLogger = createConsoleLogger({ minLevel: 'debug' });
+      const circular: Record<string, unknown> = {};
+      circular.self = circular;
+
+      // Must not throw even with circular context
+      expect(() => defaultLogger.info('circular test', circular)).not.toThrow();
     });
   });
 });

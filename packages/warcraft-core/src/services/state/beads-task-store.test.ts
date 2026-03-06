@@ -41,11 +41,7 @@ describe('BeadsTaskStore fail-fast behavior', () => {
       setTaskState: () => ({ success: true as const, value: undefined }),
       flushArtifacts: () => ({ success: true as const, value: undefined }),
       getTaskState: () => ({ success: true as const, value: null }),
-      getGateway: () => ({
-        syncTaskStatus: () => {
-          throw initFailure();
-        },
-      }),
+      syncTaskStatus: () => ({ success: false as const, error: initFailure() }),
     };
 
     const store = new BeadsTaskStore('/tmp/project', repository as any);
@@ -192,9 +188,7 @@ describe('BeadsTaskStore caching layer', () => {
         value: { folder: '01-task-1', status: 'pending', origin: 'plan', planTitle: 'Task 1' },
       }),
       setTaskState: () => ({ success: true as const, value: undefined }),
-      getGateway: () => ({
-        createTask: () => 'task-2',
-      }),
+      createTask: () => ({ success: true as const, value: 'task-2' }),
     };
 
     const store = new BeadsTaskStore('/tmp/project', repository as any);
@@ -226,6 +220,7 @@ describe('BeadsTaskStore caching layer', () => {
         success: true as const,
         value: { folder: '01-task-1', status: 'pending', origin: 'plan', planTitle: 'Task 1' },
       }),
+      closeBead: () => ({ success: true as const, value: undefined }),
     };
 
     const store = new BeadsTaskStore('/tmp/project', repository as any);
@@ -257,9 +252,8 @@ describe('BeadsTaskStore caching layer', () => {
         success: true as const,
         value: { folder: '01-task-1', status: 'pending', origin: 'plan', planTitle: 'Task 1', beadId: 'task-1' },
       }),
-      getGateway: () => ({
-        upsertArtifact: () => undefined,
-      }),
+      upsertTaskArtifact: () => ({ success: true as const, value: undefined }),
+      setTaskState: () => ({ success: true as const, value: undefined }),
       flushArtifacts: () => ({ success: true as const, value: undefined }),
     };
 
@@ -298,11 +292,9 @@ describe('BeadsTaskStore caching layer', () => {
             ? { folder: '01-task-1', status: 'pending', origin: 'plan', planTitle: 'Task 1', dependsOn: ['02-task-2'] }
             : { folder: '02-task-2', status: 'pending', origin: 'plan', planTitle: 'Task 2', dependsOn: [] },
       }),
-      getGateway: () => ({
-        listDependencies: () => [],
-        addDependency: () => undefined,
-        removeDependency: () => undefined,
-      }),
+      listDependencies: () => ({ success: true as const, value: [] }),
+      addDependency: () => ({ success: true as const, value: undefined }),
+      removeDependency: () => ({ success: true as const, value: undefined }),
       getViewerGateway: () => ({
         getHealth: () => ({ available: false }),
       }),
@@ -397,11 +389,7 @@ describe('BeadsTaskStore audit trail for state transitions', () => {
       flushArtifacts: () => ({ success: true as const, value: undefined }),
       appendComment: () => ({ success: true as const, value: undefined }),
       getTaskState: () => ({ success: true as const, value: null }),
-      getGateway: () => ({
-        syncTaskStatus: () => {
-          // syncTaskStatus succeeds
-        },
-      }),
+      syncTaskStatus: () => ({ success: true as const, value: undefined }),
     };
 
     const appendCommentSpy = spyOn(repository, 'appendComment');
@@ -430,11 +418,7 @@ describe('BeadsTaskStore audit trail for state transitions', () => {
       flushArtifacts: () => ({ success: true as const, value: undefined }),
       appendComment: () => ({ success: true as const, value: undefined }),
       getTaskState: () => ({ success: true as const, value: null }),
-      getGateway: () => ({
-        syncTaskStatus: () => {
-          // syncTaskStatus succeeds
-        },
-      }),
+      syncTaskStatus: () => ({ success: true as const, value: undefined }),
     };
 
     const appendCommentSpy = spyOn(repository, 'appendComment');
@@ -457,11 +441,7 @@ describe('BeadsTaskStore audit trail for state transitions', () => {
       flushArtifacts: () => ({ success: true as const, value: undefined }),
       appendComment: () => ({ success: false as const, error: new Error('Failed to add comment') }),
       getTaskState: () => ({ success: true as const, value: null }),
-      getGateway: () => ({
-        syncTaskStatus: () => {
-          // syncTaskStatus succeeds
-        },
-      }),
+      syncTaskStatus: () => ({ success: true as const, value: undefined }),
     };
 
     const store = new BeadsTaskStore('/tmp/project', repository as any);
@@ -484,11 +464,7 @@ describe('BeadsTaskStore audit trail for state transitions', () => {
         throw new Error('br command crashed');
       },
       getTaskState: () => ({ success: true as const, value: null }),
-      getGateway: () => ({
-        syncTaskStatus: () => {
-          // syncTaskStatus succeeds
-        },
-      }),
+      syncTaskStatus: () => ({ success: true as const, value: undefined }),
     };
 
     const store = new BeadsTaskStore('/tmp/project', repository as any);
@@ -509,11 +485,7 @@ describe('BeadsTaskStore audit trail for state transitions', () => {
       flushArtifacts: () => ({ success: true as const, value: undefined }),
       appendComment: () => ({ success: true as const, value: undefined }),
       getTaskState: () => ({ success: true as const, value: null }),
-      getGateway: () => ({
-        syncTaskStatus: () => {
-          // syncTaskStatus succeeds
-        },
-      }),
+      syncTaskStatus: () => ({ success: true as const, value: undefined }),
     };
 
     const appendCommentSpy = spyOn(repository, 'appendComment');
@@ -545,11 +517,7 @@ describe('BeadsTaskStore audit trail for state transitions', () => {
         success: true as const,
         value: { status: 'in_progress', origin: 'plan', planTitle: 'Task 1' },
       }),
-      getGateway: () => ({
-        syncTaskStatus: () => {
-          // syncTaskStatus succeeds
-        },
-      }),
+      syncTaskStatus: () => ({ success: true as const, value: undefined }),
     };
 
     const appendCommentSpy = spyOn(repository, 'appendComment');
@@ -576,11 +544,7 @@ describe('BeadsTaskStore audit trail for state transitions', () => {
       flushArtifacts: () => ({ success: true as const, value: undefined }),
       appendComment: () => ({ success: true as const, value: undefined }),
       getTaskState: () => ({ success: true as const, value: null }),
-      getGateway: () => ({
-        syncTaskStatus: () => {
-          // syncTaskStatus succeeds
-        },
-      }),
+      syncTaskStatus: () => ({ success: true as const, value: undefined }),
     };
 
     const appendCommentSpy = spyOn(repository, 'appendComment');
@@ -602,5 +566,116 @@ describe('BeadsTaskStore audit trail for state transitions', () => {
 
     // Count should still be 1 since no pending transitions were accumulated
     expect(appendCommentSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('BeadsTaskStore canonical delete', () => {
+  it('delete() closes the bead before local cleanup', () => {
+    let closedBeadId: string | undefined;
+    const repository = {
+      getEpicByFeatureName: () => ({ success: true as const, value: 'epic-1' }),
+      listTaskBeadsForEpic: () => ({
+        success: true as const,
+        value: [{ id: 'task-1', title: 'Task 1', status: 'pending' }],
+      }),
+      getTaskState: () => ({
+        success: true as const,
+        value: { folder: '01-task-1', status: 'pending', origin: 'plan', planTitle: 'Task 1' },
+      }),
+      closeBead: (beadId: string) => {
+        closedBeadId = beadId;
+        return { success: true as const, value: undefined };
+      },
+    };
+
+    const store = new BeadsTaskStore('/tmp/project', repository as any);
+
+    // Populate cache so resolveBeadId finds the bead
+    store.list('test-feature');
+
+    store.delete('test-feature', '01-task-1');
+    expect(closedBeadId).toBe('task-1');
+  });
+
+  it('delete() continues local cleanup when bead close fails', () => {
+    const repository = {
+      getEpicByFeatureName: () => ({ success: true as const, value: 'epic-1' }),
+      listTaskBeadsForEpic: () => ({
+        success: true as const,
+        value: [{ id: 'task-1', title: 'Task 1', status: 'pending' }],
+      }),
+      getTaskState: () => ({
+        success: true as const,
+        value: { folder: '01-task-1', status: 'pending', origin: 'plan', planTitle: 'Task 1' },
+      }),
+      closeBead: () => {
+        throw new Error('bead close failed');
+      },
+    };
+
+    const store = new BeadsTaskStore('/tmp/project', repository as any);
+    store.list('test-feature');
+
+    // Should not throw — close failure is best-effort
+    expect(() => store.delete('test-feature', '01-task-1')).not.toThrow();
+  });
+
+  it('delete() handles missing beadId gracefully', () => {
+    const repository = {
+      getEpicByFeatureName: () => ({ success: true as const, value: 'epic-1' }),
+      listTaskBeadsForEpic: () => ({
+        success: true as const,
+        value: [],
+      }),
+      getTaskState: () => ({ success: true as const, value: null }),
+    };
+
+    const store = new BeadsTaskStore('/tmp/project', repository as any);
+    store.list('test-feature');
+
+    // Should not throw when no bead found
+    expect(() => store.delete('test-feature', 'nonexistent')).not.toThrow();
+  });
+});
+
+describe('BeadsTaskStore transition audit durability', () => {
+  it('flushTransitionAudit retains failed transitions for retry', () => {
+    let appendCallCount = 0;
+    const repository = {
+      setTaskState: () => ({ success: true as const, value: undefined }),
+      flushArtifacts: () => ({ success: true as const, value: undefined }),
+      appendComment: () => {
+        appendCallCount++;
+        // First call fails, subsequent calls succeed
+        if (appendCallCount === 1) {
+          return { success: false as const, error: new Error('comment write failed') };
+        }
+        return { success: true as const, value: undefined };
+      },
+      getTaskState: () => ({ success: true as const, value: null }),
+      syncTaskStatus: () => ({ success: true as const, value: undefined }),
+    };
+
+    const store = new BeadsTaskStore('/tmp/project', repository as any);
+
+    // Trigger a transition that will try to flush
+    store.save(
+      'test-feature',
+      '01-task',
+      { status: 'in_progress', origin: 'manual', beadId: 'task-1', planTitle: 'Task 1' },
+      { syncBeadStatus: true },
+    );
+
+    // First flush fails — appendCallCount is now 1
+    // The failed transition should be retained
+    expect(appendCallCount).toBe(1);
+
+    // Retry flush — now appendComment succeeds
+    store.flushTransitionAudit();
+    expect(appendCallCount).toBe(2);
+
+    // Third flush — nothing pending, no new calls
+    store.flushTransitionAudit();
+    expect(appendCallCount).toBe(2);
   });
 });

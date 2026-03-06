@@ -84,9 +84,7 @@ describe('FilesystemTaskStore', () => {
       // Create a mock repository that throws (simulating unavailable beads)
       const mockRepository = {
         getEpicByFeatureName: () => ({ success: false }),
-        getGateway: () => ({
-          createTask: () => 'bead-123',
-        }),
+        createTask: () => ({ success: true, value: 'bead-123' }),
         upsertTaskArtifact: () => {},
         readTaskArtifact: () => ({ success: false }),
       } as any;
@@ -98,9 +96,7 @@ describe('FilesystemTaskStore', () => {
     it('should use repository for bead ID when available', () => {
       const mockRepository = {
         getEpicByFeatureName: () => ({ success: true, value: 'epic-abc' }),
-        getGateway: () => ({
-          createTask: () => 'bead-xyz-123',
-        }),
+        createTask: () => ({ success: true, value: 'bead-xyz-123' }),
         upsertTaskArtifact: () => {},
         readTaskArtifact: () => ({ success: false }),
       } as any;

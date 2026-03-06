@@ -2,8 +2,10 @@ import { describe, expect, it } from 'bun:test';
 import { getTaskBeadActions } from './beadMapping';
 
 describe('getTaskBeadActions', () => {
-  it('maps done to close action', () => {
-    expect(getTaskBeadActions('done')).toEqual([{ type: 'close' }]);
+  it('maps done to close action with removeLabels for transient labels', () => {
+    expect(getTaskBeadActions('done')).toEqual([
+      { type: 'close', removeLabels: ['blocked', 'failed', 'partial', 'cancelled'] },
+    ]);
   });
 
   it('maps in_progress to claim action with removeLabels for transient labels', () => {

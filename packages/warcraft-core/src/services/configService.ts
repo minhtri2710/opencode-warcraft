@@ -281,14 +281,9 @@ export class ConfigService {
     return 'compat';
   }
 
-  /**
-   * Check if unified dispatch is enabled.
-   * When true, single and batch task dispatch use the same code path.
-   * Defaults to false for backward compatibility.
-   */
+  /** @deprecated Unified dispatch is always enabled. Returns true. */
   isUnifiedDispatchEnabled(): boolean {
-    const config = this.get();
-    return config.unifiedDispatchEnabled === true;
+    return true;
   }
 
   /**

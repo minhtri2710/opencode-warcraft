@@ -721,9 +721,9 @@ describe('ConfigService rollout flags', () => {
     }
   });
 
-  it('isUnifiedDispatchEnabled() returns false by default', () => {
+  it('isUnifiedDispatchEnabled() always returns true', () => {
     const service = new ConfigService();
-    expect(service.isUnifiedDispatchEnabled()).toBe(false);
+    expect(service.isUnifiedDispatchEnabled()).toBe(true);
   });
 
   it('isUnifiedDispatchEnabled() returns true when configured', () => {
@@ -735,15 +735,15 @@ describe('ConfigService rollout flags', () => {
     expect(svc.isUnifiedDispatchEnabled()).toBe(true);
   });
 
-  it('isUnifiedDispatchEnabled() returns false for non-boolean values', () => {
+  it('isUnifiedDispatchEnabled() always returns true regardless of config value', () => {
     const service = new ConfigService();
     const configPath = service.getPath();
     fs.mkdirSync(path.dirname(configPath), { recursive: true });
 
-    for (const invalid of ['true', 1, 'yes', null]) {
-      fs.writeFileSync(configPath, JSON.stringify({ unifiedDispatchEnabled: invalid }));
+    for (const value of [true, false, 'true', 1, 'yes', null]) {
+      fs.writeFileSync(configPath, JSON.stringify({ unifiedDispatchEnabled: value }));
       const svc = new ConfigService();
-      expect(svc.isUnifiedDispatchEnabled()).toBe(false);
+      expect(svc.isUnifiedDispatchEnabled()).toBe(true);
     }
   });
 
@@ -784,7 +784,7 @@ describe('ConfigService rollout flags', () => {
 
     // Accessors should return safe backward-compatible defaults
     expect(service.getStructuredVerificationMode()).toBe('compat');
-    expect(service.isUnifiedDispatchEnabled()).toBe(false);
+    expect(service.isUnifiedDispatchEnabled()).toBe(true);
     expect(service.isStrictTaskTransitionsEnabled()).toBe(false);
   });
 
@@ -843,9 +843,9 @@ describe('ConfigService.getWorkflowGatesMode', () => {
 });
 
 describe('ConfigService.isUnifiedDispatchEnabled', () => {
-  it('defaults to false when config is missing', () => {
+  it('always returns true when config is missing', () => {
     const service = new ConfigService();
-    expect(service.isUnifiedDispatchEnabled()).toBe(false);
+    expect(service.isUnifiedDispatchEnabled()).toBe(true);
   });
 
   it('returns true when explicitly set in config', () => {
@@ -857,21 +857,15 @@ describe('ConfigService.isUnifiedDispatchEnabled', () => {
     expect(svc.isUnifiedDispatchEnabled()).toBe(true);
   });
 
-  it('returns false when explicitly set to false', () => {
+  it('returns true regardless of config value', () => {
     const service = new ConfigService();
     const configPath = service.getPath();
     fs.mkdirSync(path.dirname(configPath), { recursive: true });
-    fs.writeFileSync(configPath, JSON.stringify({ unifiedDispatchEnabled: false }));
-    const svc = new ConfigService();
-    expect(svc.isUnifiedDispatchEnabled()).toBe(false);
-  });
 
-  it('returns false for non-boolean values', () => {
-    const service = new ConfigService();
-    const configPath = service.getPath();
-    fs.mkdirSync(path.dirname(configPath), { recursive: true });
-    fs.writeFileSync(configPath, JSON.stringify({ unifiedDispatchEnabled: 'yes' }));
-    const svc = new ConfigService();
-    expect(svc.isUnifiedDispatchEnabled()).toBe(false);
+    for (const value of [false, 'yes', null]) {
+      fs.writeFileSync(configPath, JSON.stringify({ unifiedDispatchEnabled: value }));
+      const svc = new ConfigService();
+      expect(svc.isUnifiedDispatchEnabled()).toBe(true);
+    }
   });
 });

@@ -1,35 +1,10 @@
-export type BeadArtifactKind =
-  | 'spec'
-  | 'worker_prompt'
-  | 'report'
-  | 'plan_approval'
-  | 'approved_plan'
-  | 'plan_comments'
-  | 'feature_state'
-  | 'task_state';
-
-export interface PlanApprovalPayload {
-  /** SHA-256 hash of the approved plan content */
-  hash: string;
-  /** ISO timestamp when plan was approved */
-  approvedAt: string;
-  /** Optional session ID that performed the approval */
-  approvedBySession?: string;
-}
+export type BeadArtifactKind = 'spec' | 'worker_prompt' | 'report' | 'task_state';
 
 export interface TaskBeadArtifacts {
   spec?: string;
   worker_prompt?: string;
   /** Task completion report content */
   report?: string;
-  /** Plan approval record with hash for integrity checking */
-  plan_approval?: string;
-  /** Full approved plan content snapshot */
-  approved_plan?: string;
-  /** Structured plan comments */
-  plan_comments?: string;
-  /** Feature metadata/state when beadsMode is on */
-  feature_state?: string;
   /** Task metadata/state when beadsMode is on */
   task_state?: string;
 }

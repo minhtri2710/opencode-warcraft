@@ -1,14 +1,12 @@
 import type { BeadsMode, FeatureInfo, FeatureJson, FeatureStatusType, TaskInfo } from '../types.js';
 import { fileExists } from '../utils/fs.js';
 import { getPlanPath, sanitizeName } from '../utils/paths.js';
-import type { PlanService } from './planService.js';
 import type { FeatureStore } from './state/types.js';
 
 export class FeatureService {
   constructor(
     private readonly projectRoot: string,
     private readonly store: FeatureStore,
-    private readonly planService: PlanService,
     private readonly beadsMode: BeadsMode = 'on',
     private readonly taskLister?: { list(featureName: string): TaskInfo[] },
   ) {}
@@ -78,14 +76,12 @@ export class FeatureService {
 
     const tasks = this.taskLister?.list(name) ?? [];
     const hasPlan = fileExists(getPlanPath(this.projectRoot, name, this.beadsMode));
-    const commentCount = this.planService.getComments(name).length;
 
     return {
       name: feature.name,
       status: feature.status,
       tasks,
       hasPlan,
-      commentCount,
     };
   }
 

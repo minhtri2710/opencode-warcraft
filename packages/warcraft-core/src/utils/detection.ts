@@ -1,8 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import type { FeatureJson } from '../types.js';
-import { readJson } from './fs.js';
-import { getFeaturePath, listFeatureDirectories, normalizePath } from './paths.js';
+import { normalizePath } from './paths.js';
 
 export interface DetectionResult {
   projectRoot: string;
@@ -60,17 +58,6 @@ export function detectContext(cwd: string): DetectionResult {
 
   return result;
 }
-
-export function listFeatures(projectRoot: string): string[] {
-  return listFeatureDirectories(projectRoot);
-}
-
-export function getFeatureData(projectRoot: string, featureName: string): FeatureJson | null {
-  const featurePath = getFeaturePath(projectRoot, featureName);
-  const featureJsonPath = path.join(featurePath, 'feature.json');
-  return readJson<FeatureJson>(featureJsonPath);
-}
-
 export function findProjectRoot(startDir: string): string | null {
   let current = startDir;
   const root = path.parse(current).root;

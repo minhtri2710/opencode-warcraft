@@ -1,17 +1,16 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import type { FeatureJson, FeatureStatusType } from '../../types.js';
-import { ensureDir, fileExists, writeJson } from '../../utils/fs.js';
+import type { FeatureJson } from '../../types.js';
+import { ensureDir, fileExists, readJson, writeJson } from '../../utils/fs.js';
 import { acquireLockSync } from '../../utils/json-lock.js';
 import { getContextPath, getFeatureJsonPath, getFeaturePath } from '../../utils/paths.js';
 import { type BeadsRepository, throwIfInitFailure } from '../beads/BeadsRepository.js';
-import { mapBeadStatusToFeatureStatus } from '../beads/beadStatus.js';
 import type { CreateFeatureInput, FeatureStore } from './types.js';
 
 /**
  * FeatureStore implementation for beadsMode='on'.
  *
- * Creates epic beads, dual-writes cache to disk + bead artifacts.
+ * Feature data lives in feature.json on disk; epic beads provide fallback metadata.
  */
 export class BeadsFeatureStore implements FeatureStore {
   constructor(
@@ -52,7 +51,7 @@ export class BeadsFeatureStore implements FeatureStore {
       try {
         ensureDir(featurePath);
         ensureDir(getContextPath(this.projectRoot, input.name, 'on'));
-        this.writeFeatureState(epicBeadId, feature);
+        writeJson(featureJsonPath, feature);
       } catch (error) {
         if (fileExists(featurePath)) {
           fs.rmSync(featurePath, { recursive: true, force: true });
@@ -68,65 +67,29 @@ export class BeadsFeatureStore implements FeatureStore {
   }
 
   get(name: string): FeatureJson | null {
+    const featureJsonPath = getFeatureJsonPath(this.projectRoot, name, 'on');
+    const cached = readJson<FeatureJson>(featureJsonPath);
+    if (cached) {
+      return cached;
+    }
+
     const epicResult = this.repository.getEpicByFeatureName(name, false);
     if (epicResult.success === false) {
       throwIfInitFailure(epicResult.error, `Failed to get epic for feature '${name}'`);
-      console.warn(`Failed to get epic: ${epicResult.error.message}`);
       return null;
     }
     if (!epicResult.value) {
       return null;
     }
-    const epicId = epicResult.value;
-
-    const gateway = this.repository.getGateway();
-
-    let details: Record<string, unknown>;
-    try {
-      details = gateway.show(epicId) as Record<string, unknown>;
-    } catch (error) {
-      throwIfInitFailure(error, `Failed to show epic '${epicId}' for feature '${name}'`);
-      return null;
-    }
-
-    const description = gateway.readDescription(epicId);
-    let ticket: string | undefined;
-
-    if (description) {
-      const ticketMatch = description.match(/Ticket:\s*([^\n]+)/);
-      if (ticketMatch) {
-        ticket = ticketMatch[1].trim();
-      }
-    }
-
-    const featureStateResult = this.repository.getFeatureState(epicId);
-    const featureState = featureStateResult.success !== false ? featureStateResult.value : null;
-
-    const epic = details as {
-      status: string;
-      created_at?: string;
-      approved_at?: string;
-      closed_at?: string;
-      title?: string;
-    };
-    const status: FeatureStatusType = featureState?.status ?? mapBeadStatusToFeatureStatus(epic.status);
 
     const feature: FeatureJson = {
-      name: epic.title || name,
-      epicBeadId: epicId,
-      status,
-      ticket: featureState?.ticket ?? ticket,
-      createdAt: String(epic.created_at || new Date().toISOString()),
-      approvedAt: featureState?.approvedAt ?? (epic.approved_at ? String(epic.approved_at) : undefined),
-      completedAt: featureState?.completedAt ?? (epic.closed_at ? String(epic.closed_at) : undefined),
-      sessionId: featureState?.sessionId,
-      workflowPath: featureState?.workflowPath,
-      reviewChecklistVersion: featureState?.reviewChecklistVersion,
-      reviewChecklistCompletedAt: featureState?.reviewChecklistCompletedAt,
+      name,
+      epicBeadId: epicResult.value,
+      status: 'planning',
+      createdAt: new Date().toISOString(),
     };
 
-    // Write cache to disk
-    writeJson(getFeatureJsonPath(this.projectRoot, feature.name, 'on'), feature);
+    writeJson(featureJsonPath, feature);
     return feature;
   }
 
@@ -140,7 +103,7 @@ export class BeadsFeatureStore implements FeatureStore {
   }
 
   save(feature: FeatureJson): void {
-    this.writeFeatureState(feature.epicBeadId, feature);
+    writeJson(getFeatureJsonPath(this.projectRoot, feature.name, 'on'), feature);
   }
 
   complete(feature: FeatureJson): void {
@@ -165,15 +128,6 @@ export class BeadsFeatureStore implements FeatureStore {
       console.warn(
         `[warcraft] Failed to close epic bead '${feature.epicBeadId}' for feature '${feature.name}': ${reason}`,
       );
-    }
-  }
-
-  private writeFeatureState(epicBeadId: string, feature: FeatureJson): void {
-    writeJson(getFeatureJsonPath(this.projectRoot, feature.name, 'on'), feature);
-    const result = this.repository.setFeatureState(epicBeadId, feature);
-    if (result.success === false) {
-      throwIfInitFailure(result.error, `Failed to write feature state for epic '${epicBeadId}'`);
-      console.warn(`Failed to write feature state: ${result.error.message}`);
     }
   }
 }

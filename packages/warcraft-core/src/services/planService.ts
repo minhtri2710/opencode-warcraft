@@ -1,16 +1,7 @@
-import * as crypto from 'crypto';
-import type { BeadsMode, PlanComment, PlanReadResult } from '../types.js';
+import type { BeadsMode, PlanReadResult } from '../types.js';
 import { fileExists, readText, writeText } from '../utils/fs.js';
 import { getPlanPath } from '../utils/paths.js';
 import type { PlanStore } from './state/types.js';
-
-/**
- * Compute SHA-256 hash of plan content.
- * Returns 64-character hex string.
- */
-function computePlanHash(content: string): string {
-  return crypto.createHash('sha256').update(content, 'utf-8').digest('hex');
-}
 
 export class PlanService {
   constructor(
@@ -27,8 +18,6 @@ export class PlanService {
     const contentChanged = currentContent !== null && currentContent !== content;
 
     writeText(planPath, content);
-
-    this.store.setComments(featureName, []);
 
     // Invalidate approval if plan changed
     if (contentChanged) {
@@ -47,31 +36,34 @@ export class PlanService {
 
     if (content === null) return null;
 
-    const comments = this.store.getComments(featureName);
-    const currentHash = computePlanHash(content);
-    const isApproved = this.store.isApproved(featureName, currentHash);
+    const isApproved = this.store.isApproved(featureName, content);
 
     return {
       content,
       status: isApproved ? 'approved' : 'planning',
-      comments,
     };
   }
 
-  approve(featureName: string, sessionId?: string): void {
-    const planPath = getPlanPath(this.projectRoot, featureName, this.beadsMode);
-    if (!fileExists(planPath)) {
-      throw new Error(`No plan.md found for feature '${featureName}'`);
-    }
+  /**
+   * Approve the current plan.
+   * Optionally accepts already-read plan content to avoid re-reading plan.md.
+   */
+  approve(featureName: string, sessionId?: string, preloadedContent?: string): void {
+    let planContent = preloadedContent ?? null;
 
-    const planContent = readText(planPath);
     if (planContent === null) {
-      throw new Error(`No plan.md found for feature '${featureName}'`);
+      const planPath = getPlanPath(this.projectRoot, featureName, this.beadsMode);
+      if (!fileExists(planPath)) {
+        throw new Error(`No plan.md found for feature '${featureName}'`);
+      }
+      planContent = readText(planPath);
+      if (planContent === null) {
+        throw new Error(`No plan.md found for feature '${featureName}'`);
+      }
     }
-    const planHash = computePlanHash(planContent);
-    const timestamp = new Date().toISOString();
 
-    this.store.approve(featureName, planContent, planHash, timestamp, sessionId);
+    const timestamp = new Date().toISOString();
+    this.store.approve(featureName, planContent, timestamp, sessionId);
   }
 
   isApproved(featureName: string): boolean {
@@ -84,34 +76,10 @@ export class PlanService {
     if (currentPlanContent === null) {
       return false;
     }
-    const currentHash = computePlanHash(currentPlanContent);
-    return this.store.isApproved(featureName, currentHash);
+    return this.store.isApproved(featureName, currentPlanContent);
   }
 
   revokeApproval(featureName: string): void {
     this.store.revokeApproval(featureName);
-  }
-
-  getComments(featureName: string): PlanComment[] {
-    return this.store.getComments(featureName);
-  }
-
-  addComment(featureName: string, comment: Omit<PlanComment, 'id' | 'timestamp'>): PlanComment {
-    const newComment: PlanComment = {
-      ...comment,
-      id: `comment-${crypto.randomUUID()}`,
-      timestamp: new Date().toISOString(),
-    };
-
-    const comments = this.store.getComments(featureName);
-    this.store.setComments(featureName, [...comments, newComment]);
-
-    this.store.syncPlanComment(featureName, newComment);
-
-    return newComment;
-  }
-
-  clearComments(featureName: string): void {
-    this.store.setComments(featureName, []);
   }
 }

@@ -69,22 +69,9 @@ export interface TaskStatus {
   folder?: string;
 }
 
-export interface PlanComment {
-  id: string;
-  line: number;
-  body: string;
-  author: string;
-  timestamp: string;
-}
-
-export interface CommentsJson {
-  threads: PlanComment[];
-}
-
 export interface PlanReadResult {
   content: string;
   status: FeatureStatusType;
-  comments: PlanComment[];
 }
 
 export interface TasksSyncResult {
@@ -111,7 +98,6 @@ export interface FeatureInfo {
   status: FeatureStatusType;
   tasks: TaskInfo[];
   hasPlan: boolean;
-  commentCount: number;
 }
 
 export interface ContextFile {
@@ -212,7 +198,7 @@ export interface WarcraftConfig {
   workflowGatesMode?: 'enforce' | 'warn';
   /** Structured verification mode: 'compat' (default) keeps regex fallback; 'enforce' requires structured payload. */
   structuredVerificationMode?: 'compat' | 'enforce';
-  /** Enable unified dispatch path for single and batch task execution (default: false). */
+  /** @deprecated Unified dispatch is always enabled. This field is ignored. */
   unifiedDispatchEnabled?: boolean;
   /** Enable strict task state transitions (default: false). */
   strictTaskTransitionsEnabled?: boolean;

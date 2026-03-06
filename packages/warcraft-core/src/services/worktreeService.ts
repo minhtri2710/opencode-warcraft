@@ -1,8 +1,9 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import simpleGit from 'simple-git';
+import type { BeadsMode } from '../types.js';
 import { acquireLock } from '../utils/json-lock.js';
-import { getWarcraftPath, sanitizeName } from '../utils/paths.js';
+import { getTaskStatusPath, getWarcraftPath, sanitizeName } from '../utils/paths.js';
 import type { GitClient, GitClientFactory } from './ports/git-client.js';
 import { SimpleGitClient } from './ports/simple-git-client.js';
 export interface WorktreeInfo {
@@ -86,7 +87,7 @@ export class WorktreeService {
   }
 
   private getStepStatusPath(feature: string, step: string): string {
-    return path.join(this.config.warcraftDir, sanitizeName(feature), 'tasks', sanitizeName(step), 'status.json');
+    return getTaskStatusPath(this.config.baseDir, sanitizeName(feature), sanitizeName(step));
   }
 
   private getBranchName(feature: string, step: string): string {
@@ -244,7 +245,7 @@ export class WorktreeService {
       return { success: true, filesAffected: [] };
     }
 
-    const patchPath = path.join(this.config.warcraftDir, '.worktrees', feature, `${step}.patch`);
+    const patchPath = path.join(this.getWorktreesDir(), feature, `${step}.patch`);
 
     try {
       await fs.writeFile(patchPath, diffContent);
@@ -270,7 +271,7 @@ export class WorktreeService {
       return { success: true, filesAffected: [] };
     }
 
-    const patchPath = path.join(this.config.warcraftDir, '.worktrees', feature, `${step}.patch`);
+    const patchPath = path.join(this.getWorktreesDir(), feature, `${step}.patch`);
 
     try {
       await fs.writeFile(patchPath, diffContent);
@@ -511,7 +512,7 @@ export class WorktreeService {
       return [];
     }
 
-    const patchPath = path.join(this.config.warcraftDir, '.worktrees', feature, `${step}-check.patch`);
+    const patchPath = path.join(this.getWorktreesDir(), feature, `${step}-check.patch`);
 
     try {
       await fs.writeFile(patchPath, diffContent);
@@ -713,11 +714,11 @@ export class WorktreeService {
   }
 }
 
-export function createWorktreeService(projectDir: string): WorktreeService {
+export function createWorktreeService(projectDir: string, beadsMode: BeadsMode = 'off'): WorktreeService {
   const gitFactory: GitClientFactory = (cwd?: string) => new SimpleGitClient(simpleGit(cwd ?? projectDir));
   return new WorktreeService({
     baseDir: projectDir,
-    warcraftDir: getWarcraftPath(projectDir),
+    warcraftDir: getWarcraftPath(projectDir, beadsMode),
     gitFactory,
   });
 }

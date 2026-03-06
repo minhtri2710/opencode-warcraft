@@ -14,7 +14,7 @@ import { createNoopLogger } from '../utils/logger.js';
 import { getPlanPath, sanitizeName } from '../utils/paths.js';
 import { deriveTaskFolder, slugifyTaskName } from '../utils/slug.js';
 import type { Diagnostic } from './outcomes.js';
-import { diagnostic, fromError } from './outcomes.js';
+import { fromError } from './outcomes.js';
 import { formatSpecContent } from './specFormatter.js';
 import type { TaskStore } from './state/types.js';
 import { validateTransition } from './task-state-machine.js';
@@ -148,30 +148,33 @@ export class TaskService {
       }
 
       // Apply creations with rollback tracking
+      const createdSet = new Set(delta.created);
       for (const planTask of delta.planTasks) {
-        if (!delta.existingByFolder.has(planTask.folder)) {
-          const dependsOn = this.resolveDependencies(planTask, delta.planTasks);
-
-          const status: TaskStatus = {
-            status: 'pending',
-            origin: 'plan',
-            planTitle: planTask.name,
-            dependsOn,
-          };
-
-          this.store.createTask(featureName, planTask.folder, planTask.name, status, 3);
-          createdFolders.push(planTask.folder);
-
-          const specData = this.buildSpecData({
-            featureName,
-            task: planTask,
-            dependsOn,
-            allTasks: delta.planTasks,
-            planContent: delta.planContent,
-          });
-          const specContent = formatSpecContent(specData);
-          this.store.writeArtifact(featureName, planTask.folder, 'spec', specContent);
+        if (!createdSet.has(planTask.folder)) {
+          continue;
         }
+
+        const dependsOn = this.resolveDependencies(planTask, delta.planTasks);
+
+        const status: TaskStatus = {
+          status: 'pending',
+          origin: 'plan',
+          planTitle: planTask.name,
+          dependsOn,
+        };
+
+        this.store.createTask(featureName, planTask.folder, planTask.name, status, 3);
+        createdFolders.push(planTask.folder);
+
+        const specData = this.buildSpecData({
+          featureName,
+          task: planTask,
+          dependsOn,
+          allTasks: delta.planTasks,
+          planContent: delta.planContent,
+        });
+        const specContent = formatSpecContent(specData);
+        this.store.writeArtifact(featureName, planTask.folder, 'spec', specContent);
       }
 
       this.store.flush();
@@ -278,7 +281,24 @@ export class TaskService {
     }
 
     for (const planTask of planTasks) {
-      if (!existingByFolder.has(planTask.folder)) {
+      if (existingByFolder.has(planTask.folder)) {
+        continue;
+      }
+
+      // Secondary match: when task_state.folder is missing, list() derives folders
+      // from title sort order, which may not match the canonical plan folder.
+      // Look for a removed (pending) existing task with matching planTitle to prevent
+      // duplicate creation.
+      const titleMatchIdx = removed.findIndex((removedFolder) => {
+        const existing = existingByFolder.get(removedFolder);
+        return existing?.planTitle === planTask.name;
+      });
+
+      if (titleMatchIdx !== -1) {
+        // Reconcile: un-remove the existing task and keep it instead of creating a duplicate
+        const reconciledFolder = removed.splice(titleMatchIdx, 1)[0];
+        kept.push(reconciledFolder);
+      } else {
         created.push(planTask.folder);
       }
     }

@@ -5,7 +5,7 @@
  * wrapping BeadGateway and BeadsViewerGateway with:
  * - Consistent error handling and normalization
  * - Sync/flush timing policy
- * - Canonical mapping: description vs comments vs labels
+ * - Canonical mapping: description vs labels
  * - Epic resolution with fallback logic
  * - Artifact encoding/decoding using schema module
  *
@@ -13,22 +13,12 @@
  * to ensure consistency across the codebase.
  */
 
-import type { FeatureJson, PlanComment, TaskStatus } from '../../types.js';
+import type { TaskStatus, TaskStatusType } from '../../types.js';
 import {
-  decodeApprovedPlan,
-  decodeFeatureState,
-  decodePlanApproval,
-  decodePlanComments,
   decodeTaskReport,
   decodeTaskState,
   decodeWorkerPrompt,
-  encodeApprovedPlan,
-  encodeFeatureState,
-  encodePlanApproval,
-  encodePlanComments,
   encodeTaskState,
-  featureStateFromFeatureJson,
-  featureStateToFeatureJson,
   taskStateFromTaskStatus,
   taskStateToTaskStatus,
 } from './artifactSchemas.js';
@@ -141,7 +131,7 @@ const DEFAULT_SYNC_POLICY: SyncPolicy = {
  * Responsibilities:
  * - Epic resolution with fallback logic
  * - Feature/task state CRUD operations
- * - Plan management (description, approval, comments)
+ * - Plan management (description, labels)
  * - Task artifact operations
  * - Robot plan queries (via BeadsViewerGateway)
  * - Sync policy enforcement
@@ -269,6 +259,27 @@ export class BeadsRepository {
     }
   }
 
+  /**
+   * Create a new task bead under an epic.
+   *
+   * @param title - Task title
+   * @param epicBeadId - Parent epic bead ID
+   * @param priority - Task priority (1-5)
+   * @returns Task bead ID
+   */
+  createTask(title: string, epicBeadId: string, priority: number): Result<string> {
+    try {
+      const taskBeadId = this.gateway.createTask(title, epicBeadId, priority);
+      this.afterWrite();
+      return { success: true, value: taskBeadId };
+    } catch (error) {
+      return {
+        success: false,
+        error: this.normalizeError(error),
+      };
+    }
+  }
+
   // ==========================================================================
   // Epic Resolution
   // ==========================================================================
@@ -322,55 +333,43 @@ export class BeadsRepository {
   }
 
   // ==========================================================================
-  // Feature State Operations
+  // Task Lifecycle
   // ==========================================================================
 
   /**
-   * Get feature state from epic bead artifact.
+   * Sync a task bead's status label.
    *
-   * @param epicBeadId - Epic bead ID
-   * @returns Feature state artifact, or null if not found
+   * @param beadId - Task bead ID
+   * @param status - New task status
    */
-  getFeatureState(epicBeadId: string): Result<FeatureJson | null> {
+  syncTaskStatus(beadId: string, status: TaskStatusType): Result<void> {
+    try {
+      this.gateway.syncTaskStatus(beadId, status);
+      this.afterWrite();
+      return { success: true, value: undefined };
+    } catch (error) {
+      return {
+        success: false,
+        error: this.normalizeError(error),
+      };
+    }
+  }
+
+  // ==========================================================================
+  // Dependency Operations
+  // ==========================================================================
+
+  /**
+   * List dependency edges for a task bead.
+   *
+   * @param beadId - Task bead ID
+   * @returns Array of dependency targets
+   */
+  listDependencies(beadId: string): Result<Array<{ id: string; title: string; status: string }>> {
     try {
       this.beforeRead();
-
-      const raw = this.gateway.readArtifact(epicBeadId, 'feature_state');
-      const artifact = decodeFeatureState(raw);
-
-      if (!artifact) {
-        return { success: true, value: null };
-      }
-
-      const partialFeatureJson = featureStateToFeatureJson(artifact);
-      // Convert to full FeatureJson by ensuring required fields
-      if (!partialFeatureJson.name || !partialFeatureJson.status || !partialFeatureJson.createdAt) {
-        return {
-          success: false,
-          error: new RepositoryError(
-            'invalid_artifact',
-            `Invalid feature_state artifact for epic '${epicBeadId}': missing required fields`,
-          ),
-        };
-      }
-
-      const featureJson: FeatureJson = {
-        name: partialFeatureJson.name,
-        epicBeadId: epicBeadId,
-        status: partialFeatureJson.status,
-        createdAt: partialFeatureJson.createdAt,
-        approvedAt: partialFeatureJson.approvedAt,
-        completedAt: partialFeatureJson.completedAt,
-        workflowPath: partialFeatureJson.workflowPath,
-        reviewChecklistVersion: partialFeatureJson.reviewChecklistVersion,
-        reviewChecklistCompletedAt: partialFeatureJson.reviewChecklistCompletedAt,
-        ticket: partialFeatureJson.ticket,
-        sessionId: partialFeatureJson.sessionId,
-      };
-      // Add epicBeadId since it's not stored in the artifact
-      featureJson.epicBeadId = epicBeadId;
-
-      return { success: true, value: featureJson };
+      const deps = this.gateway.listDependencies(beadId);
+      return { success: true, value: deps };
     } catch (error) {
       return {
         success: false,
@@ -380,19 +379,34 @@ export class BeadsRepository {
   }
 
   /**
-   * Set feature state in epic bead artifact.
+   * Add a dependency edge between two task beads.
    *
-   * @param epicBeadId - Epic bead ID
-   * @param featureJson - Feature data to store
+   * @param beadId - Task bead ID
+   * @param dependsOnBeadId - Bead ID of the dependency target
    */
-  setFeatureState(epicBeadId: string, featureJson: FeatureJson): Result<void> {
+  addDependency(beadId: string, dependsOnBeadId: string): Result<void> {
     try {
-      const artifact = featureStateFromFeatureJson(featureJson);
-      const encoded = encodeFeatureState(artifact);
-
-      this.gateway.upsertArtifact(epicBeadId, 'feature_state', encoded);
+      this.gateway.addDependency(beadId, dependsOnBeadId);
       this.afterWrite();
+      return { success: true, value: undefined };
+    } catch (error) {
+      return {
+        success: false,
+        error: this.normalizeError(error),
+      };
+    }
+  }
 
+  /**
+   * Remove a dependency edge between two task beads.
+   *
+   * @param beadId - Task bead ID
+   * @param dependsOnBeadId - Bead ID of the dependency target to remove
+   */
+  removeDependency(beadId: string, dependsOnBeadId: string): Result<void> {
+    try {
+      this.gateway.removeDependency(beadId, dependsOnBeadId);
+      this.afterWrite();
       return { success: true, value: undefined };
     } catch (error) {
       return {
@@ -495,186 +509,6 @@ export class BeadsRepository {
 
       const content = this.gateway.readDescription(epicBeadId);
       return { success: true, value: content };
-    } catch (error) {
-      return {
-        success: false,
-        error: this.normalizeError(error),
-      };
-    }
-  }
-
-  /**
-   * Get plan approval artifact.
-   *
-   * @param epicBeadId - Epic bead ID
-   * @returns Plan approval artifact, or null if not approved
-   */
-  getPlanApproval(epicBeadId: string): Result<{
-    hash: string;
-    approvedAt: string;
-    approvedBySession?: string;
-  } | null> {
-    try {
-      this.beforeRead();
-
-      const raw = this.gateway.readArtifact(epicBeadId, 'plan_approval');
-      const artifact = decodePlanApproval(raw);
-
-      if (!artifact) {
-        return { success: true, value: null };
-      }
-
-      return {
-        success: true,
-        value: {
-          hash: artifact.hash,
-          approvedAt: artifact.approvedAt,
-          approvedBySession: artifact.approvedBySession,
-        },
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: this.normalizeError(error),
-      };
-    }
-  }
-
-  /**
-   * Set plan approval artifact.
-   *
-   * @param epicBeadId - Epic bead ID
-   * @param hash - SHA-256 hash of approved plan content
-   * @param approvedAt - ISO timestamp of approval
-   * @param approvedBySession - Optional session ID that approved
-   */
-  setPlanApproval(epicBeadId: string, hash: string, approvedAt: string, approvedBySession?: string): Result<void> {
-    try {
-      const artifact = { schemaVersion: 1, hash, approvedAt, approvedBySession } as const;
-      const encoded = encodePlanApproval(artifact);
-
-      this.gateway.upsertArtifact(epicBeadId, 'plan_approval', encoded);
-      this.afterWrite();
-
-      return { success: true, value: undefined };
-    } catch (error) {
-      return {
-        success: false,
-        error: this.normalizeError(error),
-      };
-    }
-  }
-
-  /**
-   * Get approved plan snapshot.
-   *
-   * @param epicBeadId - Epic bead ID
-   * @returns Approved plan content, or null if not found
-   */
-  getApprovedPlan(epicBeadId: string): Result<string | null> {
-    try {
-      this.beforeRead();
-
-      const raw = this.gateway.readArtifact(epicBeadId, 'approved_plan');
-      const artifact = decodeApprovedPlan(raw);
-
-      return artifact ? { success: true, value: artifact.content } : { success: true, value: null };
-    } catch (error) {
-      return {
-        success: false,
-        error: this.normalizeError(error),
-      };
-    }
-  }
-
-  /**
-   * Set approved plan snapshot.
-   *
-   * @param epicBeadId - Epic bead ID
-   * @param content - Full plan content to snapshot
-   * @param contentHash - SHA-256 hash of the content
-   */
-  setApprovedPlan(epicBeadId: string, content: string, contentHash: string): Result<void> {
-    try {
-      const artifact = {
-        schemaVersion: 1,
-        content,
-        snapshotAt: new Date().toISOString(),
-        contentHash,
-      } as const;
-      const encoded = encodeApprovedPlan(artifact);
-
-      this.gateway.upsertArtifact(epicBeadId, 'approved_plan', encoded);
-      this.afterWrite();
-
-      return { success: true, value: undefined };
-    } catch (error) {
-      return {
-        success: false,
-        error: this.normalizeError(error),
-      };
-    }
-  }
-
-  /**
-   * Append a comment to the plan (stored as bead comment).
-   *
-   * Comments are append-only timeline events.
-   *
-   * @param epicBeadId - Epic bead ID
-   * @param comment - Comment text to append
-   */
-  appendPlanComment(epicBeadId: string, comment: string): Result<void> {
-    try {
-      this.gateway.addComment(epicBeadId, comment);
-      this.afterWrite();
-
-      return { success: true, value: undefined };
-    } catch (error) {
-      return {
-        success: false,
-        error: this.normalizeError(error),
-      };
-    }
-  }
-
-  /**
-   * Get plan comments artifact (structured comments).
-   *
-   * @param epicBeadId - Epic bead ID
-   * @returns Plan comments array, or null if not found
-   */
-  getPlanComments(epicBeadId: string): Result<PlanComment[] | null> {
-    try {
-      this.beforeRead();
-
-      const raw = this.gateway.readArtifact(epicBeadId, 'plan_comments');
-      const artifact = decodePlanComments(raw);
-
-      return artifact ? { success: true, value: artifact.comments } : { success: true, value: null };
-    } catch (error) {
-      return {
-        success: false,
-        error: this.normalizeError(error),
-      };
-    }
-  }
-
-  /**
-   * Set plan comments artifact.
-   *
-   * @param epicBeadId - Epic bead ID
-   * @param comments - Plan comments array to store
-   */
-  setPlanComments(epicBeadId: string, comments: PlanComment[]): Result<void> {
-    try {
-      const artifact = { schemaVersion: 1, comments };
-      const encoded = encodePlanComments(artifact);
-
-      this.gateway.upsertArtifact(epicBeadId, 'plan_comments', encoded);
-      this.afterWrite();
-
-      return { success: true, value: undefined };
     } catch (error) {
       return {
         success: false,
@@ -923,6 +757,55 @@ export class BeadsRepository {
         success: false,
         error: this.normalizeError(error),
       };
+    }
+  }
+
+  /**
+   * Remove a workflow label from a bead.
+   *
+   * Best-effort: swallows errors if the label doesn't exist.
+   *
+   * @param beadId - Bead ID
+   * @param label - Label to remove
+   */
+  removeWorkflowLabel(beadId: string, label: string): Result<void> {
+    try {
+      this.gateway.removeLabel(beadId, label);
+      this.afterWrite();
+
+      return { success: true, value: undefined };
+    } catch {
+      // Best-effort: swallow errors (label may not exist)
+      return { success: true, value: undefined };
+    }
+  }
+
+  /**
+   * Check if a bead has a specific workflow label.
+   *
+   * @param beadId - Bead ID
+   * @param label - Label to check for
+   * @returns true if the bead has the label, false otherwise
+   */
+  hasWorkflowLabel(beadId: string, label: string): Result<boolean> {
+    try {
+      this.beforeRead();
+
+      const payload = this.gateway.show(beadId);
+      if (
+        payload !== null &&
+        typeof payload === 'object' &&
+        'labels' in payload &&
+        Array.isArray((payload as Record<string, unknown>).labels)
+      ) {
+        const labels = (payload as Record<string, unknown>).labels as string[];
+        return { success: true, value: labels.includes(label) };
+      }
+
+      return { success: true, value: false };
+    } catch {
+      // If show fails, treat as no label
+      return { success: true, value: false };
     }
   }
 

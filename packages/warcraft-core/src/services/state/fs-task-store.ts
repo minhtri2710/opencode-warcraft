@@ -32,7 +32,10 @@ export class FilesystemTaskStore implements TaskStore {
         const epicResult = this.repository.getEpicByFeatureName(featureName, true);
         if (epicResult.success !== false) {
           const epicBeadId = epicResult.value!;
-          beadId = this.repository.getGateway().createTask(title, epicBeadId, priority);
+          const createResult = this.repository.createTask(title, epicBeadId, priority);
+          if (createResult.success !== false) {
+            beadId = createResult.value;
+          }
         }
       } catch {
         // Beads unavailable — fall through to local ID generation

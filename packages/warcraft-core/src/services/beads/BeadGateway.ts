@@ -26,17 +26,8 @@ import { getTaskBeadActions } from './beadMapping.js';
 const ARTIFACTS_BEGIN = '<!-- WARCRAFT:ARTIFACTS:BEGIN -->';
 const ARTIFACTS_END = '<!-- WARCRAFT:ARTIFACTS:END -->';
 const ARTIFACT_COMMENT_PREFIX = 'WARCRAFT_ARTIFACT_V1 ';
-const ARTIFACT_COMMENT_ENCODING = 'base64';
-const BEAD_ARTIFACT_KINDS = new Set<BeadArtifactKind>([
-  'spec',
-  'worker_prompt',
-  'report',
-  'plan_approval',
-  'approved_plan',
-  'plan_comments',
-  'feature_state',
-  'task_state',
-]);
+const ARTIFACT_COMMENT_ENCODING = 'plain';
+const BEAD_ARTIFACT_KINDS = new Set<BeadArtifactKind>(['spec', 'worker_prompt', 'report', 'task_state']);
 
 export class BeadGateway {
   private preflightCompleted: boolean = false;
@@ -271,7 +262,29 @@ export class BeadGateway {
         this.runBr(['update', beadId, '--claim'], `claim bead '${beadId}'`);
       } else if (action.type === 'unclaim') {
         // No --unclaim flag exists in br CLI. Use --assignee '' -s open instead.
-        this.runBr(['update', beadId, '--assignee', '', '-s', 'open'], `unclaim bead '${beadId}'`);
+        // Fallback: if the combined command fails, try separate status then assignee clear.
+        try {
+          this.runBr(['update', beadId, '--assignee', '', '-s', 'open'], `unclaim bead '${beadId}'`);
+        } catch (combinedError) {
+          const reason = combinedError instanceof Error ? combinedError.message : String(combinedError);
+          console.warn(
+            `[warcraft] Combined unclaim failed for '${beadId}', retrying with separate commands: ${reason}`,
+          );
+          try {
+            this.runBr(['update', beadId, '-s', 'open'], `reopen bead '${beadId}'`);
+          } catch (reopenError) {
+            const reopenReason = reopenError instanceof Error ? reopenError.message : String(reopenError);
+            console.warn(`[warcraft] Failed to reopen bead '${beadId}' during unclaim fallback: ${reopenReason}`);
+          }
+          try {
+            this.runBr(['update', beadId, '--assignee', ''], `clear assignee on bead '${beadId}'`);
+          } catch (assigneeError) {
+            const assigneeReason = assigneeError instanceof Error ? assigneeError.message : String(assigneeError);
+            console.warn(
+              `[warcraft] Failed to clear assignee on bead '${beadId}' during unclaim fallback: ${assigneeReason}`,
+            );
+          }
+        }
       } else {
         this.runBr(['update', beadId, '-s', 'deferred'], `mark bead '${beadId}' deferred`);
         this.runBr(['update', beadId, '--add-label', action.label], `add label '${action.label}' to bead '${beadId}'`);
@@ -496,13 +509,30 @@ export class BeadGateway {
   upsertArtifact(beadId: string, kind: BeadArtifactKind, content: string): void {
     this.ensurePreflight();
     if (kind === 'spec') {
+      // Spec is description-only: single canonical write path, no comment duplication
       this.updateDescription(beadId, content);
+      return;
     }
     this.addComment(beadId, this.serializeArtifactComment(kind, content));
   }
 
   readArtifact(beadId: string, kind: BeadArtifactKind): string | null {
     this.ensurePreflight();
+
+    if (kind === 'spec') {
+      // Spec is description-only: read directly, no comment lookup
+      const description = this.readDescription(beadId);
+      if (!description) {
+        return null;
+      }
+      const { prefix, artifacts } = this.parseArtifacts(description);
+      if (!artifacts.spec) {
+        return prefix.length > 0 ? prefix : description;
+      }
+      return artifacts.spec;
+    }
+
+    // Non-spec artifacts: prefer comment snapshot, fallback to description
     const commentArtifact = this.readLatestArtifactComment(beadId, kind);
     if (commentArtifact !== null) {
       return commentArtifact;
@@ -512,10 +542,7 @@ export class BeadGateway {
     if (!description) {
       return null;
     }
-    const { prefix, artifacts } = this.parseArtifacts(description);
-    if (kind === 'spec' && !artifacts.spec) {
-      return prefix.length > 0 ? prefix : description;
-    }
+    const { artifacts } = this.parseArtifacts(description);
     return artifacts[kind] ?? null;
   }
 
@@ -620,49 +647,55 @@ export class BeadGateway {
       encoding: ARTIFACT_COMMENT_ENCODING,
       ts: new Date().toISOString(),
     });
-    const payload = Buffer.from(content, 'utf8').toString('base64');
-    return `${ARTIFACT_COMMENT_PREFIX}${header}\n${payload}`;
+    return `${ARTIFACT_COMMENT_PREFIX}${header}\n${content}`;
   }
 
   private readLatestArtifactComment(beadId: string, kind: BeadArtifactKind): string | null {
     const comments = this.listComments(beadId);
-    const sortedComments = comments
-      .map((comment, index) => ({
-        comment,
-        index,
-        timestamp: this.parseCommentTimestamp(comment.timestamp),
-        numericId: this.parseCommentNumericId(comment.id),
-      }))
-      .sort((a, b) => {
-        if (a.timestamp !== null && b.timestamp !== null && a.timestamp !== b.timestamp) {
-          return b.timestamp - a.timestamp;
-        }
-        if (a.timestamp !== null && b.timestamp === null) {
-          return -1;
-        }
-        if (a.timestamp === null && b.timestamp !== null) {
-          return 1;
-        }
-        if (a.numericId !== null && b.numericId !== null && a.numericId !== b.numericId) {
-          return b.numericId - a.numericId;
-        }
-        if (a.numericId !== null && b.numericId === null) {
-          return -1;
-        }
-        if (a.numericId === null && b.numericId !== null) {
-          return 1;
-        }
-        return b.index - a.index;
-      });
+    let bestContent: string | null = null;
+    let bestTs: number | null = null;
+    let bestNid: number | null = null;
+    let bestIdx = -1;
 
-    for (const entry of sortedComments) {
-      const artifact = this.parseArtifactComment(entry.comment.body);
-      if (artifact?.kind === kind) {
-        return artifact.content;
+    for (let i = 0; i < comments.length; i++) {
+      const artifact = this.parseArtifactComment(comments[i].body);
+      if (artifact?.kind !== kind) continue;
+
+      const ts = this.parseCommentTimestamp(comments[i].timestamp);
+      const nid = this.parseCommentNumericId(comments[i].id);
+
+      if (this.isNewerCandidate(ts, nid, i, bestTs, bestNid, bestIdx)) {
+        bestContent = artifact.content;
+        bestTs = ts;
+        bestNid = nid;
+        bestIdx = i;
       }
     }
 
-    return null;
+    return bestContent;
+  }
+
+  /**
+   * Returns true when candidate (ts, nid, idx) should replace the current best.
+   * Tie-breaking order: higher timestamp > higher numericId > higher array index.
+   * Presence beats absence for timestamp and numericId.
+   */
+  private isNewerCandidate(
+    ts: number | null,
+    nid: number | null,
+    idx: number,
+    bestTs: number | null,
+    bestNid: number | null,
+    bestIdx: number,
+  ): boolean {
+    if (bestIdx === -1) return true;
+    if (ts !== null && bestTs !== null && ts !== bestTs) return ts > bestTs;
+    if (ts !== null && bestTs === null) return true;
+    if (ts === null && bestTs !== null) return false;
+    if (nid !== null && bestNid !== null && nid !== bestNid) return nid > bestNid;
+    if (nid !== null && bestNid === null) return true;
+    if (nid === null && bestNid !== null) return false;
+    return idx > bestIdx;
   }
 
   private parseCommentNumericId(value: string): number | null {
@@ -682,31 +715,20 @@ export class BeadGateway {
   }
 
   private parseArtifactComment(body: string): { kind: BeadArtifactKind; content: string } | null {
-    if (!body.startsWith(ARTIFACT_COMMENT_PREFIX)) {
-      return null;
-    }
-
+    if (!body.startsWith(ARTIFACT_COMMENT_PREFIX)) return null;
     const headerEndIndex = body.indexOf('\n');
-    if (headerEndIndex === -1) {
-      return null;
-    }
-
+    if (headerEndIndex === -1) return null;
     const headerJson = body.slice(ARTIFACT_COMMENT_PREFIX.length, headerEndIndex).trim();
-    const payload = body.slice(headerEndIndex + 1).trim();
-    if (!headerJson || !payload) {
-      return null;
-    }
-
+    const payload = body.slice(headerEndIndex + 1);
+    if (!headerJson) return null;
     try {
       const parsed = JSON.parse(headerJson) as { kind?: string; encoding?: string };
-      if (!parsed.kind || !this.isBeadArtifactKind(parsed.kind) || parsed.encoding !== ARTIFACT_COMMENT_ENCODING) {
-        return null;
+      if (!parsed.kind || !this.isBeadArtifactKind(parsed.kind)) return null;
+      // Support both 'plain' (new) and 'base64' (legacy reads)
+      if (parsed.encoding === 'base64') {
+        return { kind: parsed.kind, content: Buffer.from(payload.trim(), 'base64').toString('utf8') };
       }
-
-      return {
-        kind: parsed.kind,
-        content: Buffer.from(payload, 'base64').toString('utf8'),
-      };
+      return { kind: parsed.kind, content: payload };
     } catch {
       return null;
     }
