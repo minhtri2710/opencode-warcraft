@@ -79,7 +79,7 @@ jobs:
 
       - name: Publish to npm
         working-directory: packages/opencode-warcraft
-        run: npm publish --access public --provenance
+        run: npm publish --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 

@@ -1,6 +1,5 @@
 # opencode-warcraft
 
-[![npm version](https://img.shields.io/npm/v/opencode-warcraft)](https://www.npmjs.com/package/opencode-warcraft)
 [![License: MIT with Commons Clause](https://img.shields.io/badge/License-MIT%20with%20Commons%20Clause-blue.svg)](../../LICENSE)
 
 An OpenCode plugin for structured, plan-first AI-assisted development.
@@ -11,15 +10,27 @@ Warcraft enforces a plan-first workflow for AI coding assistants: write a plan, 
 
 ## Installation
 
+This plugin is **not published to npm**. Install from git:
+
 ```bash
-npm install opencode-warcraft
+cd ~/.config/opencode/plugins/
+git clone https://github.com/YOUR_USERNAME/opencode-warcraft.git
+cd opencode-warcraft
+bun install
+```
+
+Add to `opencode.json`:
+
+```json
+{
+  "plugins": ["opencode-warcraft"]
+}
 ```
 
 ## Optional: Enable MCP Research Tools
 
-1. Create `.opencode/mcp-servers.json` using the template:
-   - From this repo: `packages/opencode-warcraft/templates/mcp-servers.json`
-   - Or from npm: `node_modules/opencode-warcraft/templates/mcp-servers.json`
+1. Create `.opencode/mcp-servers.json` using the template from this repo:
+   `packages/opencode-warcraft/templates/mcp-servers.json`
 2. Set `EXA_API_KEY` to enable `websearch_exa` (optional).
 3. Restart OpenCode.
 

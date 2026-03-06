@@ -4,13 +4,20 @@ Shared domain services, types, and utilities for [Project Warcraft](https://gith
 
 ## Installation
 
+This package is part of the [opencode-warcraft](https://github.com/minhtri2710/opencode-warcraft) monorepo and is bundled with the OpenCode plugin. It is **not published independently to npm**.
+
+To use, install the plugin:
+
 ```bash
-npm install warcraft-core
+cd ~/.config/opencode/plugins/
+git clone https://github.com/YOUR_USERNAME/opencode-warcraft.git
+cd opencode-warcraft
+bun install
 ```
 
 ## Overview
 
-`warcraft-core` provides the foundational services used by `opencode-warcraft` and related tooling. It has **no dependency on OpenCode** and can be consumed independently.
+`warcraft-core` provides the foundational services used by `opencode-warcraft` and related tooling. It has **no dependency on OpenCode** and can be consumed independently by other tools.
 
 ### Services
 
