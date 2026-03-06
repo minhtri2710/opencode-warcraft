@@ -82,7 +82,9 @@ export function createWarcraftContainer(directory: string, configService: Config
   const logger = createConsoleLogger({ minLevel: 'info' });
   const eventLogger = createEventLogger(directory);
   const planService = new PlanService(directory, stores.planStore, beadsMode);
-  const taskService = new TaskService(directory, stores.taskStore, beadsMode, logger);
+  const taskService = new TaskService(directory, stores.taskStore, beadsMode, logger, {
+    strictTaskTransitions: configService.isStrictTaskTransitionsEnabled(),
+  });
   const featureService = new FeatureService(directory, stores.featureStore, planService, beadsMode, taskService);
   const contextService = new ContextService(directory, configService);
   const agentsMdService = new AgentsMdService(directory, contextService);

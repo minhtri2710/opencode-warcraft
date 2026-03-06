@@ -302,6 +302,13 @@ export class ConfigService {
   }
 
   /**
+   * Backward-compatible alias for strict task transitions mode.
+   */
+  getStrictTaskTransitions(): boolean {
+    return this.isStrictTaskTransitionsEnabled();
+  }
+
+  /**
    * Get beads rollout mode.
    * Normalizes boolean values to strings and validates against valid modes.
    * Rejects legacy strings (dual-write, beads-primary) with validation error.

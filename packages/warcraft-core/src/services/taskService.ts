@@ -17,6 +17,7 @@ import type { Diagnostic } from './outcomes.js';
 import { diagnostic, fromError } from './outcomes.js';
 import { formatSpecContent } from './specFormatter.js';
 import type { TaskStore } from './state/types.js';
+import { validateTransition } from './task-state-machine.js';
 import type { RunnableBlockedResult, TaskWithDeps } from './taskDependencyGraph.js';
 import { buildEffectiveDependencies, computeRunnableAndBlocked } from './taskDependencyGraph.js';
 
@@ -77,16 +78,41 @@ interface SyncDelta {
   manual: string[];
 }
 
+/** Options for TaskService behavior. */
+export interface TaskServiceOptions {
+  /** When true, enforce the state machine - reject invalid transitions. Default: false (compat mode). */
+  strictTaskTransitions?: boolean;
+}
+
+function isLogger(value: unknown): value is Logger {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.debug === 'function' &&
+    typeof candidate.info === 'function' &&
+    typeof candidate.warn === 'function' &&
+    typeof candidate.error === 'function'
+  );
+}
+
 export class TaskService {
   private readonly logger: Logger;
+  private readonly options: Required<TaskServiceOptions>;
 
   constructor(
     private projectRoot: string,
     private readonly store: TaskStore,
     private readonly beadsMode: BeadsMode = 'on',
-    logger?: Logger,
+    loggerOrOptions?: Logger | TaskServiceOptions,
+    maybeOptions?: TaskServiceOptions,
   ) {
+    const logger = isLogger(loggerOrOptions) ? loggerOrOptions : undefined;
+    const options = isLogger(loggerOrOptions) ? maybeOptions : loggerOrOptions;
+
     this.logger = logger ?? createNoopLogger();
+    this.options = {
+      strictTaskTransitions: options?.strictTaskTransitions ?? false,
+    };
   }
 
   /**
@@ -355,6 +381,42 @@ export class TaskService {
     this.store.save(featureName, taskFolder, updated, { syncBeadStatus: updates.status !== undefined });
 
     return updated;
+  }
+
+  /**
+   * Transition task status with state machine enforcement.
+   * Validates the transition against the allowed-transition map when strict mode is enabled.
+   * Stamps timestamps consistently (startedAt on in_progress, completedAt on done).
+   *
+   * @param featureName - Feature name
+   * @param taskFolder - Task folder name
+   * @param toStatus - Target status to transition to
+   * @param extras - Optional additional fields (summary, blocker, baseCommit)
+   * @returns Updated TaskStatus
+   * @throws InvalidTransitionError when strict mode is enabled and transition is not allowed
+   */
+  transition(
+    featureName: string,
+    taskFolder: string,
+    toStatus: TaskStatusType,
+    extras?: Partial<Pick<TaskStatus, 'summary' | 'blocker' | 'baseCommit'>>,
+  ): TaskStatus {
+    const current = this.store.getRawStatus(featureName, taskFolder);
+
+    if (!current) {
+      throw new Error(`Task '${taskFolder}' not found`);
+    }
+
+    // Validate transition when strict mode is enabled
+    if (this.options.strictTaskTransitions) {
+      validateTransition(current.status, toStatus);
+    }
+
+    // Delegate to update() for the actual state change + timestamp stamping
+    return this.update(featureName, taskFolder, {
+      status: toStatus,
+      ...extras,
+    });
   }
 
   /**

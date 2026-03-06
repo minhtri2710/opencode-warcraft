@@ -8,6 +8,7 @@ import { createNoopLogger } from '../utils/logger';
 import { BeadsRepository } from './beads/BeadsRepository';
 import { formatSpecContent } from './specFormatter';
 import { createStores } from './state/index.js';
+import { InvalidTransitionError } from './task-state-machine.js';
 import { TASK_STATUS_SCHEMA_VERSION, TaskService } from './taskService';
 
 const TEST_DIR = `/tmp/warcraft-core-taskservice-test-${process.pid}`;
@@ -2550,6 +2551,208 @@ Second task description.
 
       listSpy.mockRestore();
       listSpy2.mockRestore();
+    });
+  });
+
+  describe('transition() - state machine enforcement', () => {
+    it('allows valid transition: pending -> in_progress', () => {
+      const featureName = 'test-feature';
+      setupFeature(featureName);
+      setupTask(featureName, '01-test-task', { status: 'pending', beadId: 'bd-task-1' });
+
+      const result = service.transition(featureName, '01-test-task', 'in_progress');
+
+      expect(result.status).toBe('in_progress');
+      expect(result.startedAt).toBeDefined();
+    });
+
+    it('allows valid transition: in_progress -> done', () => {
+      const featureName = 'test-feature';
+      setupFeature(featureName);
+      setupTask(featureName, '01-test-task', {
+        status: 'in_progress',
+        beadId: 'bd-task-1',
+        startedAt: new Date().toISOString(),
+      });
+
+      const result = service.transition(featureName, '01-test-task', 'done', {
+        summary: 'All done',
+      });
+
+      expect(result.status).toBe('done');
+      expect(result.completedAt).toBeDefined();
+      expect(result.summary).toBe('All done');
+    });
+
+    it('allows valid transition: in_progress -> blocked', () => {
+      const featureName = 'test-feature';
+      setupFeature(featureName);
+      setupTask(featureName, '01-test-task', {
+        status: 'in_progress',
+        beadId: 'bd-task-1',
+        startedAt: new Date().toISOString(),
+      });
+
+      const result = service.transition(featureName, '01-test-task', 'blocked', {
+        summary: 'Waiting for input',
+        blocker: { reason: 'Need decision' },
+      });
+
+      expect(result.status).toBe('blocked');
+      expect(result.summary).toBe('Waiting for input');
+      expect(result.blocker?.reason).toBe('Need decision');
+    });
+
+    it('allows valid transition: blocked -> in_progress (resume)', () => {
+      const featureName = 'test-feature';
+      setupFeature(featureName);
+      setupTask(featureName, '01-test-task', {
+        status: 'blocked',
+        beadId: 'bd-task-1',
+        startedAt: new Date().toISOString(),
+      });
+
+      const result = service.transition(featureName, '01-test-task', 'in_progress');
+
+      expect(result.status).toBe('in_progress');
+    });
+
+    it('rejects done -> in_progress in strict mode', () => {
+      const featureName = 'test-feature';
+      setupFeature(featureName);
+      setupTask(featureName, '01-test-task', {
+        status: 'done',
+        beadId: 'bd-task-1',
+        completedAt: new Date().toISOString(),
+      });
+
+      // Default mode (strict=true) should throw
+      const strictStores = createStores(PROJECT_ROOT, 'on', createRepository());
+      const strictService = new TaskService(PROJECT_ROOT, strictStores.taskStore, 'on', {
+        strictTaskTransitions: true,
+      });
+
+      expect(() => strictService.transition(featureName, '01-test-task', 'in_progress')).toThrow(
+        InvalidTransitionError,
+      );
+    });
+
+    it('allows done -> in_progress in non-strict mode (compat)', () => {
+      const featureName = 'test-feature';
+      setupFeature(featureName);
+      setupTask(featureName, '01-test-task', {
+        status: 'done',
+        beadId: 'bd-task-1',
+        completedAt: new Date().toISOString(),
+      });
+
+      const compatStores = createStores(PROJECT_ROOT, 'on', createRepository());
+      const compatService = new TaskService(PROJECT_ROOT, compatStores.taskStore, 'on', {
+        strictTaskTransitions: false,
+      });
+
+      // Should NOT throw in compat mode - falls through to update()
+      const result = compatService.transition(featureName, '01-test-task', 'in_progress');
+      expect(result.status).toBe('in_progress');
+    });
+
+    it('stamps startedAt on transition to in_progress', () => {
+      const featureName = 'test-feature';
+      setupFeature(featureName);
+      setupTask(featureName, '01-test-task', { status: 'pending', beadId: 'bd-task-1' });
+
+      const before = new Date().toISOString();
+      const result = service.transition(featureName, '01-test-task', 'in_progress');
+      const after = new Date().toISOString();
+
+      expect(result.startedAt).toBeDefined();
+      expect(result.startedAt! >= before).toBe(true);
+      expect(result.startedAt! <= after).toBe(true);
+    });
+
+    it('stamps completedAt on transition to done', () => {
+      const featureName = 'test-feature';
+      setupFeature(featureName);
+      setupTask(featureName, '01-test-task', {
+        status: 'in_progress',
+        beadId: 'bd-task-1',
+        startedAt: new Date().toISOString(),
+      });
+
+      const before = new Date().toISOString();
+      const result = service.transition(featureName, '01-test-task', 'done', {
+        summary: 'Complete',
+      });
+      const after = new Date().toISOString();
+
+      expect(result.completedAt).toBeDefined();
+      expect(result.completedAt! >= before).toBe(true);
+      expect(result.completedAt! <= after).toBe(true);
+    });
+
+    it('throws for non-existent task', () => {
+      const featureName = 'test-feature';
+      setupFeature(featureName);
+
+      expect(() => service.transition(featureName, 'nonexistent-task', 'in_progress')).toThrow(/not found/);
+    });
+
+    it('preserves existing fields through transition', () => {
+      const featureName = 'test-feature';
+      setupFeature(featureName);
+      setupTask(featureName, '01-test-task', {
+        status: 'pending',
+        beadId: 'bd-task-1',
+        planTitle: 'My Task',
+        dependsOn: ['00-setup'],
+      });
+
+      const result = service.transition(featureName, '01-test-task', 'in_progress');
+
+      expect(result.planTitle).toBe('My Task');
+      expect(result.dependsOn).toEqual(['00-setup']);
+    });
+
+    it('allows same-status transition as no-op', () => {
+      const featureName = 'test-feature';
+      setupFeature(featureName);
+      setupTask(featureName, '01-test-task', {
+        status: 'in_progress',
+        beadId: 'bd-task-1',
+        startedAt: '2026-01-01T00:00:00Z',
+      });
+
+      const result = service.transition(featureName, '01-test-task', 'in_progress');
+
+      // Should succeed and not re-stamp timestamps
+      expect(result.status).toBe('in_progress');
+      expect(result.startedAt).toBe('2026-01-01T00:00:00Z');
+    });
+
+    it('rejects pending -> done (skip states) in strict mode', () => {
+      const featureName = 'test-feature';
+      setupFeature(featureName);
+      setupTask(featureName, '01-test-task', { status: 'pending', beadId: 'bd-task-1' });
+
+      const strictStores = createStores(PROJECT_ROOT, 'on', createRepository());
+      const strictService = new TaskService(PROJECT_ROOT, strictStores.taskStore, 'on', {
+        strictTaskTransitions: true,
+      });
+
+      expect(() => strictService.transition(featureName, '01-test-task', 'done')).toThrow(InvalidTransitionError);
+    });
+
+    it('rejects pending -> blocked in strict mode', () => {
+      const featureName = 'test-feature';
+      setupFeature(featureName);
+      setupTask(featureName, '01-test-task', { status: 'pending', beadId: 'bd-task-1' });
+
+      const strictStores = createStores(PROJECT_ROOT, 'on', createRepository());
+      const strictService = new TaskService(PROJECT_ROOT, strictStores.taskStore, 'on', {
+        strictTaskTransitions: true,
+      });
+
+      expect(() => strictService.transition(featureName, '01-test-task', 'blocked')).toThrow(InvalidTransitionError);
     });
   });
 });
