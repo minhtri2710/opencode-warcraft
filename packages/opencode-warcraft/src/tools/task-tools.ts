@@ -138,10 +138,16 @@ export class TaskTools {
         if (!resolution.ok) return toolError(resolution.error);
         const feature = resolution.feature;
         validateTaskInput(task);
-        const updated = taskService.update(feature, task, {
-          status: status ? validateTaskStatus(status) : undefined,
-          summary,
-        });
+        let updated: ReturnType<typeof taskService.update>;
+        if (status) {
+          // Use transition API for status changes (enforces state machine when strict mode enabled)
+          updated = taskService.transition(feature, task, validateTaskStatus(status), {
+            summary,
+          });
+        } else {
+          // No status change — just update summary
+          updated = taskService.update(feature, task, { summary });
+        }
         return toolSuccess({ message: `Task "${task}" updated: status=${updated.status}` });
       },
     });

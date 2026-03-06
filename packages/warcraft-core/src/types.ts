@@ -208,4 +208,6 @@ export interface WarcraftConfig {
   verificationModel?: 'tdd' | 'best-effort';
   /** Workflow gates mode: 'enforce' blocks commit without gate evidence; 'warn' (default) proceeds with a note. */
   workflowGatesMode?: 'enforce' | 'warn';
+  /** Strict task transitions: when true, rejects invalid state transitions (e.g., done -> in_progress). Default: false (compat mode). */
+  strictTaskTransitionsEnabled?: boolean;
 }

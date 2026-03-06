@@ -10,6 +10,7 @@ function createMockDeps(overrides: Partial<MockDeps> = {}): MockDeps {
     taskService: {
       get: (_f: string, _t: string) => ({ status: 'in_progress', folder: '01-test', name: '01-test' }),
       update: () => {},
+      transition: () => {},
       writeReport: () => {},
       getRawStatus: () => null,
       patchBackgroundFields: () => {},

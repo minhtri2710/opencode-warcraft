@@ -98,11 +98,11 @@ export class WorktreeTools {
           worktree = await worktreeService.create(feature, task);
         }
 
-        const updatePayload: Record<string, unknown> = { status: 'in_progress' };
+        const updateExtras: { baseCommit?: string } = {};
         if (continueFrom !== 'blocked') {
-          updatePayload.baseCommit = worktree.commit;
+          updateExtras.baseCommit = worktree.commit;
         }
-        taskService.update(feature, task, updatePayload);
+        taskService.transition(feature, task, 'in_progress', updateExtras);
 
         // Generate spec.md with context for task
         const prep = prepareTaskDispatch(
@@ -318,8 +318,7 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
         }
 
         if (status === 'blocked') {
-          taskService.update(feature, task, {
-            status: 'blocked',
+          taskService.transition(feature, task, 'blocked', {
             summary,
             blocker,
           });
@@ -398,8 +397,7 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
         }
 
         const finalStatus = status === 'completed' ? 'done' : status;
-        taskService.update(feature, task, {
-          status: validateTaskStatus(finalStatus),
+        taskService.transition(feature, task, validateTaskStatus(finalStatus), {
           summary,
         });
 

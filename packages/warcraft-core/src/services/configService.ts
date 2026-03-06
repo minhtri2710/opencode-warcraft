@@ -270,6 +270,16 @@ export class ConfigService {
   }
 
   /**
+   * Get strict task transitions mode.
+   * When true, invalid task state transitions (e.g., done -> in_progress) are rejected.
+   * Defaults to false (compat mode) for backward compatibility.
+   */
+  getStrictTaskTransitions(): boolean {
+    const config = this.get();
+    return config.strictTaskTransitionsEnabled === true;
+  }
+
+  /**
    * Get beads rollout mode.
    * Normalizes boolean values to strings and validates against valid modes.
    * Rejects legacy strings (dual-write, beads-primary) with validation error.
