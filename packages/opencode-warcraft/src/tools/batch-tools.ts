@@ -2,6 +2,7 @@ import { type ToolDefinition, tool } from '@opencode-ai/plugin';
 import type { FeatureService, PlanService, TaskService, WorktreeService } from 'warcraft-core';
 import type { BlockedResult } from '../types.js';
 import { toolError, toolSuccess } from '../types.js';
+import { type DispatchOneTaskServices, dispatchOneTask } from './dispatch-task.js';
 import { fetchSharedDispatchData, prepareTaskDispatch } from './task-dispatch.js';
 import { resolveFeatureInput, validateTaskInput } from './tool-input.js';
 
@@ -22,6 +23,8 @@ export interface BatchToolsDependencies {
   verificationModel: 'tdd' | 'best-effort';
   /** Enable unified dispatch path for single and batch task execution. */
   unifiedDispatchEnabled: boolean;
+  /** Directory for per-task dispatch locks (required when unifiedDispatchEnabled is true). */
+  lockDir?: string;
 }
 
 export interface EffectiveParallelPolicy {
@@ -104,6 +107,8 @@ export class BatchTools {
       checkBlocked,
       checkDependencies,
       verificationModel,
+      unifiedDispatchEnabled,
+      lockDir,
     } = this.deps;
     const parallelPolicy = resolveParallelPolicy(this.deps.parallelExecution);
     return tool({
@@ -221,6 +226,22 @@ export class BatchTools {
         });
 
         const dispatchTask = async (task: string): Promise<TaskDispatchResult> => {
+          // --- Unified dispatch path (gated by flag) ---
+          if (unifiedDispatchEnabled) {
+            const unifiedServices: DispatchOneTaskServices = {
+              taskService,
+              planService,
+              contextService,
+              worktreeService,
+              checkBlocked,
+              checkDependencies,
+              verificationModel,
+              lockDir,
+            };
+            return dispatchOneTask({ feature, task }, unifiedServices, shared);
+          }
+
+          // --- Legacy dispatch path ---
           const taskInfo = taskService.get(feature, task);
           if (!taskInfo) {
             return { task, success: false, agent: 'mekkatorque', error: 'Task not found' };

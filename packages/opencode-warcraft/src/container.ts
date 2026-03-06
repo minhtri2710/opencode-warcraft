@@ -243,6 +243,10 @@ To unblock: Remove ${blockedPath}`;
     return { allowed: true };
   };
 
+  // --- Unified dispatch config ---
+  const unifiedDispatchEnabled = configService.isUnifiedDispatchEnabled();
+  const lockDir = path.join(directory, '.beads', 'artifacts', '.locks');
+
   // --- Tool modules ---
 
   const featureTools = new FeatureTools({ featureService });
@@ -275,6 +279,8 @@ To unblock: Remove ${blockedPath}`;
     verificationModel: configService.getVerificationModel(),
     structuredVerificationMode: configService.getStructuredVerificationMode(),
     eventLogger,
+    unifiedDispatchEnabled,
+    lockDir,
   });
   const batchTools = new BatchTools({
     featureService,
@@ -286,7 +292,8 @@ To unblock: Remove ${blockedPath}`;
     checkDependencies,
     parallelExecution,
     verificationModel: configService.getVerificationModel(),
-    unifiedDispatchEnabled: configService.isUnifiedDispatchEnabled(),
+    unifiedDispatchEnabled,
+    lockDir,
   });
   const contextTools = new ContextTools({
     featureService,
