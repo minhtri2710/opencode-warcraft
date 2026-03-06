@@ -16,7 +16,12 @@ import { getVerificationCommandsForCwd } from '../utils/runtime-commands.js';
 import { DEFAULT_BUDGET, prepareTaskDispatch } from './task-dispatch.js';
 import { resolveFeatureInput, validateTaskInput } from './tool-input.js';
 
-const execAsync = promisify(execCb);
+type ExecAsyncFn = (
+  command: string,
+  options: { cwd: string; timeout: number },
+) => Promise<{ stdout: string; stderr: string }>;
+
+const defaultExecAsync = promisify(execCb) as ExecAsyncFn;
 
 type CompletionGate = 'build' | 'test' | 'lint';
 
@@ -35,6 +40,10 @@ export interface WorktreeToolsDependencies {
   completionGates: readonly CompletionGate[];
   verificationModel: 'tdd' | 'best-effort';
   workflowGatesMode: 'enforce' | 'warn';
+  structuredVerificationMode?: 'compat' | 'enforce';
+  unifiedDispatchEnabled?: boolean;
+  lockDir?: string;
+  execAsync?: ExecAsyncFn;
   eventLogger: EventLogger;
 }
 
@@ -489,11 +498,53 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
   }
 
   /**
+   * Prune stale worktrees with dry-run safety by default.
+   */
+  pruneWorktreeTool(resolveFeature: (name?: string) => string | null): ToolDefinition {
+    const { worktreeService } = this.deps;
+    return tool({
+      description: 'Prune stale worktrees (safe by default via dryRun=true)',
+      args: {
+        feature: tool.schema.string().optional().describe('Feature name (defaults to active if available)'),
+        dryRun: tool.schema.boolean().optional().default(true).describe('Preview removals without deleting'),
+        confirm: tool.schema
+          .boolean()
+          .optional()
+          .default(false)
+          .describe('Required for destructive prune when dryRun=false'),
+      },
+      async execute({ feature: explicitFeature, dryRun = true, confirm = false }) {
+        const featureResolution = explicitFeature ? resolveFeatureInput(resolveFeature, explicitFeature) : null;
+        if (featureResolution && !featureResolution.ok) return toolError(featureResolution.error);
+
+        const feature = featureResolution?.feature;
+        const worktreeServiceWithPrune = worktreeService as WorktreeService & {
+          prune: (opts: { dryRun: boolean; confirm?: boolean; feature?: string }) => Promise<{
+            wouldRemove: Array<{ feature: string; step: string; path: string; branch: string }>;
+            removed: string[];
+            requiresConfirm?: boolean;
+          }>;
+        };
+
+        const result = await worktreeServiceWithPrune.prune({ dryRun, confirm, feature });
+
+        return toolSuccess({
+          dryRun,
+          requiresConfirm: result.requiresConfirm ?? false,
+          staleWorktrees: result.wouldRemove,
+          removed: result.removed,
+        });
+      },
+    });
+  }
+
+  /**
    * Merge completed task branch into current branch (explicit integration)
    */
   mergeTaskTool(resolveFeature: (name?: string) => string | null): ToolDefinition {
     // Capture deps in closure to avoid 'this' binding issues
-    const { taskService, worktreeService } = this.deps;
+    const { taskService, worktreeService, verificationModel, execAsync: injectedExecAsync } = this.deps;
+    const execAsync = injectedExecAsync ?? defaultExecAsync;
     return tool({
       description: 'Merge completed task branch into current branch (explicit integration)',
       args: {
@@ -509,7 +560,7 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
           .default(false)
           .describe('Run build+test after merge to verify integration'),
       },
-      async execute({ task, strategy = 'merge', feature: explicitFeature, verify = false }) {
+      async execute({ task, strategy = 'merge', feature: explicitFeature, verify }) {
         validateTaskInput(task);
         const resolution = resolveFeatureInput(resolveFeature, explicitFeature);
         if (!resolution.ok) return toolError(resolution.error);
@@ -535,15 +586,23 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
           message: `Task "${task}" merged successfully using ${strategy} strategy.\nCommit: ${result.sha}\nFiles changed: ${result.filesChanged?.length || 0}`,
         };
 
-        if (verify) {
+        const effectiveVerify = verify ?? verificationModel === 'tdd';
+        if (effectiveVerify) {
           const execOpts = { cwd: process.cwd(), timeout: 300_000 };
           const cmds = getVerificationCommandsForCwd(execOpts.cwd);
           try {
-            await execAsync(cmds.build, execOpts);
-            await execAsync(cmds.test, execOpts);
+            const buildResult = await execAsync(cmds.build, execOpts);
+            const testResult = await execAsync(cmds.test, execOpts);
+            const output = [buildResult.stdout, buildResult.stderr, testResult.stdout, testResult.stderr]
+              .filter(Boolean)
+              .join('\n');
             return toolSuccess({
               ...mergeResult,
-              verification: { passed: true },
+              verification: {
+                passed: true,
+                commands: { build: cmds.build, test: cmds.test },
+                output,
+              },
             });
           } catch (err: unknown) {
             const execErr = err as { stdout?: string; stderr?: string; message?: string };
