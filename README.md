@@ -23,6 +23,9 @@ This repository is a Bun workspace monorepo containing shared core services and 
 | `.beads/artifacts/` | Beads artifact cache and task execution records |
 
 See also:
+- [Quickstart](docs/quickstart.md) -- End-to-end workflow guide
+- [Plan Authoring](docs/plan-authoring.md) -- How to write effective plans
+- [Troubleshooting](docs/troubleshooting.md) -- Common issues and recovery patterns
 - [packages/README.md](packages/README.md)
 - [AGENTS.md](AGENTS.md)
 - [packages/opencode-warcraft/README.md](packages/opencode-warcraft/README.md)
@@ -168,14 +171,22 @@ bun run test
 bun run test --filter warcraft-core
 ```
 
+## Documentation
+
+| Guide | Description |
+| --- | --- |
+| [Quickstart](docs/quickstart.md) | End-to-end workflow from feature creation to merge |
+| [Plan Authoring](docs/plan-authoring.md) | How to write plans that produce reliable task specs |
+| [Troubleshooting](docs/troubleshooting.md) | Common issues, recovery patterns, and operational playbooks |
+| [WARCRAFT-TOOLS.md](packages/opencode-warcraft/docs/WARCRAFT-TOOLS.md) | Full tool behavior reference |
+| [DATA-MODEL.md](packages/opencode-warcraft/docs/DATA-MODEL.md) | Data model and artifact layout |
+| [BEADS.md](packages/warcraft-core/BEADS.md) | Beads subsystem architecture |
+
 ## Package-Level References
 
 - [packages/warcraft-core/AGENTS.md](packages/warcraft-core/AGENTS.md)
 - [packages/opencode-warcraft/AGENTS.md](packages/opencode-warcraft/AGENTS.md)
 - [packages/opencode-warcraft/docs](packages/opencode-warcraft/docs)
-- [WARCRAFT-TOOLS.md](packages/opencode-warcraft/docs/WARCRAFT-TOOLS.md) -- Tool behavior reference
-- [DATA-MODEL.md](packages/opencode-warcraft/docs/DATA-MODEL.md) -- Data model and artifact layout
-- [BEADS.md](packages/warcraft-core/BEADS.md) -- Beads subsystem architecture
 
 ## License
 
