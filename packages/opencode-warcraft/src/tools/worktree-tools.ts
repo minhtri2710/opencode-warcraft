@@ -28,6 +28,8 @@ export interface WorktreeToolsDependencies {
   completionGates: readonly CompletionGate[];
   verificationModel: 'tdd' | 'best-effort';
   workflowGatesMode: 'enforce' | 'warn';
+  /** Structured verification mode: 'compat' keeps regex fallback; 'enforce' requires structured payload. */
+  structuredVerificationMode: 'compat' | 'enforce';
 }
 
 /**

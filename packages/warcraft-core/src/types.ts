@@ -208,4 +208,10 @@ export interface WarcraftConfig {
   verificationModel?: 'tdd' | 'best-effort';
   /** Workflow gates mode: 'enforce' blocks commit without gate evidence; 'warn' (default) proceeds with a note. */
   workflowGatesMode?: 'enforce' | 'warn';
+  /** Structured verification mode: 'compat' (default) keeps regex fallback; 'enforce' requires structured payload. */
+  structuredVerificationMode?: 'compat' | 'enforce';
+  /** Enable unified dispatch path for single and batch task execution (default: false). */
+  unifiedDispatchEnabled?: boolean;
+  /** Enable strict task state transitions (default: false). */
+  strictTaskTransitionsEnabled?: boolean;
 }

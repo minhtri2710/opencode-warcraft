@@ -20,6 +20,8 @@ export interface BatchToolsDependencies {
     maxConcurrency?: number;
   };
   verificationModel: 'tdd' | 'best-effort';
+  /** Enable unified dispatch path for single and batch task execution. */
+  unifiedDispatchEnabled: boolean;
 }
 
 export interface EffectiveParallelPolicy {

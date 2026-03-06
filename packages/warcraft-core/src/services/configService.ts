@@ -270,6 +270,38 @@ export class ConfigService {
   }
 
   /**
+   * Get structured verification mode.
+   * Controls whether structured verification payloads are required.
+   * Defaults to 'compat' (regex fallback allowed).
+   */
+  getStructuredVerificationMode(): 'compat' | 'enforce' {
+    const config = this.get();
+    const mode = config.structuredVerificationMode;
+    if (mode === 'enforce') return 'enforce';
+    return 'compat';
+  }
+
+  /**
+   * Check if unified dispatch is enabled.
+   * When true, single and batch task dispatch use the same code path.
+   * Defaults to false for backward compatibility.
+   */
+  isUnifiedDispatchEnabled(): boolean {
+    const config = this.get();
+    return config.unifiedDispatchEnabled === true;
+  }
+
+  /**
+   * Check if strict task state transitions are enabled.
+   * When true, only allowed state transitions are permitted.
+   * Defaults to false for backward compatibility.
+   */
+  isStrictTaskTransitionsEnabled(): boolean {
+    const config = this.get();
+    return config.strictTaskTransitionsEnabled === true;
+  }
+
+  /**
    * Get beads rollout mode.
    * Normalizes boolean values to strings and validates against valid modes.
    * Rejects legacy strings (dual-write, beads-primary) with validation error.
