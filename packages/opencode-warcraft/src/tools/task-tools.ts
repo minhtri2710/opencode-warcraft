@@ -1,5 +1,5 @@
 import { type ToolDefinition, tool } from '@opencode-ai/plugin';
-import type { FeatureService, PlanService, TaskService, TaskStatusType } from 'warcraft-core';
+import type { EventLogger, FeatureService, PlanService, TaskService, TaskStatusType } from 'warcraft-core';
 import { detectWorkflowPath, validateLightweightPlan } from 'warcraft-core';
 import { toolError, toolSuccess } from '../types.js';
 import { resolveFeatureInput, validateTaskInput } from './tool-input.js';
@@ -10,6 +10,7 @@ export interface TaskToolsDependencies {
   taskService: TaskService;
   workflowGatesMode: 'enforce' | 'warn';
   validateTaskStatus: (status: string) => TaskStatusType;
+  eventLogger: EventLogger;
 }
 
 /**
@@ -124,7 +125,7 @@ export class TaskTools {
    */
   updateTaskTool(resolveFeature: (name?: string) => string | null): ToolDefinition {
     // Capture deps in closure to avoid 'this' binding issues
-    const { taskService, validateTaskStatus } = this.deps;
+    const { taskService, validateTaskStatus, eventLogger } = this.deps;
     return tool({
       description: 'Update task status or summary',
       args: {
@@ -138,6 +139,21 @@ export class TaskTools {
         if (!resolution.ok) return toolError(resolution.error);
         const feature = resolution.feature;
         validateTaskInput(task);
+
+        // Detect reopen: status changing away from 'done'
+        if (status) {
+          const currentTask = taskService.get(feature, task);
+          const validatedStatus = validateTaskStatus(status);
+          if (currentTask && currentTask.status === 'done' && validatedStatus !== 'done') {
+            eventLogger.emit({
+              type: 'reopen',
+              feature,
+              task,
+              details: { previousStatus: 'done', newStatus: validatedStatus },
+            });
+          }
+        }
+
         const updated = taskService.update(feature, task, {
           status: status ? validateTaskStatus(status) : undefined,
           summary,

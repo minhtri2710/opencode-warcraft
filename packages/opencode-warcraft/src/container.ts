@@ -7,9 +7,11 @@ import {
   buildEffectiveDependencies,
   type ConfigService,
   ContextService,
+  createEventLogger,
   createStores,
   createWorktreeService,
   detectContext,
+  type EventLogger,
   FeatureService,
   getFeaturePath,
   PlanService,
@@ -44,6 +46,7 @@ export interface WarcraftContainer {
   agentsMdService: AgentsMdService;
   configService: ConfigService;
   bvTriageService: BvTriageService;
+  eventLogger: EventLogger;
   builtinMcps: ReturnType<typeof createBuiltinMcps>;
   filteredSkills: ReturnType<typeof getFilteredSkills>;
   resolveFeature: (explicit?: string) => string | null;
@@ -83,6 +86,7 @@ export function createWarcraftContainer(directory: string, configService: Config
   const builtinMcps = createBuiltinMcps(disabledMcps);
   const filteredSkills = getFilteredSkills(disabledSkills);
   const worktreeService = createWorktreeService(directory);
+  const eventLogger = createEventLogger(directory);
 
   // Initialize BV Triage Service with explicit state ownership
   const bvTriageService = new BvTriageService(directory, configService.getBeadsMode() !== 'off');
@@ -249,6 +253,7 @@ To unblock: Remove ${blockedPath}`;
     taskService,
     workflowGatesMode: configService.getWorkflowGatesMode(),
     validateTaskStatus,
+    eventLogger,
   });
   const worktreeTools = new WorktreeTools({
     featureService,
@@ -263,6 +268,7 @@ To unblock: Remove ${blockedPath}`;
     completionGates: COMPLETION_GATES,
     workflowGatesMode: configService.getWorkflowGatesMode(),
     verificationModel: configService.getVerificationModel(),
+    eventLogger,
   });
   const batchTools = new BatchTools({
     featureService,
@@ -296,6 +302,7 @@ To unblock: Remove ${blockedPath}`;
     agentsMdService,
     configService,
     bvTriageService,
+    eventLogger,
     builtinMcps,
     filteredSkills,
     resolveFeature,

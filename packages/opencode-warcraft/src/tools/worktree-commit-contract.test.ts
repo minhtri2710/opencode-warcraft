@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import { createNoopEventLogger } from 'warcraft-core';
 import { WorktreeTools } from './worktree-tools.js';
 
 type MockDeps = ConstructorParameters<typeof WorktreeTools>[0];
@@ -27,6 +28,7 @@ function createMockDeps(overrides: Partial<MockDeps> = {}): MockDeps {
     completionGates: ['build', 'test', 'lint'] as const,
     workflowGatesMode: 'enforce' as const,
     verificationModel: 'tdd' as const,
+    eventLogger: createNoopEventLogger(),
     ...overrides,
   };
 }

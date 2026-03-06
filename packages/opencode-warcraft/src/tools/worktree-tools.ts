@@ -1,7 +1,14 @@
 import { type ToolDefinition, tool } from '@opencode-ai/plugin';
 import { exec as execCb } from 'child_process';
 import { promisify } from 'util';
-import type { FeatureService, PlanService, TaskService, TaskStatusType, WorktreeService } from 'warcraft-core';
+import type {
+  EventLogger,
+  FeatureService,
+  PlanService,
+  TaskService,
+  TaskStatusType,
+  WorktreeService,
+} from 'warcraft-core';
 import type { BlockedResult } from '../types.js';
 import { toolError, toolSuccess } from '../types.js';
 import { calculatePayloadMeta, calculatePromptMeta, checkWarnings } from '../utils/prompt-observability.js';
@@ -28,6 +35,7 @@ export interface WorktreeToolsDependencies {
   completionGates: readonly CompletionGate[];
   verificationModel: 'tdd' | 'best-effort';
   workflowGatesMode: 'enforce' | 'warn';
+  eventLogger: EventLogger;
 }
 
 /**
@@ -49,6 +57,7 @@ export class WorktreeTools {
       contextService,
       worktreeService,
       verificationModel,
+      eventLogger,
     } = this.deps;
     return tool({
       description: 'Create worktree and begin work on task. Spawns Mekkatorque worker automatically.',
@@ -222,6 +231,14 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
 
         const allWarnings = [...sizeWarnings, ...budgetWarnings];
 
+        // Emit dispatch event for trust metrics tracking
+        eventLogger.emit({
+          type: 'dispatch',
+          feature,
+          task,
+          details: { agent, continueFrom: continueFrom || null },
+        });
+
         return toolSuccess({
           ...responseBase,
           promptMeta,
@@ -257,6 +274,7 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
       completionGates,
       workflowGatesMode,
       verificationModel,
+      eventLogger,
     } = this.deps;
     return tool({
       description:
@@ -322,6 +340,13 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
             status: 'blocked',
             summary,
             blocker,
+          });
+
+          eventLogger.emit({
+            type: 'blocked',
+            feature,
+            task,
+            details: { reason: blocker?.reason, summary },
           });
 
           const worktree = await worktreeService.get(feature, task);
@@ -401,6 +426,14 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
         taskService.update(feature, task, {
           status: validateTaskStatus(finalStatus),
           summary,
+        });
+
+        // Emit commit event for trust metrics tracking
+        eventLogger.emit({
+          type: 'commit',
+          feature,
+          task,
+          details: { status, finalStatus, sha: commitResult.sha },
         });
 
         const worktree = await worktreeService.get(feature, task);
