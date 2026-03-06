@@ -694,6 +694,114 @@ describe('ConfigService.getVerificationModel', () => {
   });
 });
 
+describe('ConfigService rollout flags', () => {
+  it("getStructuredVerificationMode() returns 'compat' by default", () => {
+    const service = new ConfigService();
+    expect(service.getStructuredVerificationMode()).toBe('compat');
+  });
+
+  it("getStructuredVerificationMode() returns 'enforce' when configured", () => {
+    const service = new ConfigService();
+    const configPath = service.getPath();
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    fs.writeFileSync(configPath, JSON.stringify({ structuredVerificationMode: 'enforce' }));
+    const svc = new ConfigService();
+    expect(svc.getStructuredVerificationMode()).toBe('enforce');
+  });
+
+  it("getStructuredVerificationMode() returns 'compat' for invalid values", () => {
+    const service = new ConfigService();
+    const configPath = service.getPath();
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+
+    for (const invalid of ['', 'invalid', 'ENFORCE', null, 123]) {
+      fs.writeFileSync(configPath, JSON.stringify({ structuredVerificationMode: invalid }));
+      const svc = new ConfigService();
+      expect(svc.getStructuredVerificationMode()).toBe('compat');
+    }
+  });
+
+  it('isUnifiedDispatchEnabled() returns false by default', () => {
+    const service = new ConfigService();
+    expect(service.isUnifiedDispatchEnabled()).toBe(false);
+  });
+
+  it('isUnifiedDispatchEnabled() returns true when configured', () => {
+    const service = new ConfigService();
+    const configPath = service.getPath();
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    fs.writeFileSync(configPath, JSON.stringify({ unifiedDispatchEnabled: true }));
+    const svc = new ConfigService();
+    expect(svc.isUnifiedDispatchEnabled()).toBe(true);
+  });
+
+  it('isUnifiedDispatchEnabled() returns false for non-boolean values', () => {
+    const service = new ConfigService();
+    const configPath = service.getPath();
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+
+    for (const invalid of ['true', 1, 'yes', null]) {
+      fs.writeFileSync(configPath, JSON.stringify({ unifiedDispatchEnabled: invalid }));
+      const svc = new ConfigService();
+      expect(svc.isUnifiedDispatchEnabled()).toBe(false);
+    }
+  });
+
+  it('isStrictTaskTransitionsEnabled() returns false by default', () => {
+    const service = new ConfigService();
+    expect(service.isStrictTaskTransitionsEnabled()).toBe(false);
+  });
+
+  it('isStrictTaskTransitionsEnabled() returns true when configured', () => {
+    const service = new ConfigService();
+    const configPath = service.getPath();
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    fs.writeFileSync(configPath, JSON.stringify({ strictTaskTransitionsEnabled: true }));
+    const svc = new ConfigService();
+    expect(svc.isStrictTaskTransitionsEnabled()).toBe(true);
+  });
+
+  it('isStrictTaskTransitionsEnabled() returns false for non-boolean values', () => {
+    const service = new ConfigService();
+    const configPath = service.getPath();
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+
+    for (const invalid of ['true', 1, 'yes', null]) {
+      fs.writeFileSync(configPath, JSON.stringify({ strictTaskTransitionsEnabled: invalid }));
+      const svc = new ConfigService();
+      expect(svc.isStrictTaskTransitionsEnabled()).toBe(false);
+    }
+  });
+
+  it('rollout flags default values do not change existing behavior', () => {
+    const service = new ConfigService();
+    const config = service.get();
+
+    // All rollout flags should be at their safe defaults
+    expect(config.structuredVerificationMode).toBeUndefined();
+    expect(config.unifiedDispatchEnabled).toBeUndefined();
+    expect(config.strictTaskTransitionsEnabled).toBeUndefined();
+
+    // Accessors should return safe backward-compatible defaults
+    expect(service.getStructuredVerificationMode()).toBe('compat');
+    expect(service.isUnifiedDispatchEnabled()).toBe(false);
+    expect(service.isStrictTaskTransitionsEnabled()).toBe(false);
+  });
+
+  it('set() persists and returns rollout flag updates', () => {
+    const service = new ConfigService();
+    service.set({
+      structuredVerificationMode: 'enforce',
+      unifiedDispatchEnabled: true,
+      strictTaskTransitionsEnabled: true,
+    });
+
+    expect(service.getStructuredVerificationMode()).toBe('enforce');
+    expect(service.isUnifiedDispatchEnabled()).toBe(true);
+    expect(service.isStrictTaskTransitionsEnabled()).toBe(true);
+  });
+});
+
 describe('ConfigService.getWorkflowGatesMode', () => {
   it("returns 'warn' when not configured", () => {
     const service = new ConfigService();
