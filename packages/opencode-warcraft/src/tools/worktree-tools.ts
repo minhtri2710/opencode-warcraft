@@ -30,6 +30,9 @@ export interface WorktreeToolsDependencies {
   workflowGatesMode: 'enforce' | 'warn';
   /** Structured verification mode: 'compat' keeps regex fallback; 'enforce' requires structured payload. */
   structuredVerificationMode: 'compat' | 'enforce';
+  eventLogger?: {
+    emit: (event: { type: string; feature: string; task: string; details?: Record<string, unknown> }) => void;
+  };
 }
 
 /**
@@ -51,6 +54,7 @@ export class WorktreeTools {
       contextService,
       worktreeService,
       verificationModel,
+      eventLogger,
     } = this.deps;
     return tool({
       description: 'Create worktree and begin work on task. Spawns Mekkatorque worker automatically.',
@@ -156,6 +160,9 @@ export class WorktreeTools {
           );
         }
 
+        // Emit dispatch event for operational observability
+        eventLogger?.emit({ type: 'dispatch', feature, task, details: { attempt, agent } });
+
         const contextContent = contextFiles.map((f) => f.content).join('\n\n');
         const previousTasksContent = previousTasks.map((t) => `- **${t.name}**: ${t.summary}`).join('\n');
         const promptMeta = calculatePromptMeta({
@@ -260,6 +267,7 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
       workflowGatesMode,
       verificationModel,
       structuredVerificationMode,
+      eventLogger,
     } = this.deps;
     return tool({
       description:
@@ -369,6 +377,14 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
             blocker,
           });
 
+          // Emit blocked event for operational observability
+          eventLogger?.emit({
+            type: 'blocked',
+            feature,
+            task,
+            details: { reason: blocker?.reason },
+          });
+
           const worktree = await worktreeService.get(feature, task);
           return toolSuccess({
             ok: true,
@@ -442,6 +458,14 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
           );
         }
 
+        // Emit commit event for operational observability
+        eventLogger?.emit({
+          type: 'commit',
+          feature,
+          task,
+          details: { status, sha: commitResult.sha },
+        });
+
         const finalStatus = status === 'completed' ? 'done' : status;
         taskService.update(feature, task, {
           status: validateTaskStatus(finalStatus),
@@ -512,7 +536,7 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
    */
   mergeTaskTool(resolveFeature: (name?: string) => string | null): ToolDefinition {
     // Capture deps in closure to avoid 'this' binding issues
-    const { taskService, worktreeService } = this.deps;
+    const { taskService, worktreeService, eventLogger } = this.deps;
     return tool({
       description: 'Merge completed task branch into current branch (explicit integration)',
       args: {
@@ -553,6 +577,14 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
         const mergeResult = {
           message: `Task "${task}" merged successfully using ${strategy} strategy.\nCommit: ${result.sha}\nFiles changed: ${result.filesChanged?.length || 0}`,
         };
+
+        // Emit merge event for operational observability
+        eventLogger?.emit({
+          type: 'merge',
+          feature,
+          task,
+          details: { strategy, sha: result.sha },
+        });
 
         if (verify) {
           const execOpts = { cwd: process.cwd(), timeout: 300_000 };

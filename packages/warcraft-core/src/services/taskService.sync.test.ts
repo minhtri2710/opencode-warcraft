@@ -132,19 +132,17 @@ describe('TaskService.sync() - rollback and fault tolerance', () => {
       throw new Error('Dependency sync explosion');
     };
 
-    const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
     const svc = new TaskService(TEST_DIR, stores.taskStore, 'off');
 
     // Should not throw despite syncDependencies failing
     const result = svc.sync(featureName);
     expect(result.created).toHaveLength(1);
 
-    // Should have logged a warning
-    expect(warnSpy).toHaveBeenCalled();
-    const warnCalls = warnSpy.mock.calls.map((c) => String(c[0]));
-    expect(warnCalls.some((c) => c.includes('Dependency sync failed'))).toBe(true);
-
-    warnSpy.mockRestore();
+    // Should have captured the failure as a diagnostic
+    expect(result.diagnostics).toBeDefined();
+    expect(result.diagnostics!.length).toBeGreaterThan(0);
+    expect(result.diagnostics![0].code).toBe('dep_sync_failed');
+    expect(result.diagnostics![0].message).toContain('Dependency sync explosion');
   });
 });
 

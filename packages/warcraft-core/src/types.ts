@@ -92,6 +92,8 @@ export interface TasksSyncResult {
   removed: string[];
   kept: string[];
   manual: string[];
+  /** Diagnostics from degraded paths encountered during sync (e.g., dependency sync failures) */
+  diagnostics?: Array<{ code: string; message: string; severity: string; context?: Record<string, unknown> }>;
 }
 
 export interface TaskInfo {

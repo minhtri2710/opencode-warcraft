@@ -9,8 +9,12 @@ import type {
 } from '../types.js';
 import { readText } from '../utils/fs.js';
 import type { LockOptions } from '../utils/json-lock.js';
+import type { Logger } from '../utils/logger.js';
+import { createNoopLogger } from '../utils/logger.js';
 import { getPlanPath, sanitizeName } from '../utils/paths.js';
 import { deriveTaskFolder, slugifyTaskName } from '../utils/slug.js';
+import type { Diagnostic } from './outcomes.js';
+import { diagnostic, fromError } from './outcomes.js';
 import { formatSpecContent } from './specFormatter.js';
 import type { TaskStore } from './state/types.js';
 import type { RunnableBlockedResult, TaskWithDeps } from './taskDependencyGraph.js';
@@ -74,11 +78,16 @@ interface SyncDelta {
 }
 
 export class TaskService {
+  private readonly logger: Logger;
+
   constructor(
     private projectRoot: string,
     private readonly store: TaskStore,
     private readonly beadsMode: BeadsMode = 'on',
-  ) {}
+    logger?: Logger,
+  ) {
+    this.logger = logger ?? createNoopLogger();
+  }
 
   /**
    * Preview what tasks_sync would create/remove without making changes.
@@ -104,6 +113,7 @@ export class TaskService {
     }
 
     const createdFolders: string[] = [];
+    const diagnostics: Diagnostic[] = [];
 
     try {
       // Apply removals
@@ -145,8 +155,12 @@ export class TaskService {
         try {
           this.store.syncDependencies(featureName);
         } catch (depError) {
-          const reason = depError instanceof Error ? depError.message : String(depError);
-          console.warn(`[warcraft] Dependency sync failed after task sync for '${featureName}' (degraded): ${reason}`);
+          const diag = fromError('dep_sync_failed', depError, 'degraded', { featureName });
+          diagnostics.push(diag);
+          this.logger.warn(`Dependency sync failed after task sync for '${featureName}' (degraded): ${diag.message}`, {
+            featureName,
+            code: diag.code,
+          });
         }
       }
     } catch (error) {
@@ -155,8 +169,13 @@ export class TaskService {
         try {
           this.store.delete(featureName, folder);
         } catch (rollbackError) {
-          const reason = rollbackError instanceof Error ? rollbackError.message : String(rollbackError);
-          console.warn(`[warcraft] Rollback failed for '${folder}' during sync recovery: ${reason}`);
+          const diag = fromError('rollback_failed', rollbackError, 'degraded', { folder, featureName });
+          diagnostics.push(diag);
+          this.logger.warn(`Rollback failed for '${folder}' during sync recovery: ${diag.message}`, {
+            featureName,
+            folder,
+            code: diag.code,
+          });
         }
       }
 
@@ -176,6 +195,7 @@ export class TaskService {
       removed: delta.removed,
       kept: delta.kept,
       manual: delta.manual,
+      diagnostics,
     };
   }
 

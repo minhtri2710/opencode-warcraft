@@ -82,8 +82,12 @@ export class TaskTools {
         if (featureData.status === 'approved') {
           featureService.updateStatus(feature, 'executing');
         }
+
+        const diagnostics = result.diagnostics ?? [];
+
         return toolSuccess({
           message: `Tasks synced: ${result.created.length} created, ${result.removed.length} removed, ${result.kept.length} kept${warning}`,
+          ...(diagnostics.length > 0 ? { diagnostics } : {}),
         });
       },
     });

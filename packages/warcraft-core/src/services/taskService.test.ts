@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type { TaskStatus } from '../types';
 import { getLockPath } from '../utils/json-lock';
+import { createNoopLogger } from '../utils/logger';
 import { BeadsRepository } from './beads/BeadsRepository';
 import { formatSpecContent } from './specFormatter';
 import { createStores } from './state/index.js';
@@ -2001,6 +2002,90 @@ Align documentation wording.
       expect(result.completed[0].beadId).toBe('bd-3');
 
       listSpy.mockRestore();
+    });
+  });
+
+  describe('sync() - diagnostics on degraded paths', () => {
+    it('returns diagnostics when dependency sync fails', () => {
+      const featureName = 'test-feature';
+      const featurePath = path.join(TEST_DIR, '.beads/artifacts', featureName);
+      fs.mkdirSync(featurePath, { recursive: true });
+
+      fs.writeFileSync(
+        path.join(featurePath, 'feature.json'),
+        JSON.stringify({
+          name: featureName,
+          epicBeadId: 'bd-epic-test',
+          status: 'executing',
+          createdAt: new Date().toISOString(),
+        }),
+      );
+
+      const planContent = `# Plan
+
+### 1. Test Task
+
+**Depends on**: none
+
+Test task.
+`;
+      fs.writeFileSync(path.join(featurePath, 'plan.md'), planContent);
+
+      // Use off-mode service so we can control the store
+      const offStores = createStores(PROJECT_ROOT, 'off', createRepository('off'));
+
+      // Add syncDependencies to the store and mock it to simulate failure
+      (offStores.taskStore as any).syncDependencies = () => {
+        throw new Error('Dependency sync failed: network timeout');
+      };
+
+      const logger = createNoopLogger();
+      const offModeService = new TaskService(PROJECT_ROOT, offStores.taskStore, 'off', logger);
+
+      const result = offModeService.sync(featureName);
+
+      // sync should still succeed
+      expect(result.created).toContain('01-test-task');
+      // but diagnostics should capture the dependency sync failure
+      expect(result.diagnostics).toBeDefined();
+      expect(result.diagnostics!.length).toBeGreaterThan(0);
+      expect(result.diagnostics![0].code).toBe('dep_sync_failed');
+    });
+
+    it('returns empty diagnostics when sync completes without issues', () => {
+      const featureName = 'test-feature';
+      const featurePath = path.join(TEST_DIR, '.beads/artifacts', featureName);
+      fs.mkdirSync(featurePath, { recursive: true });
+
+      fs.writeFileSync(
+        path.join(featurePath, 'feature.json'),
+        JSON.stringify({
+          name: featureName,
+          epicBeadId: 'bd-epic-test',
+          status: 'executing',
+          createdAt: new Date().toISOString(),
+        }),
+      );
+
+      const planContent = `# Plan
+
+### 1. Simple Task
+
+**Depends on**: none
+
+Simple task.
+`;
+      fs.writeFileSync(path.join(featurePath, 'plan.md'), planContent);
+
+      const offStores = createStores(PROJECT_ROOT, 'off', createRepository('off'));
+      const logger = createNoopLogger();
+      const offModeService = new TaskService(PROJECT_ROOT, offStores.taskStore, 'off', logger);
+
+      const result = offModeService.sync(featureName);
+
+      expect(result.created).toContain('01-simple-task');
+      expect(result.diagnostics).toBeDefined();
+      expect(result.diagnostics!.length).toBe(0);
     });
   });
 

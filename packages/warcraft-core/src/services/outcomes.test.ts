@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'bun:test';
 import type { OperationOutcome } from './outcomes.js';
-import { degraded, diagnostic, fatal, isUsable, ok, okVoid, worstSeverity } from './outcomes.js';
+import {
+  collectOutcomes,
+  degraded,
+  diagnostic,
+  fatal,
+  fromError,
+  isUsable,
+  ok,
+  okVoid,
+  withDiagnostics,
+  worstSeverity,
+} from './outcomes.js';
 
 describe('outcomes', () => {
   describe('ok()', () => {
@@ -108,6 +119,99 @@ describe('outcomes', () => {
     it('returns ok when all diagnostics are ok', () => {
       const diags = [diagnostic('a', 'a', 'ok'), diagnostic('b', 'b', 'ok')];
       expect(worstSeverity(diags)).toBe('ok');
+    });
+  });
+
+  describe('withDiagnostics()', () => {
+    it('adds diagnostics to an ok outcome and upgrades severity', () => {
+      const base = ok(42);
+      const diags = [diagnostic('warn_code', 'Something degraded')];
+      const result = withDiagnostics(base, diags);
+      expect(result.severity).toBe('degraded');
+      expect(result.value).toBe(42);
+      expect(result.diagnostics).toHaveLength(1);
+      expect(result.diagnostics[0].code).toBe('warn_code');
+    });
+
+    it('preserves existing diagnostics and appends new ones', () => {
+      const base = degraded('val', [diagnostic('existing', 'Already there')]);
+      const newDiags = [diagnostic('new_warn', 'New warning')];
+      const result = withDiagnostics(base, newDiags);
+      expect(result.diagnostics).toHaveLength(2);
+      expect(result.diagnostics[0].code).toBe('existing');
+      expect(result.diagnostics[1].code).toBe('new_warn');
+    });
+
+    it('upgrades severity to fatal when fatal diagnostic is added', () => {
+      const base = ok('value');
+      const diags = [diagnostic('fatal_err', 'Critical failure', 'fatal')];
+      const result = withDiagnostics(base, diags);
+      expect(result.severity).toBe('fatal');
+    });
+
+    it('does not downgrade severity when ok diagnostics are added to degraded', () => {
+      const base = degraded('val', [diagnostic('warn', 'w')]);
+      const okDiags = [diagnostic('info', 'info', 'ok')];
+      const result = withDiagnostics(base, okDiags);
+      expect(result.severity).toBe('degraded');
+    });
+  });
+
+  describe('fromError()', () => {
+    it('creates a diagnostic from an Error instance', () => {
+      const error = new Error('Something failed');
+      const d = fromError('op_failed', error);
+      expect(d.code).toBe('op_failed');
+      expect(d.message).toBe('Something failed');
+      expect(d.severity).toBe('degraded');
+    });
+
+    it('creates a diagnostic from a string error', () => {
+      const d = fromError('str_error', 'plain string error');
+      expect(d.code).toBe('str_error');
+      expect(d.message).toBe('plain string error');
+    });
+
+    it('creates a diagnostic from an unknown error type', () => {
+      const d = fromError('unknown_error', 42);
+      expect(d.code).toBe('unknown_error');
+      expect(d.message).toBe('42');
+    });
+
+    it('accepts explicit severity and context', () => {
+      const d = fromError('fatal_op', new Error('boom'), 'fatal', { op: 'sync' });
+      expect(d.severity).toBe('fatal');
+      expect(d.context).toEqual({ op: 'sync' });
+    });
+  });
+
+  describe('collectOutcomes()', () => {
+    it('merges multiple ok outcomes into a single ok outcome', () => {
+      const outcomes = [ok('a'), ok('b'), ok('c')];
+      const result = collectOutcomes(outcomes);
+      expect(result.severity).toBe('ok');
+      expect(result.diagnostics).toEqual([]);
+    });
+
+    it('merges ok and degraded into degraded with combined diagnostics', () => {
+      const outcomes = [ok('a'), degraded('b', [diagnostic('warn', 'w')])];
+      const result = collectOutcomes(outcomes);
+      expect(result.severity).toBe('degraded');
+      expect(result.diagnostics).toHaveLength(1);
+      expect(result.diagnostics[0].code).toBe('warn');
+    });
+
+    it('returns fatal if any outcome is fatal', () => {
+      const outcomes = [ok('a'), fatal([diagnostic('err', 'e', 'fatal')]), degraded('c', [diagnostic('w', 'w')])];
+      const result = collectOutcomes(outcomes);
+      expect(result.severity).toBe('fatal');
+      expect(result.diagnostics).toHaveLength(2);
+    });
+
+    it('returns ok for empty array', () => {
+      const result = collectOutcomes([]);
+      expect(result.severity).toBe('ok');
+      expect(result.diagnostics).toEqual([]);
     });
   });
 });
