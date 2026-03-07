@@ -376,7 +376,7 @@ export class TaskService {
   update(
     featureName: string,
     taskFolder: string,
-    updates: Partial<Pick<TaskStatus, 'status' | 'summary' | 'baseCommit' | 'blocker'>>,
+    updates: Partial<Pick<TaskStatus, 'status' | 'summary' | 'baseCommit' | 'blocker' | 'learnings'>>,
     _lockOptions?: LockOptions,
   ): TaskStatus {
     const current = this.store.getRawStatus(featureName, taskFolder);

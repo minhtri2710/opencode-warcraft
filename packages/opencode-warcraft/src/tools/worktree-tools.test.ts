@@ -281,6 +281,140 @@ describe('mergeTaskTool verification defaults', () => {
   });
 });
 
+/**
+ * Create mock deps for commitWorktreeTool that track taskService.update() calls.
+ */
+function createCommitDeps(overrides: Partial<WorktreeToolsDependencies> = {}) {
+  const updateCalls: Array<{ feature: string; task: string; updates: Record<string, unknown> }> = [];
+
+  const deps: WorktreeToolsDependencies = {
+    featureService: {
+      get: () => ({ name: 'test-feature', status: 'executing' }),
+    } as unknown as WorktreeToolsDependencies['featureService'],
+    planService: {} as WorktreeToolsDependencies['planService'],
+    taskService: {
+      get: () => ({ folder: '01-task', name: 'Task', status: 'in_progress', origin: 'plan' as const }),
+      update: (feature: string, task: string, updates: Record<string, unknown>) => {
+        updateCalls.push({ feature, task, updates });
+        return { ...updates, origin: 'plan' };
+      },
+      writeReport: () => {},
+      ...((overrides as Record<string, unknown>).taskServiceOverrides ?? {}),
+    } as unknown as WorktreeToolsDependencies['taskService'],
+    worktreeService: {
+      commitChanges: async () => ({ committed: true, sha: 'abc123', message: 'ok' }),
+      getDiff: async () => ({ hasDiff: false, filesChanged: [], insertions: 0, deletions: 0 }),
+      get: async () => ({ path: '/tmp/wt', branch: 'warcraft/test/01-task' }),
+      ...((overrides as Record<string, unknown>).worktreeServiceOverrides ?? {}),
+    } as unknown as WorktreeToolsDependencies['worktreeService'],
+    contextService: { list: () => [] } as unknown as WorktreeToolsDependencies['contextService'],
+    validateTaskStatus: ((s: string) => s) as unknown as WorktreeToolsDependencies['validateTaskStatus'],
+    checkBlocked: () => ({ blocked: false }),
+    checkDependencies: () => ({ allowed: true }),
+    hasCompletionGateEvidence: () => true,
+    completionGates: ['build', 'test', 'lint'] as const,
+    verificationModel: 'best-effort',
+    workflowGatesMode: 'warn',
+    eventLogger: { emit: () => {} } as unknown as WorktreeToolsDependencies['eventLogger'],
+    ...overrides,
+  };
+
+  return { deps, getUpdateCalls: () => updateCalls };
+}
+
+/** Parse tool result JSON string into data object */
+function parseCommitResult(result: unknown): Record<string, unknown> {
+  const json = JSON.parse(result as string);
+  return json.data ?? json;
+}
+
+describe('commitWorktreeTool learnings', () => {
+  const resolveFeature = () => 'test-feature';
+
+  it('persists learnings in taskService.update when status is completed', async () => {
+    const { deps, getUpdateCalls } = createCommitDeps();
+    const tools = new WorktreeTools(deps);
+    const commitTool = tools.commitWorktreeTool(resolveFeature);
+
+    await commitTool.execute(
+      {
+        task: '01-task',
+        summary: 'Did things. build: exit 0, test: exit 0, lint: exit 0',
+        status: 'completed',
+        learnings: ['Use foo instead of bar', 'Config lives in /etc'],
+      },
+      {} as never,
+    );
+
+    const updates = getUpdateCalls();
+    // The final update (status → done) should include learnings
+    const finalUpdate = updates.find((u) => u.updates.status === 'done');
+    expect(finalUpdate).toBeDefined();
+    expect(finalUpdate!.updates.learnings).toEqual(['Use foo instead of bar', 'Config lives in /etc']);
+  });
+
+  it('persists learnings in taskService.update when status is blocked', async () => {
+    const { deps, getUpdateCalls } = createCommitDeps();
+    const tools = new WorktreeTools(deps);
+    const commitTool = tools.commitWorktreeTool(resolveFeature);
+
+    await commitTool.execute(
+      {
+        task: '01-task',
+        summary: 'Blocked on X',
+        status: 'blocked',
+        blocker: { reason: 'Need clarification' },
+        learnings: ['Discovered pattern Y'],
+      },
+      {} as never,
+    );
+
+    const blockedUpdate = getUpdateCalls().find((u) => u.updates.status === 'blocked');
+    expect(blockedUpdate).toBeDefined();
+    expect(blockedUpdate!.updates.learnings).toEqual(['Discovered pattern Y']);
+  });
+
+  it('omits learnings from taskService.update when not provided', async () => {
+    const { deps, getUpdateCalls } = createCommitDeps();
+    const tools = new WorktreeTools(deps);
+    const commitTool = tools.commitWorktreeTool(resolveFeature);
+
+    await commitTool.execute(
+      {
+        task: '01-task',
+        summary: 'Did things. build: exit 0, test: exit 0, lint: exit 0',
+        status: 'completed',
+      },
+      {} as never,
+    );
+
+    const updates = getUpdateCalls();
+    const finalUpdate = updates.find((u) => u.updates.status === 'done');
+    expect(finalUpdate).toBeDefined();
+    expect(finalUpdate!.updates.learnings).toBeUndefined();
+  });
+
+  it('preserves existing completed behavior when learnings is omitted', async () => {
+    const { deps } = createCommitDeps();
+    const tools = new WorktreeTools(deps);
+    const commitTool = tools.commitWorktreeTool(resolveFeature);
+
+    const result = await commitTool.execute(
+      {
+        task: '01-task',
+        summary: 'Did things. build: exit 0, test: exit 0, lint: exit 0',
+        status: 'completed',
+      },
+      {} as never,
+    );
+
+    const data = parseCommitResult(result);
+    expect(data.ok).toBe(true);
+    expect(data.terminal).toBe(true);
+    expect(data.status).toBe('completed');
+  });
+});
+
 describe('formatSpecContent', () => {
   it('formats SpecData into markdown with all sections', () => {
     const specData: SpecData = {
