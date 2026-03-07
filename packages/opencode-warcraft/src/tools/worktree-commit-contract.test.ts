@@ -370,3 +370,103 @@ describe('worktree_commit learnings schema validation', () => {
     expect(commitTool.args.learnings).toBeDefined();
   });
 });
+
+describe('worktree_commit invalid learnings via tool execute', () => {
+  it('does not crash when learnings is a non-array (string) at tool boundary', async () => {
+    const updateCalls: Array<{ feature: string; task: string; updates: Record<string, unknown> }> = [];
+    const deps = createMockDeps({
+      taskService: {
+        ...createMockDeps().taskService,
+        update: (feature: string, task: string, updates: Record<string, unknown>) => {
+          updateCalls.push({ feature, task, updates });
+        },
+      } as any,
+    });
+    const tools = new WorktreeTools(deps);
+    const commitTool = tools.commitWorktreeTool(() => 'test-feature');
+
+    // Simulate malformed payload that bypasses schema validation (e.g., persisted data)
+    const raw = await commitTool.execute(
+      {
+        task: '01-test',
+        summary: 'build: exit 0, test: exit 0, lint: exit 0',
+        status: 'completed',
+        learnings: 'not an array' as unknown as string[],
+      },
+      MOCK_CONTEXT,
+    );
+    const result = parseResult(raw);
+    // Must not crash — should succeed and omit invalid learnings
+    expect(result.success).toBe(true);
+    expect(result.data.ok).toBe(true);
+    expect(result.data.terminal).toBe(true);
+    // Learnings should NOT appear in update since they are malformed
+    const doneUpdate = updateCalls.find((u) => u.updates.status === 'done');
+    expect(doneUpdate).toBeDefined();
+    expect(doneUpdate!.updates.learnings).toBeUndefined();
+  });
+
+  it('does not crash when learnings contains non-string elements at tool boundary', async () => {
+    const updateCalls: Array<{ feature: string; task: string; updates: Record<string, unknown> }> = [];
+    const deps = createMockDeps({
+      taskService: {
+        ...createMockDeps().taskService,
+        update: (feature: string, task: string, updates: Record<string, unknown>) => {
+          updateCalls.push({ feature, task, updates });
+        },
+      } as any,
+    });
+    const tools = new WorktreeTools(deps);
+    const commitTool = tools.commitWorktreeTool(() => 'test-feature');
+
+    const raw = await commitTool.execute(
+      {
+        task: '01-test',
+        summary: 'build: exit 0, test: exit 0, lint: exit 0',
+        status: 'completed',
+        learnings: ['valid learning', 42, null, ''] as unknown as string[],
+      },
+      MOCK_CONTEXT,
+    );
+    const result = parseResult(raw);
+    expect(result.success).toBe(true);
+    expect(result.data.ok).toBe(true);
+    expect(result.data.terminal).toBe(true);
+    // Only the valid non-empty string should be persisted
+    const doneUpdate = updateCalls.find((u) => u.updates.status === 'done');
+    expect(doneUpdate).toBeDefined();
+    expect(doneUpdate!.updates.learnings).toEqual(['valid learning']);
+  });
+
+  it('does not persist learnings when all entries are invalid at tool boundary', async () => {
+    const updateCalls: Array<{ feature: string; task: string; updates: Record<string, unknown> }> = [];
+    const deps = createMockDeps({
+      taskService: {
+        ...createMockDeps().taskService,
+        update: (feature: string, task: string, updates: Record<string, unknown>) => {
+          updateCalls.push({ feature, task, updates });
+        },
+      } as any,
+    });
+    const tools = new WorktreeTools(deps);
+    const commitTool = tools.commitWorktreeTool(() => 'test-feature');
+
+    const raw = await commitTool.execute(
+      {
+        task: '01-test',
+        summary: 'build: exit 0, test: exit 0, lint: exit 0',
+        status: 'completed',
+        learnings: [42, null, '', '  '] as unknown as string[],
+      },
+      MOCK_CONTEXT,
+    );
+    const result = parseResult(raw);
+    expect(result.success).toBe(true);
+    expect(result.data.ok).toBe(true);
+    expect(result.data.terminal).toBe(true);
+    // No valid learnings remain — should be treated as if omitted
+    const doneUpdate = updateCalls.find((u) => u.updates.status === 'done');
+    expect(doneUpdate).toBeDefined();
+    expect(doneUpdate!.updates.learnings).toBeUndefined();
+  });
+});

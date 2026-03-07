@@ -199,3 +199,137 @@ describe('fetchSharedDispatchData learnings', () => {
     expect(data.rawPreviousTasks[0].summary).toBe('Just a plain task.');
   });
 });
+
+// ============================================================================
+// fetchSharedDispatchData - malformed persisted learnings (runtime guards)
+// ============================================================================
+
+describe('fetchSharedDispatchData malformed learnings runtime guards', () => {
+  it('does not crash when persisted learnings is a string (not array)', () => {
+    const services = createMockServices([
+      {
+        folder: '01-corrupt',
+        name: 'Corrupt Learnings',
+        status: 'done',
+        summary: 'Completed OK.',
+        learnings: 'not an array' as unknown as string[],
+      },
+    ]);
+
+    const data = fetchSharedDispatchData('test-feature', services);
+
+    expect(data.rawPreviousTasks).toHaveLength(1);
+    expect(data.rawPreviousTasks[0].learnings).toBeUndefined();
+    // Summary should not contain malformed learnings
+    expect(data.rawPreviousTasks[0].summary).toBe('Completed OK.');
+  });
+
+  it('does not crash when persisted learnings is a number', () => {
+    const services = createMockServices([
+      {
+        folder: '01-number',
+        name: 'Number Learnings',
+        status: 'done',
+        summary: 'Completed OK.',
+        learnings: 42 as unknown as string[],
+      },
+    ]);
+
+    const data = fetchSharedDispatchData('test-feature', services);
+
+    expect(data.rawPreviousTasks).toHaveLength(1);
+    expect(data.rawPreviousTasks[0].learnings).toBeUndefined();
+    expect(data.rawPreviousTasks[0].summary).toBe('Completed OK.');
+  });
+
+  it('does not crash when persisted learnings is an object', () => {
+    const services = createMockServices([
+      {
+        folder: '01-object',
+        name: 'Object Learnings',
+        status: 'done',
+        summary: 'Completed OK.',
+        learnings: { key: 'value' } as unknown as string[],
+      },
+    ]);
+
+    const data = fetchSharedDispatchData('test-feature', services);
+
+    expect(data.rawPreviousTasks).toHaveLength(1);
+    expect(data.rawPreviousTasks[0].learnings).toBeUndefined();
+    expect(data.rawPreviousTasks[0].summary).toBe('Completed OK.');
+  });
+
+  it('filters out non-string elements from persisted learnings array', () => {
+    const services = createMockServices([
+      {
+        folder: '01-mixed',
+        name: 'Mixed Learnings',
+        status: 'done',
+        summary: 'Completed OK.',
+        learnings: ['valid learning', 42, null, 'another valid', { obj: true }] as unknown as string[],
+      },
+    ]);
+
+    const data = fetchSharedDispatchData('test-feature', services);
+
+    expect(data.rawPreviousTasks).toHaveLength(1);
+    expect(data.rawPreviousTasks[0].learnings).toEqual(['valid learning', 'another valid']);
+    expect(data.rawPreviousTasks[0].summary).toContain('valid learning');
+    expect(data.rawPreviousTasks[0].summary).toContain('another valid');
+  });
+
+  it('filters out empty strings from persisted learnings array', () => {
+    const services = createMockServices([
+      {
+        folder: '01-empty-strings',
+        name: 'Empty String Learnings',
+        status: 'done',
+        summary: 'Completed OK.',
+        learnings: ['valid learning', '', '  ', 'another valid'],
+      },
+    ]);
+
+    const data = fetchSharedDispatchData('test-feature', services);
+
+    expect(data.rawPreviousTasks).toHaveLength(1);
+    expect(data.rawPreviousTasks[0].learnings).toEqual(['valid learning', 'another valid']);
+  });
+
+  it('treats all-invalid learnings array same as no learnings', () => {
+    const services = createMockServices([
+      {
+        folder: '01-all-invalid',
+        name: 'All Invalid Learnings',
+        status: 'done',
+        summary: 'Completed OK.',
+        learnings: [42, null, '', '  '] as unknown as string[],
+      },
+    ]);
+
+    const data = fetchSharedDispatchData('test-feature', services);
+
+    expect(data.rawPreviousTasks).toHaveLength(1);
+    expect(data.rawPreviousTasks[0].learnings).toBeUndefined();
+    expect(data.rawPreviousTasks[0].summary).toBe('Completed OK.');
+  });
+
+  it('does not pollute summary with malformed learnings', () => {
+    const services = createMockServices([
+      {
+        folder: '01-no-pollution',
+        name: 'No Pollution',
+        status: 'done',
+        summary: 'Original summary only.',
+        learnings: 'string not array' as unknown as string[],
+      },
+    ]);
+
+    const data = fetchSharedDispatchData('test-feature', services);
+
+    // Summary must remain exactly the original
+    expect(data.rawPreviousTasks[0].summary).toBe('Original summary only.');
+    expect(data.rawPreviousTasks[0].summary).not.toContain('Learnings');
+    expect(data.rawPreviousTasks[0].summary).not.toContain('string not array');
+  });
+});
