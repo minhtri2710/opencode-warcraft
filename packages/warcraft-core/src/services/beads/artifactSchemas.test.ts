@@ -81,6 +81,80 @@ describe('artifactSchemas', () => {
       expect(converted.status).toBe(taskStatus.status);
       expect(converted.origin).toBe(taskStatus.origin);
     });
+
+    it('should round-trip learnings when present', () => {
+      const original = {
+        schemaVersion: 1,
+        status: 'done' as const,
+        origin: 'plan' as const,
+        summary: 'Task completed successfully',
+        learnings: ['Use bun:test for testing', 'ESM requires .js extensions'],
+      };
+
+      const encoded = encodeTaskState(original);
+      const decoded = decodeTaskState(encoded);
+
+      expect(decoded).not.toBeNull();
+      expect(decoded!.learnings).toEqual(['Use bun:test for testing', 'ESM requires .js extensions']);
+    });
+
+    it('should omit learnings when absent', () => {
+      const original = {
+        schemaVersion: 1,
+        status: 'done' as const,
+        origin: 'plan' as const,
+        summary: 'Task completed',
+      };
+
+      const encoded = encodeTaskState(original);
+      const decoded = decodeTaskState(encoded);
+
+      expect(decoded).not.toBeNull();
+      expect(decoded!.learnings).toBeUndefined();
+    });
+
+    it('should preserve learnings in TaskStatus to TaskStateArtifact round-trip', () => {
+      const taskStatus: TaskStatus = {
+        schemaVersion: 1,
+        status: 'done',
+        origin: 'plan',
+        summary: 'Completed with learnings',
+        learnings: ['Pattern A works well', 'Avoid approach B'],
+      };
+
+      const artifact = taskStateFromTaskStatus(taskStatus);
+      expect(artifact.learnings).toEqual(['Pattern A works well', 'Avoid approach B']);
+
+      const converted = taskStateToTaskStatus(artifact);
+      expect(converted.learnings).toEqual(['Pattern A works well', 'Avoid approach B']);
+    });
+
+    it('should omit learnings in TaskStatus conversion when not provided', () => {
+      const taskStatus: TaskStatus = {
+        schemaVersion: 1,
+        status: 'pending',
+        origin: 'plan',
+      };
+
+      const artifact = taskStateFromTaskStatus(taskStatus);
+      expect(artifact.learnings).toBeUndefined();
+
+      const converted = taskStateToTaskStatus(artifact);
+      expect(converted.learnings).toBeUndefined();
+    });
+
+    it('should migrate legacy task state without learnings', () => {
+      const legacy = JSON.stringify({
+        status: 'done',
+        origin: 'plan',
+        summary: 'Old task without learnings',
+      });
+
+      const decoded = decodeTaskState(legacy);
+
+      expect(decoded).not.toBeNull();
+      expect(decoded!.learnings).toBeUndefined();
+    });
   });
 
   describe('WorkerPromptArtifact', () => {

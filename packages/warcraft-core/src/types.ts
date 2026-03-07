@@ -67,6 +67,8 @@ export interface TaskStatus {
   blocker?: TaskBlocker;
   /** Task folder name (e.g., '01-setup'). Persisted for stable identity across reordering. */
   folder?: string;
+  /** Learnings surfaced by the worker upon task completion (done tasks only). */
+  learnings?: string[];
 }
 
 export interface PlanReadResult {
