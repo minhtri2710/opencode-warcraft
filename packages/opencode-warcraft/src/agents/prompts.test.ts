@@ -418,14 +418,14 @@ describe('prompt snapshot invariants (lifecycle gates)', () => {
 
   describe('structural anchors', () => {
     it('every prompt is non-empty', () => {
-      for (const [name, prompt] of Object.entries(ALL_PROMPTS)) {
+      for (const [_name, prompt] of Object.entries(ALL_PROMPTS)) {
         expect(prompt.length).toBeGreaterThan(0);
       }
     });
 
     it('every prompt has a minimum length (guards against accidental truncation)', () => {
       const MIN_PROMPT_LENGTH = 200;
-      for (const [name, prompt] of Object.entries(ALL_PROMPTS)) {
+      for (const [_name, prompt] of Object.entries(ALL_PROMPTS)) {
         expect(prompt.length).toBeGreaterThan(MIN_PROMPT_LENGTH);
       }
     });

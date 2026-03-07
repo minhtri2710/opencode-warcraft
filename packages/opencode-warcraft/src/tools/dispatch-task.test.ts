@@ -1,7 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'fs';
-import * as path from 'path';
-import { getLockPath } from 'warcraft-core';
 import {
   type DispatchOneTaskInput,
   type DispatchOneTaskServices,

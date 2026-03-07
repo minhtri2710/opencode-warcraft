@@ -4,7 +4,7 @@ import type { PlanService, TaskInfo, TaskService, TaskStatusType, WorktreeServic
 import { acquireLock } from 'warcraft-core';
 import type { BlockedResult } from '../types.js';
 import type { ContinueFromBlocked } from '../utils/worker-prompt.js';
-import { fetchSharedDispatchData, prepareTaskDispatch, type SharedDispatchData } from './task-dispatch.js';
+import { prepareTaskDispatch, type SharedDispatchData } from './task-dispatch.js';
 
 // ============================================================================
 // Types
