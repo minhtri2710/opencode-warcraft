@@ -85,6 +85,8 @@ export interface TaskStateArtifact extends VersionedArtifact {
   };
   /** Task folder name (e.g., '01-setup'). Persisted for stable identity across reordering. */
   folder?: string;
+  /** Learnings surfaced by the worker upon task completion (done tasks only). */
+  learnings?: string[];
 }
 
 /**
@@ -105,6 +107,7 @@ interface LegacyTaskState {
   dependsOn?: string[];
   blocker?: unknown;
   folder?: string;
+  learnings?: string[];
 }
 
 /**
@@ -153,6 +156,7 @@ export function decodeTaskState(raw: string | null): TaskStateArtifact | null {
       dependsOn: legacy.dependsOn,
       blocker: legacy.blocker as TaskStateArtifact['blocker'],
       folder: legacy.folder,
+      learnings: legacy.learnings,
     };
   } catch {
     return null;
@@ -178,6 +182,7 @@ export function taskStateFromTaskStatus(taskStatus: TaskStatus): TaskStateArtifa
     dependsOn: taskStatus.dependsOn,
     blocker: taskStatus.blocker,
     folder: taskStatus.folder,
+    learnings: taskStatus.learnings,
   };
 }
 
@@ -200,6 +205,7 @@ export function taskStateToTaskStatus(artifact: TaskStateArtifact): TaskStatus {
     dependsOn: artifact.dependsOn,
     blocker: artifact.blocker,
     folder: artifact.folder,
+    learnings: artifact.learnings,
   };
 }
 
