@@ -1,0 +1,201 @@
+/**
+ * Tests for task dispatch learnings flow.
+ *
+ * Verifies:
+ * - `fetchSharedDispatchData` includes learnings from done tasks only
+ * - `fetchSharedDispatchData` excludes learnings from partial/blocked/failed tasks
+ * - Learnings are folded into summary for budget-aware rendering
+ * - Empty learnings arrays are handled gracefully
+ * - Missing learnings are handled gracefully
+ */
+
+import { describe, expect, it } from 'bun:test';
+import type { TaskStatus } from 'warcraft-core';
+import { fetchSharedDispatchData, type TaskDispatchServices } from './task-dispatch.js';
+
+// ============================================================================
+// Test helpers
+// ============================================================================
+
+function createMockServices(
+  tasks: Array<{
+    folder: string;
+    name: string;
+    status: string;
+    summary?: string;
+    learnings?: string[];
+  }>,
+): TaskDispatchServices {
+  // Build a lookup of raw statuses indexed by folder
+  const statusMap = new Map<string, TaskStatus>();
+  for (const t of tasks) {
+    statusMap.set(t.folder, {
+      status: t.status as TaskStatus['status'],
+      origin: 'plan' as const,
+      summary: t.summary,
+      learnings: t.learnings,
+    });
+  }
+
+  return {
+    planService: {
+      read: () => ({ content: '# Plan', status: 'approved' as const, comments: [] }),
+    },
+    taskService: {
+      list: () =>
+        tasks.map((t) => ({
+          folder: t.folder,
+          name: t.name,
+          status: t.status as TaskStatus['status'],
+          origin: 'plan' as const,
+          planTitle: t.name,
+          summary: t.summary,
+        })),
+      getRawStatus: (_feature: string, folder: string) => statusMap.get(folder) ?? null,
+    } as unknown as TaskDispatchServices['taskService'],
+    contextService: {
+      list: () => [],
+    },
+    verificationModel: 'tdd',
+  };
+}
+
+// ============================================================================
+// fetchSharedDispatchData - learnings for done tasks
+// ============================================================================
+
+describe('fetchSharedDispatchData learnings', () => {
+  it('includes learnings from done tasks', () => {
+    const services = createMockServices([
+      {
+        folder: '01-setup',
+        name: 'Setup',
+        status: 'done',
+        summary: 'Set up the project.',
+        learnings: ['Use bun, not npm', 'Tests live next to source files'],
+      },
+    ]);
+
+    const data = fetchSharedDispatchData('test-feature', services);
+
+    expect(data.rawPreviousTasks).toHaveLength(1);
+    expect(data.rawPreviousTasks[0].name).toBe('01-setup');
+    expect(data.rawPreviousTasks[0].learnings).toEqual(['Use bun, not npm', 'Tests live next to source files']);
+  });
+
+  it('excludes learnings from partial tasks', () => {
+    const services = createMockServices([
+      {
+        folder: '01-partial',
+        name: 'Partial Task',
+        status: 'partial',
+        summary: 'Got halfway.',
+        learnings: ['Should not appear'],
+      },
+    ]);
+
+    const data = fetchSharedDispatchData('test-feature', services);
+
+    // partial tasks should not be in rawPreviousTasks at all
+    expect(data.rawPreviousTasks).toHaveLength(0);
+  });
+
+  it('excludes learnings from blocked tasks', () => {
+    const services = createMockServices([
+      {
+        folder: '01-blocked',
+        name: 'Blocked Task',
+        status: 'blocked',
+        summary: 'Blocked on something.',
+        learnings: ['Should not appear'],
+      },
+    ]);
+
+    const data = fetchSharedDispatchData('test-feature', services);
+
+    expect(data.rawPreviousTasks).toHaveLength(0);
+  });
+
+  it('excludes learnings from failed tasks', () => {
+    const services = createMockServices([
+      {
+        folder: '01-failed',
+        name: 'Failed Task',
+        status: 'failed',
+        summary: 'Failed hard.',
+        learnings: ['Should not appear'],
+      },
+    ]);
+
+    const data = fetchSharedDispatchData('test-feature', services);
+
+    expect(data.rawPreviousTasks).toHaveLength(0);
+  });
+
+  it('handles done tasks with empty learnings array', () => {
+    const services = createMockServices([
+      {
+        folder: '01-empty',
+        name: 'Empty Learnings',
+        status: 'done',
+        summary: 'Completed task.',
+        learnings: [],
+      },
+    ]);
+
+    const data = fetchSharedDispatchData('test-feature', services);
+
+    expect(data.rawPreviousTasks).toHaveLength(1);
+    expect(data.rawPreviousTasks[0].learnings).toBeUndefined();
+  });
+
+  it('handles done tasks with no learnings (undefined)', () => {
+    const services = createMockServices([
+      {
+        folder: '01-none',
+        name: 'No Learnings',
+        status: 'done',
+        summary: 'Completed task.',
+      },
+    ]);
+
+    const data = fetchSharedDispatchData('test-feature', services);
+
+    expect(data.rawPreviousTasks).toHaveLength(1);
+    expect(data.rawPreviousTasks[0].learnings).toBeUndefined();
+  });
+
+  it('folds learnings into summary for budget-aware rendering', () => {
+    const services = createMockServices([
+      {
+        folder: '01-setup',
+        name: 'Setup',
+        status: 'done',
+        summary: 'Set up the project.',
+        learnings: ['Use bun, not npm', 'ESM requires .js extensions'],
+      },
+    ]);
+
+    const data = fetchSharedDispatchData('test-feature', services);
+
+    // Summary should contain the original summary plus learnings bullets
+    expect(data.rawPreviousTasks[0].summary).toContain('Set up the project.');
+    expect(data.rawPreviousTasks[0].summary).toContain('Use bun, not npm');
+    expect(data.rawPreviousTasks[0].summary).toContain('ESM requires .js extensions');
+  });
+
+  it('preserves summary unchanged when no learnings exist', () => {
+    const services = createMockServices([
+      {
+        folder: '01-plain',
+        name: 'Plain Task',
+        status: 'done',
+        summary: 'Just a plain task.',
+      },
+    ]);
+
+    const data = fetchSharedDispatchData('test-feature', services);
+
+    expect(data.rawPreviousTasks[0].summary).toBe('Just a plain task.');
+  });
+});

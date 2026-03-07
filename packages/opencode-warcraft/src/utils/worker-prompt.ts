@@ -11,6 +11,8 @@ export interface WorkerContextFile {
 export interface CompletedTask {
   name: string;
   summary: string;
+  /** Learnings surfaced by the worker upon task completion (done tasks only). */
+  learnings?: string[];
 }
 
 export interface ContinueFromBlocked {
