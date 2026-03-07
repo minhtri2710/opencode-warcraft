@@ -35,7 +35,7 @@ export interface SharedDispatchData {
   planContent: string | null;
   allTasks: Array<{ folder: string; name: string; planTitle?: string }>;
   rawContextFiles: Array<{ name: string; content: string }>;
-  rawPreviousTasks: Array<{ name: string; summary: string }>;
+  rawPreviousTasks: Array<{ name: string; summary: string; learnings?: string[] }>;
 }
 
 export interface TaskDispatchPrep {
@@ -66,7 +66,20 @@ export function fetchSharedDispatchData(feature: string, services: TaskDispatchS
 
   const rawPreviousTasks = allTasks
     .filter((t: { status: string; summary?: string }) => t.status === 'done' && t.summary)
-    .map((t: { folder: string; summary?: string }) => ({ name: t.folder, summary: t.summary! }));
+    .map((t: { folder: string; summary?: string }) => {
+      // Extract learnings from raw status for done tasks
+      const rawStatus = services.taskService.getRawStatus(feature, t.folder);
+      const learnings = rawStatus?.learnings?.length ? rawStatus.learnings : undefined;
+
+      // Fold learnings into summary for budget-aware rendering
+      let summary = t.summary!;
+      if (learnings) {
+        const bullets = learnings.map((l) => `- ${l}`).join('\n');
+        summary = `${summary}\n\nLearnings:\n${bullets}`;
+      }
+
+      return { name: t.folder, summary, learnings };
+    });
 
   return {
     planContent: planResult?.content ?? null,
@@ -111,9 +124,18 @@ export function prepareTaskDispatch(
     content: f.content,
   }));
 
+  // Build a lookup for learnings by task name (from pre-budget data)
+  const learningsMap = new Map<string, string[]>();
+  for (const t of data.rawPreviousTasks) {
+    if (t.learnings) {
+      learningsMap.set(t.name, t.learnings);
+    }
+  }
+
   const previousTasks: CompletedTask[] = taskBudgetResult.tasks.map((t: { name: string; summary: string }) => ({
     name: t.name,
     summary: t.summary,
+    ...(learningsMap.has(t.name) ? { learnings: learningsMap.get(t.name) } : {}),
   }));
 
   const truncationEvents: TruncationEvent[] = [

@@ -243,6 +243,43 @@ describe('buildWorkerPrompt verificationModel', () => {
 // Edge cases
 // ============================================================================
 
+// ============================================================================
+// Learnings on CompletedTask
+// ============================================================================
+
+describe('buildWorkerPrompt learnings support', () => {
+  it('accepts CompletedTask with learnings field', () => {
+    const params = createTestParams({
+      previousTasks: [
+        { name: '00-setup', summary: 'Initial setup done.', learnings: ['Use bun, not npm', 'ESM needs .js ext'] },
+      ],
+    });
+    // Should not throw
+    const prompt = buildWorkerPrompt(params);
+    expect(prompt).toContain('## Your Mission');
+  });
+
+  it('accepts CompletedTask without learnings field', () => {
+    const params = createTestParams({
+      previousTasks: [{ name: '00-setup', summary: 'Initial setup done.' }],
+    });
+    const prompt = buildWorkerPrompt(params);
+    expect(prompt).toContain('## Your Mission');
+  });
+
+  it('accepts CompletedTask with empty learnings array', () => {
+    const params = createTestParams({
+      previousTasks: [{ name: '00-setup', summary: 'Initial setup done.', learnings: [] }],
+    });
+    const prompt = buildWorkerPrompt(params);
+    expect(prompt).toContain('## Your Mission');
+  });
+});
+
+// ============================================================================
+// Edge cases
+// ============================================================================
+
 describe('buildWorkerPrompt edge cases', () => {
   it('handles empty context files gracefully', () => {
     const params = createTestParams({
