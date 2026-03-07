@@ -25,6 +25,17 @@ const defaultExecAsync = promisify(execCb) as ExecAsyncFn;
 
 type CompletionGate = 'build' | 'test' | 'lint';
 
+/**
+ * Sanitise a `learnings` value so that malformed payloads
+ * (non-array, non-string elements, empty / whitespace-only strings)
+ * are silently discarded rather than persisted or causing a crash.
+ */
+function sanitizeLearnings(raw: unknown): string[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const valid = raw.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+  return valid.length > 0 ? valid : undefined;
+}
+
 export interface WorktreeToolsDependencies {
   featureService: FeatureService;
   planService: PlanService;
@@ -310,7 +321,15 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
           .optional()
           .describe('Learnings discovered during this task (persisted for future workers)'),
       },
-      async execute({ task, summary, status = 'completed', blocker, feature: explicitFeature, learnings }) {
+      async execute({
+        task,
+        summary,
+        status = 'completed',
+        blocker,
+        feature: explicitFeature,
+        learnings: rawLearnings,
+      }) {
+        const learnings = sanitizeLearnings(rawLearnings);
         let missingGatesForWarn: string[] = [];
         validateTaskInput(task);
         const resolution = resolveFeatureInput(resolveFeature, explicitFeature);

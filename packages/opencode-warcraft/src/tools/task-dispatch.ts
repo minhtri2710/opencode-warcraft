@@ -51,6 +51,17 @@ export interface TaskDispatchPrep {
 }
 
 /**
+ * Sanitise a persisted `learnings` value so that malformed data
+ * (non-array, non-string elements, empty / whitespace-only strings)
+ * never propagates downstream.  Returns `undefined` when nothing valid remains.
+ */
+function sanitizeLearnings(raw: unknown): string[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const valid = raw.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+  return valid.length > 0 ? valid : undefined;
+}
+
+/**
  * Fetch plan, tasks, and context for a feature.
  * Call once and pass the result to multiple `prepareTaskDispatch` calls
  * when dispatching a batch of tasks.
@@ -67,9 +78,9 @@ export function fetchSharedDispatchData(feature: string, services: TaskDispatchS
   const rawPreviousTasks = allTasks
     .filter((t: { status: string; summary?: string }) => t.status === 'done' && t.summary)
     .map((t: { folder: string; summary?: string }) => {
-      // Extract learnings from raw status for done tasks
+      // Extract learnings from raw status for done tasks, with runtime sanitization
       const rawStatus = services.taskService.getRawStatus(feature, t.folder);
-      const learnings = rawStatus?.learnings?.length ? rawStatus.learnings : undefined;
+      const learnings = sanitizeLearnings(rawStatus?.learnings);
 
       // Fold learnings into summary for budget-aware rendering
       let summary = t.summary!;
