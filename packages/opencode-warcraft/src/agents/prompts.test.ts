@@ -228,6 +228,29 @@ describe('Mekkatorque (Worker/Coder) prompt', () => {
   it('contains intent verbalization before coding', () => {
     expect(MEKKATORQUE_PROMPT).toContain('state in one sentence what you will do');
   });
+
+  it('includes optional learnings guidance in report section', () => {
+    const prompt = MEKKATORQUE_PROMPT;
+    // The report section should mention learnings near warcraft_worktree_commit
+    const reportSection = prompt.slice(prompt.indexOf('### 5. Report'));
+    expect(reportSection).toContain('learnings');
+  });
+
+  it('makes learnings clearly optional and non-mandatory', () => {
+    const prompt = MEKKATORQUE_PROMPT;
+    const reportSection = prompt.slice(prompt.indexOf('### 5. Report'));
+    // The learnings guidance should indicate optionality
+    expect(reportSection).toMatch(/learnings.*optional|optional.*learnings/i);
+  });
+
+  it('includes learnings guidance in both tdd and best-effort modes', () => {
+    const tddPrompt = buildMekkatorquePrompt({ verificationModel: 'tdd' });
+    const bestEffortPrompt = buildMekkatorquePrompt({ verificationModel: 'best-effort' });
+    const tddReport = tddPrompt.slice(tddPrompt.indexOf('### 5. Report'));
+    const bestEffortReport = bestEffortPrompt.slice(bestEffortPrompt.indexOf('### 5. Report'));
+    expect(tddReport).toContain('learnings');
+    expect(bestEffortReport).toContain('learnings');
+  });
 });
 
 describe('Brann (Explorer/Researcher) prompt', () => {
