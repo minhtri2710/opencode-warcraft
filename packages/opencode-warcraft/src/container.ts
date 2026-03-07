@@ -295,6 +295,7 @@ To unblock: Remove ${blockedPath}`;
     worktreeService,
     checkBlocked,
     bvTriageService,
+    projectRoot: directory,
   });
   const skillTools = new SkillTools({ filteredSkills });
 
