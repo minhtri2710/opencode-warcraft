@@ -9,6 +9,7 @@ import type {
   TaskService,
   WorktreeService,
 } from 'warcraft-core';
+import { computeTrustMetrics } from 'warcraft-core';
 import type { BlockedResult } from '../types.js';
 import { toolError, toolSuccess } from '../types.js';
 import { resolveFeatureInput, validatePathSegment } from './tool-input.js';
@@ -22,6 +23,7 @@ export interface ContextToolsDependencies {
   worktreeService: WorktreeService;
   checkBlocked: (feature: string) => BlockedResult;
   bvTriageService: BvTriageService;
+  projectRoot: string;
 }
 
 /**
@@ -60,8 +62,16 @@ export class ContextTools {
    */
   getStatusTool(resolveFeature: (name?: string) => string | null): ToolDefinition {
     // Capture deps in closure to avoid 'this' binding issues
-    const { featureService, planService, taskService, contextService, worktreeService, checkBlocked, bvTriageService } =
-      this.deps;
+    const {
+      featureService,
+      planService,
+      taskService,
+      contextService,
+      worktreeService,
+      checkBlocked,
+      bvTriageService,
+      projectRoot,
+    } = this.deps;
     return tool({
       description:
         'Get comprehensive status of a feature including plan, tasks, and context. Returns JSON with all relevant state for resuming work.',
@@ -216,6 +226,8 @@ export class ContextTools {
                 ? 'locked'
                 : 'none';
 
+        const trustMetrics = computeTrustMetrics(projectRoot);
+
         return toolSuccess({
           feature: {
             name: featureName,
@@ -262,6 +274,12 @@ export class ContextTools {
             files: contextSummary,
           },
           worktreeHygiene: staleWarning,
+          health: {
+            reopenRate: trustMetrics.reopenRate,
+            totalCompleted: trustMetrics.totalCompleted,
+            reopenCount: trustMetrics.reopenCount,
+            blockedMttrMs: trustMetrics.blockedMttrMs,
+          },
           nextAction: getNextAction(planStatus, tasksSummary, runnable),
         });
       },
