@@ -144,6 +144,7 @@ warcraft_worktree_commit({
   task: "current-task",
   summary: "Implemented X. Tests pass. build: exit 0, test: exit 0, lint: exit 0",
   status: "completed",
+  learnings: ["API X requires Y setup first", "Pattern Z is preferred here"],  // optional — share reusable insights for future tasks
   verification: {
     build: { cmd: "bun run build", exitCode: 0 },
     test: { cmd: "bun test", exitCode: 0 },
