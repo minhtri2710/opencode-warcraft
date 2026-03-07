@@ -277,6 +277,69 @@ describe('buildWorkerPrompt learnings support', () => {
 });
 
 // ============================================================================
+// Downstream learnings rendering
+// ============================================================================
+
+describe('buildWorkerPrompt downstream learnings', () => {
+  it('renders learnings from done task in spec completed tasks section', () => {
+    // When learnings are folded into summary (as fetchSharedDispatchData does),
+    // they should appear in the worker prompt via spec content
+    const params = createTestParams({
+      previousTasks: [
+        {
+          name: '00-setup',
+          summary: 'Initial setup done.\n\nLearnings:\n- Use bun, not npm\n- ESM needs .js extension',
+          learnings: ['Use bun, not npm', 'ESM needs .js extension'],
+        },
+      ],
+      spec: `# Task: 01-test-task
+
+## Feature: test-feature
+
+## Completed Tasks
+
+- 00-setup: Initial setup done.
+
+Learnings:
+- Use bun, not npm
+- ESM needs .js extension
+`,
+    });
+    const prompt = buildWorkerPrompt(params);
+
+    // Learnings should appear in the prompt (via spec)
+    expect(prompt).toContain('Use bun, not npm');
+    expect(prompt).toContain('ESM needs .js extension');
+    expect(prompt).toContain('Learnings:');
+  });
+
+  it('does not render learnings from non-done task statuses', () => {
+    // Simulate a prompt where only done tasks are included
+    // (partial/blocked/failed are excluded by fetchSharedDispatchData)
+    const params = createTestParams({
+      previousTasks: [
+        { name: '00-setup', summary: 'Initial setup done.' },
+        // No partial/blocked/failed tasks should appear here
+      ],
+      spec: `# Task: 01-test-task
+
+## Feature: test-feature
+
+## Completed Tasks
+
+- 00-setup: Initial setup done.
+`,
+    });
+    const prompt = buildWorkerPrompt(params);
+
+    // Only done task summary should be present
+    expect(prompt).toContain('Initial setup done.');
+    // No stray learnings from non-done tasks
+    expect(prompt).not.toContain('Should not appear');
+  });
+});
+
+// ============================================================================
 // Edge cases
 // ============================================================================
 

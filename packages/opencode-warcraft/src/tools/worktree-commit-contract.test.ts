@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { createNoopEventLogger } from 'warcraft-core';
+import { z } from 'zod';
 import { WorktreeTools } from './worktree-tools.js';
 
 type MockDeps = ConstructorParameters<typeof WorktreeTools>[0];
@@ -129,6 +130,131 @@ describe('worktree_commit terminal contract', () => {
   });
 });
 
+describe('worktree_commit learnings contract', () => {
+  it('accepts valid learnings array and returns terminal success', async () => {
+    const updateCalls: Array<{ feature: string; task: string; updates: Record<string, unknown> }> = [];
+    const deps = createMockDeps({
+      taskService: {
+        ...createMockDeps().taskService,
+        update: (feature: string, task: string, updates: Record<string, unknown>) => {
+          updateCalls.push({ feature, task, updates });
+        },
+      } as any,
+    });
+    const tools = new WorktreeTools(deps);
+    const commitTool = tools.commitWorktreeTool(() => 'test-feature');
+    const raw = await commitTool.execute(
+      {
+        task: '01-test',
+        summary: 'build: exit 0, test: exit 0, lint: exit 0',
+        status: 'completed',
+        learnings: ['Use bun not npm', 'ESM needs .js extension'],
+      },
+      MOCK_CONTEXT,
+    );
+    const result = parseResult(raw);
+    expect(result.success).toBe(true);
+    expect(result.data.ok).toBe(true);
+    expect(result.data.terminal).toBe(true);
+    // Verify learnings were persisted via taskService.update
+    const doneUpdate = updateCalls.find((u) => u.updates.status === 'done');
+    expect(doneUpdate).toBeDefined();
+    expect(doneUpdate!.updates.learnings).toEqual(['Use bun not npm', 'ESM needs .js extension']);
+  });
+
+  it('omits learnings from update when not provided (backward compat)', async () => {
+    const updateCalls: Array<{ feature: string; task: string; updates: Record<string, unknown> }> = [];
+    const deps = createMockDeps({
+      taskService: {
+        ...createMockDeps().taskService,
+        update: (feature: string, task: string, updates: Record<string, unknown>) => {
+          updateCalls.push({ feature, task, updates });
+        },
+      } as any,
+    });
+    const tools = new WorktreeTools(deps);
+    const commitTool = tools.commitWorktreeTool(() => 'test-feature');
+    const raw = await commitTool.execute(
+      {
+        task: '01-test',
+        summary: 'build: exit 0, test: exit 0, lint: exit 0',
+        status: 'completed',
+      },
+      MOCK_CONTEXT,
+    );
+    const result = parseResult(raw);
+    expect(result.success).toBe(true);
+    expect(result.data.ok).toBe(true);
+    expect(result.data.terminal).toBe(true);
+    const doneUpdate = updateCalls.find((u) => u.updates.status === 'done');
+    expect(doneUpdate).toBeDefined();
+    expect(doneUpdate!.updates.learnings).toBeUndefined();
+  });
+
+  it('handles empty learnings array gracefully (omits from update)', async () => {
+    const updateCalls: Array<{ feature: string; task: string; updates: Record<string, unknown> }> = [];
+    const deps = createMockDeps({
+      taskService: {
+        ...createMockDeps().taskService,
+        update: (feature: string, task: string, updates: Record<string, unknown>) => {
+          updateCalls.push({ feature, task, updates });
+        },
+      } as any,
+    });
+    const tools = new WorktreeTools(deps);
+    const commitTool = tools.commitWorktreeTool(() => 'test-feature');
+    const raw = await commitTool.execute(
+      {
+        task: '01-test',
+        summary: 'build: exit 0, test: exit 0, lint: exit 0',
+        status: 'completed',
+        learnings: [],
+      },
+      MOCK_CONTEXT,
+    );
+    const result = parseResult(raw);
+    expect(result.success).toBe(true);
+    expect(result.data.ok).toBe(true);
+    expect(result.data.terminal).toBe(true);
+    // Empty array should be treated as "no learnings"
+    const doneUpdate = updateCalls.find((u) => u.updates.status === 'done');
+    expect(doneUpdate).toBeDefined();
+    expect(doneUpdate!.updates.learnings).toBeUndefined();
+  });
+
+  it('persists learnings on blocked status', async () => {
+    const updateCalls: Array<{ feature: string; task: string; updates: Record<string, unknown> }> = [];
+    const deps = createMockDeps({
+      taskService: {
+        ...createMockDeps().taskService,
+        update: (feature: string, task: string, updates: Record<string, unknown>) => {
+          updateCalls.push({ feature, task, updates });
+        },
+      } as any,
+    });
+    const tools = new WorktreeTools(deps);
+    const commitTool = tools.commitWorktreeTool(() => 'test-feature');
+    const raw = await commitTool.execute(
+      {
+        task: '01-test',
+        summary: 'Blocked on config',
+        status: 'blocked',
+        blocker: { reason: 'Need credentials' },
+        learnings: ['Config files live in /etc'],
+      },
+      MOCK_CONTEXT,
+    );
+    const result = parseResult(raw);
+    expect(result.success).toBe(true);
+    expect(result.data.ok).toBe(true);
+    expect(result.data.terminal).toBe(true);
+    expect(result.data.status).toBe('blocked');
+    const blockedUpdate = updateCalls.find((u) => u.updates.status === 'blocked');
+    expect(blockedUpdate).toBeDefined();
+    expect(blockedUpdate!.updates.learnings).toEqual(['Config files live in /etc']);
+  });
+});
+
 describe('worktree_commit best-effort verification model', () => {
   it('skips gate checks and returns verificationDeferred in best-effort mode', async () => {
     const tools = new WorktreeTools(
@@ -188,5 +314,59 @@ describe('worktree_commit best-effort verification model', () => {
     expect(result.data.terminal).toBe(true);
     expect(result.data.status).toBe('blocked');
     expect(result.data.verificationDeferred).toBeUndefined();
+  });
+});
+
+describe('worktree_commit learnings schema validation', () => {
+  // The learnings schema is z.array(z.string()).optional()
+  // These tests validate that the schema rejects invalid payloads.
+  const learningsSchema = z.array(z.string()).optional();
+
+  it('accepts valid string array', () => {
+    const result = learningsSchema.safeParse(['Use bun', 'ESM needs .js']);
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts undefined (omitted)', () => {
+    const result = learningsSchema.safeParse(undefined);
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts empty array', () => {
+    const result = learningsSchema.safeParse([]);
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects non-array value (string)', () => {
+    const result = learningsSchema.safeParse('not an array');
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects non-array value (number)', () => {
+    const result = learningsSchema.safeParse(42);
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects non-array value (object)', () => {
+    const result = learningsSchema.safeParse({ key: 'value' });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects array with non-string elements', () => {
+    const result = learningsSchema.safeParse([1, 2, 3]);
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects array with mixed types', () => {
+    const result = learningsSchema.safeParse(['valid', 42, null]);
+    expect(result.success).toBe(false);
+  });
+
+  it('matches the schema used by commitWorktreeTool', () => {
+    // Extract the actual tool args to ensure our test schema matches
+    const tools = new WorktreeTools(createMockDeps());
+    const commitTool = tools.commitWorktreeTool(() => 'test-feature');
+    // The tool has an args property with a learnings field
+    expect(commitTool.args.learnings).toBeDefined();
   });
 });

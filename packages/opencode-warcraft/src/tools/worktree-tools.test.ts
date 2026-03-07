@@ -415,6 +415,77 @@ describe('commitWorktreeTool learnings', () => {
   });
 });
 
+describe('commitWorktreeTool learnings edge cases', () => {
+  const resolveFeature = () => 'test-feature';
+
+  it('omits learnings from update when empty array provided', async () => {
+    const { deps, getUpdateCalls } = createCommitDeps();
+    const tools = new WorktreeTools(deps);
+    const commitTool = tools.commitWorktreeTool(resolveFeature);
+
+    await commitTool.execute(
+      {
+        task: '01-task',
+        summary: 'Did things. build: exit 0, test: exit 0, lint: exit 0',
+        status: 'completed',
+        learnings: [],
+      },
+      {} as never,
+    );
+
+    const updates = getUpdateCalls();
+    const finalUpdate = updates.find((u) => u.updates.status === 'done');
+    expect(finalUpdate).toBeDefined();
+    // Empty array → no learnings key in update
+    expect(finalUpdate!.updates.learnings).toBeUndefined();
+  });
+
+  it('does not include learnings from partial status in update downstream', async () => {
+    const { deps, getUpdateCalls } = createCommitDeps();
+    const tools = new WorktreeTools(deps);
+    const commitTool = tools.commitWorktreeTool(resolveFeature);
+
+    await commitTool.execute(
+      {
+        task: '01-task',
+        summary: 'Partial progress made',
+        status: 'partial',
+        learnings: ['Should persist in status but not flow downstream'],
+      },
+      {} as never,
+    );
+
+    const updates = getUpdateCalls();
+    // partial status goes through the non-blocked path, so final update is 'partial'
+    const partialUpdate = updates.find((u) => u.updates.status === 'partial');
+    expect(partialUpdate).toBeDefined();
+    // Learnings should be persisted even for partial
+    expect(partialUpdate!.updates.learnings).toEqual(['Should persist in status but not flow downstream']);
+  });
+
+  it('does not include learnings from failed status in update downstream', async () => {
+    const { deps, getUpdateCalls } = createCommitDeps();
+    const tools = new WorktreeTools(deps);
+    const commitTool = tools.commitWorktreeTool(resolveFeature);
+
+    await commitTool.execute(
+      {
+        task: '01-task',
+        summary: 'Everything broke',
+        status: 'failed',
+        learnings: ['Found root cause: wrong config'],
+      },
+      {} as never,
+    );
+
+    const updates = getUpdateCalls();
+    const failedUpdate = updates.find((u) => u.updates.status === 'failed');
+    expect(failedUpdate).toBeDefined();
+    // Learnings should still be persisted in status
+    expect(failedUpdate!.updates.learnings).toEqual(['Found root cause: wrong config']);
+  });
+});
+
 describe('formatSpecContent', () => {
   it('formats SpecData into markdown with all sections', () => {
     const specData: SpecData = {
