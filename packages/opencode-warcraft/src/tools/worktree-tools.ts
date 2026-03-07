@@ -305,8 +305,12 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
           .optional()
           .describe('Blocker info when status is blocked'),
         feature: tool.schema.string().optional().describe('Feature name (defaults to detection or single feature)'),
+        learnings: tool.schema
+          .array(tool.schema.string())
+          .optional()
+          .describe('Learnings discovered during this task (persisted for future workers)'),
       },
-      async execute({ task, summary, status = 'completed', blocker, feature: explicitFeature }) {
+      async execute({ task, summary, status = 'completed', blocker, feature: explicitFeature, learnings }) {
         let missingGatesForWarn: string[] = [];
         validateTaskInput(task);
         const resolution = resolveFeatureInput(resolveFeature, explicitFeature);
@@ -348,6 +352,7 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
             status: 'blocked',
             summary,
             blocker,
+            ...(learnings && learnings.length > 0 ? { learnings } : {}),
           });
 
           eventLogger.emit({
@@ -434,6 +439,7 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
         taskService.update(feature, task, {
           status: validateTaskStatus(finalStatus),
           summary,
+          ...(learnings && learnings.length > 0 ? { learnings } : {}),
         });
 
         // Emit commit event for trust metrics tracking
