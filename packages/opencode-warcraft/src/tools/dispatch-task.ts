@@ -52,6 +52,8 @@ export interface DispatchOneTaskServices {
   checkBlocked: (feature: string) => BlockedResult;
   checkDependencies: (feature: string, taskFolder: string) => { allowed: boolean; error?: string };
   verificationModel: 'tdd' | 'best-effort';
+  /** Feature-level reopen rate from trust metrics (0.0–1.0). Defaults to 0. */
+  featureReopenRate?: number;
   /** Directory for per-task dispatch locks. If omitted, locks are skipped. */
   lockDir?: string;
 }
@@ -256,6 +258,7 @@ export async function dispatchOneTask(
         taskService: services.taskService as TaskService,
         contextService: services.contextService,
         verificationModel: services.verificationModel,
+        featureReopenRate: services.featureReopenRate,
       },
       shared,
     );

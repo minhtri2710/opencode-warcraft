@@ -7,6 +7,7 @@ import {
   buildEffectiveDependencies,
   type ConfigService,
   ContextService,
+  computeTrustMetrics,
   createEventLogger,
   createStores,
   createWorktreeService,
@@ -241,6 +242,16 @@ To unblock: Remove ${blockedPath}`;
 
   const lockDir = path.join(directory, '.beads', '.locks');
 
+  /** Lazy getter for feature reopen rate from trust metrics. Computed at dispatch time, not container creation. */
+  const getFeatureReopenRate = (): number => {
+    try {
+      const metrics = computeTrustMetrics(directory);
+      return metrics.reopenRate;
+    } catch {
+      return 0;
+    }
+  };
+
   const featureTools = new FeatureTools({ featureService });
   const planTools = new PlanTools({
     featureService,
@@ -271,6 +282,7 @@ To unblock: Remove ${blockedPath}`;
     workflowGatesMode: configService.getWorkflowGatesMode(),
     verificationModel: configService.getVerificationModel(),
     structuredVerificationMode: configService.getStructuredVerificationMode(),
+    getFeatureReopenRate,
     eventLogger,
     lockDir,
   });
@@ -284,6 +296,7 @@ To unblock: Remove ${blockedPath}`;
     checkDependencies,
     parallelExecution,
     verificationModel: configService.getVerificationModel(),
+    getFeatureReopenRate,
     lockDir,
   });
   const contextTools = new ContextTools({
