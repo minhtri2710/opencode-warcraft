@@ -7,6 +7,7 @@ import {
   getTaskDispatchLockPath,
   releaseAllDispatchLocks,
 } from './dispatch-task.js';
+import { fetchSharedDispatchData } from './task-dispatch.js';
 
 // ============================================================================
 // Test helpers
@@ -554,6 +555,227 @@ describe('dispatch-task', () => {
       expect(result.success).toBe(false);
       expect(typeof result.error).toBe('string');
       expect(result.taskToolCall).toBeUndefined();
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // Complexity classification wired into dispatch prompt
+  // --------------------------------------------------------------------------
+
+  describe('complexity classification in dispatch prompt', () => {
+    it('includes complex task guidance when spec is large (specLength > 3000)', async () => {
+      const longPlanSection = 'X'.repeat(3500);
+      const services = createMockServices({
+        taskService: {
+          ...createMockServices().taskService,
+          buildSpecData: () => ({
+            featureName: 'test-feature',
+            task: { folder: '01-test-task', name: 'Test Task', order: 1 },
+            dependsOn: [],
+            allTasks: [{ folder: '01-test-task', name: 'Test Task', order: 1 }],
+            planSection: longPlanSection,
+            contextFiles: [],
+            completedTasks: [],
+          }),
+        },
+      });
+
+      const result = await dispatchOneTask(createInput(), services);
+
+      expect(result.success).toBe(true);
+      expect(result.taskToolCall?.prompt).toContain('Complex Task Guidance');
+    });
+
+    it('includes compact guidance for trivial tasks (small spec, few files, no deps, no retries)', async () => {
+      // Trivial: specLength < 500, fileCount <= 2, dependencyCount === 0, previousAttempts === 0
+      const tinySpec = '### 1. Test Task\n\nDo something small.';
+      const services = createMockServices({
+        planService: {
+          read: () => ({ content: tinySpec, status: 'approved' as const, comments: [] }),
+        },
+        taskService: {
+          ...createMockServices().taskService,
+          getRawStatus: () => ({
+            status: 'pending' as const,
+            origin: 'plan' as const,
+            dependsOn: [],
+          }),
+        },
+      });
+
+      const result = await dispatchOneTask(createInput(), services);
+
+      expect(result.success).toBe(true);
+      // Trivial mode should contain compact execution guidance
+      expect(result.taskToolCall?.prompt).toContain('Read spec');
+    });
+
+    it('does NOT include complex guidance for standard tasks', async () => {
+      // Standard: moderate specLength, moderate signals — default mock
+      const services = createMockServices();
+
+      const result = await dispatchOneTask(createInput(), services);
+
+      expect(result.success).toBe(true);
+      expect(result.taskToolCall?.prompt).not.toContain('Complex Task Guidance');
+    });
+
+    it('classifies as complex when previousAttempts >= 2', async () => {
+      const services = createMockServices({
+        taskService: {
+          ...createMockServices().taskService,
+          getRawStatus: () => ({
+            status: 'pending' as const,
+            origin: 'plan' as const,
+            dependsOn: [],
+            workerSession: { attempt: 2 },
+          }),
+        },
+      });
+
+      const result = await dispatchOneTask(createInput(), services);
+
+      expect(result.success).toBe(true);
+      expect(result.taskToolCall?.prompt).toContain('Complex Task Guidance');
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // Retry / failure context forwarding
+  // --------------------------------------------------------------------------
+
+  describe('retry context forwarding', () => {
+    it('includes previous attempt context when previousAttempts > 0 and summary exists', async () => {
+      const services = createMockServices({
+        taskService: {
+          ...createMockServices().taskService,
+          getRawStatus: () => ({
+            status: 'pending' as const,
+            origin: 'plan' as const,
+            dependsOn: [],
+            workerSession: { attempt: 1 },
+            summary: 'Failed because config was missing',
+          }),
+        },
+      });
+
+      const result = await dispatchOneTask(createInput(), services);
+
+      expect(result.success).toBe(true);
+      expect(result.taskToolCall?.prompt).toContain('Previous Attempt Context');
+      expect(result.taskToolCall?.prompt).toContain('Failed because config was missing');
+    });
+
+    it('does NOT include previous attempt context when previousAttempts is 0', async () => {
+      const services = createMockServices();
+
+      const result = await dispatchOneTask(createInput(), services);
+
+      expect(result.success).toBe(true);
+      expect(result.taskToolCall?.prompt).not.toContain('Previous Attempt Context');
+    });
+
+    it('does NOT include previous attempt context when summary is missing', async () => {
+      const services = createMockServices({
+        taskService: {
+          ...createMockServices().taskService,
+          getRawStatus: () => ({
+            status: 'pending' as const,
+            origin: 'plan' as const,
+            dependsOn: [],
+            workerSession: { attempt: 1 },
+            // no summary
+          }),
+        },
+      });
+
+      const result = await dispatchOneTask(createInput(), services);
+
+      expect(result.success).toBe(true);
+      expect(result.taskToolCall?.prompt).not.toContain('Previous Attempt Context');
+    });
+  });
+
+  // --------------------------------------------------------------------------
+  // Parity between batch (shared data) and single-task dispatch
+  // --------------------------------------------------------------------------
+
+  describe('batch vs single-task parity', () => {
+    it('produces same complexity classification via shared and non-shared dispatch', async () => {
+      // Use large planSection to trigger complex classification (specLength > 3000)
+      const longPlanSection = 'Y'.repeat(3500);
+      const services = createMockServices({
+        taskService: {
+          ...createMockServices().taskService,
+          buildSpecData: () => ({
+            featureName: 'test-feature',
+            task: { folder: '01-test-task', name: 'Test Task', order: 1 },
+            dependsOn: [],
+            allTasks: [{ folder: '01-test-task', name: 'Test Task', order: 1 }],
+            planSection: longPlanSection,
+            contextFiles: [],
+            completedTasks: [],
+          }),
+        },
+      });
+
+      // Single-task dispatch (no shared data)
+      const singleResult = await dispatchOneTask(createInput(), services);
+
+      // Batch-style dispatch (with shared data pre-fetched)
+      const shared = fetchSharedDispatchData('test-feature', {
+        planService: services.planService as any,
+        taskService: services.taskService as any,
+        contextService: services.contextService,
+        verificationModel: services.verificationModel,
+      });
+
+      // Release lock from single result so we can dispatch again
+      releaseAllDispatchLocks();
+
+      const batchResult = await dispatchOneTask(createInput(), services, shared);
+
+      expect(singleResult.success).toBe(true);
+      expect(batchResult.success).toBe(true);
+
+      // Both should include complex guidance
+      expect(singleResult.taskToolCall?.prompt).toContain('Complex Task Guidance');
+      expect(batchResult.taskToolCall?.prompt).toContain('Complex Task Guidance');
+    });
+
+    it('produces same retry context via shared and non-shared dispatch', async () => {
+      const services = createMockServices({
+        taskService: {
+          ...createMockServices().taskService,
+          getRawStatus: () => ({
+            status: 'pending' as const,
+            origin: 'plan' as const,
+            dependsOn: [],
+            workerSession: { attempt: 1 },
+            summary: 'Previous failure context',
+          }),
+        },
+      });
+
+      const singleResult = await dispatchOneTask(createInput(), services);
+
+      const shared = fetchSharedDispatchData('test-feature', {
+        planService: services.planService as any,
+        taskService: services.taskService as any,
+        contextService: services.contextService,
+        verificationModel: services.verificationModel,
+      });
+
+      releaseAllDispatchLocks();
+
+      const batchResult = await dispatchOneTask(createInput(), services, shared);
+
+      expect(singleResult.success).toBe(true);
+      expect(batchResult.success).toBe(true);
+
+      // Both should include retry context
+      expect(singleResult.taskToolCall?.prompt).toContain('Previous Attempt Context');
+      expect(batchResult.taskToolCall?.prompt).toContain('Previous Attempt Context');
     });
   });
 });

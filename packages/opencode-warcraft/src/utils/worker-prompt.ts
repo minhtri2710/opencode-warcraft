@@ -3,6 +3,8 @@
  * Builds context-rich prompts for worker agents with all Warcraft context.
  */
 
+import type { TaskComplexity } from './task-complexity.js';
+
 export interface WorkerContextFile {
   name: string;
   content: string;
@@ -33,6 +35,10 @@ export interface WorkerPromptParams {
   previousTasks?: CompletedTask[];
   continueFrom?: ContinueFromBlocked;
   verificationModel?: 'tdd' | 'best-effort';
+  /** Task complexity level for prompt mode selection. Defaults to 'standard'. */
+  complexity?: TaskComplexity;
+  /** Prior-attempt context injected when previousAttempts > 0. */
+  failureContext?: string;
 }
 
 /**
@@ -59,6 +65,8 @@ export function buildWorkerPrompt(params: WorkerPromptParams): string {
     spec,
     continueFrom,
     verificationModel = 'tdd',
+    complexity = 'standard',
+    failureContext,
   } = params;
 
   // Build continuation section if resuming from blocked
@@ -76,6 +84,36 @@ Continue from where the previous worker left off, incorporating the user's decis
 The worktree already contains the previous worker's progress.
 `
     : '';
+
+  // Build failure context block when prior attempts exist (FR-008)
+  const failureContextBlock = failureContext
+    ? `
+## Previous Attempt Context
+
+This task has been attempted before. Key context from the previous attempt:
+${failureContext}
+Avoid repeating the same approach if it led to the failure above.
+`
+    : '';
+
+  // Build complexity guidance block (FR-005, FR-007)
+  let complexityGuidance = '';
+  if (complexity === 'trivial') {
+    complexityGuidance = `
+## Execution Guidance
+
+Read spec → Implement → Verify → Commit. Follow references for patterns.
+`;
+  } else if (complexity === 'complex') {
+    complexityGuidance = `
+## Complex Task Guidance
+
+This is a complex task. Break implementation into smaller verified steps.
+- Verify each step compiles/passes before moving to the next.
+- Commit intermediate progress if blocked or if a logical milestone is reached.
+- Re-read the spec after each step to avoid drift.
+`;
+  }
 
   return `# Warcraft Worker Assignment
 
@@ -95,7 +133,7 @@ You are a worker agent executing a task in an isolated git worktree.
 \`${worktreePath}\`
 
 Do NOT modify files outside this directory.
-${continuationSection}
+${continuationSection}${failureContextBlock}${complexityGuidance}
 ---
 
 ## Your Mission
