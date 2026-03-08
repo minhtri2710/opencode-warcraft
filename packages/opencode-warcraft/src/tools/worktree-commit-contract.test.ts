@@ -11,9 +11,10 @@ function createMockDeps(overrides: Partial<MockDeps> = {}): MockDeps {
     planService: {} as any,
     taskService: {
       get: (_f: string, _t: string) => ({ status: 'in_progress', folder: '01-test', name: '01-test' }),
+      list: () => [{ status: 'in_progress', folder: '01-test', name: '01-test' }],
       update: () => {},
       writeReport: () => {},
-      getRawStatus: () => null,
+      getRawStatus: () => ({ baseCommit: 'base-sha' }),
       patchBackgroundFields: () => {},
     } as any,
     worktreeService: {
@@ -80,6 +81,87 @@ describe('worktree_commit terminal contract', () => {
     expect(result.data.status).toBe('completed');
   });
 
+  it('accepts canonical task folder names used by worktree commits', async () => {
+    const taskFolder = '01-build-complexity-classifier-and-tests';
+    const deps = createMockDeps({
+      taskService: {
+        ...createMockDeps().taskService,
+        get: (_feature: string, folder: string) =>
+          folder === taskFolder ? { status: 'in_progress', folder: taskFolder, name: taskFolder } : null,
+      } as any,
+    });
+    const tools = new WorktreeTools(deps);
+    const commitTool = tools.commitWorktreeTool(() => 'test-feature');
+    const raw = await commitTool.execute(
+      {
+        task: taskFolder,
+        summary: 'build: exit 0, test: exit 0, lint: exit 0',
+        status: 'completed',
+      },
+      MOCK_CONTEXT,
+    );
+    const result = parseResult(raw);
+    expect(result.success).toBe(true);
+    expect(result.data.ok).toBe(true);
+    expect(result.data.terminal).toBe(true);
+    expect(result.data.status).toBe('completed');
+  });
+
+  it('passes baseCommit from task status into worktreeService.getDiff', async () => {
+    let capturedBaseCommit: string | undefined;
+    const deps = createMockDeps({
+      worktreeService: {
+        ...createMockDeps().worktreeService,
+        getDiff: async (_feature: string, _task: string, baseCommit?: string) => {
+          capturedBaseCommit = baseCommit;
+          return { hasDiff: true, filesChanged: ['a.ts'], insertions: 1, deletions: 0 };
+        },
+      } as any,
+      taskService: {
+        ...createMockDeps().taskService,
+        getRawStatus: () => ({ baseCommit: 'explicit-base-sha' }),
+      } as any,
+    });
+
+    const tools = new WorktreeTools(deps);
+    const commitTool = tools.commitWorktreeTool(() => 'test-feature');
+    const raw = await commitTool.execute(
+      {
+        task: '01-test',
+        summary: 'build: exit 0, test: exit 0, lint: exit 0',
+        status: 'completed',
+      },
+      MOCK_CONTEXT,
+    );
+    const result = parseResult(raw);
+
+    expect(result.success).toBe(true);
+    expect(capturedBaseCommit).toBe('explicit-base-sha');
+  });
+
+  it('returns toolError when baseCommit is missing at completion time', async () => {
+    const deps = createMockDeps({
+      taskService: {
+        ...createMockDeps().taskService,
+        getRawStatus: () => null,
+      } as any,
+    });
+
+    const tools = new WorktreeTools(deps);
+    const commitTool = tools.commitWorktreeTool(() => 'test-feature');
+    const raw = await commitTool.execute(
+      {
+        task: '01-test',
+        summary: 'build: exit 0, test: exit 0, lint: exit 0',
+        status: 'completed',
+      },
+      MOCK_CONTEXT,
+    );
+    const result = parseResult(raw);
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('missing baseCommit');
+  });
   it('returns ok:true, terminal:true for blocked status', async () => {
     const tools = new WorktreeTools(createMockDeps());
     const commitTool = tools.commitWorktreeTool(() => 'test-feature');
@@ -108,10 +190,31 @@ describe('worktree_commit terminal contract', () => {
     });
     const tools = new WorktreeTools(deps);
     const commitTool = tools.commitWorktreeTool(() => 'test-feature');
-    const raw = await commitTool.execute({ task: '01-test', summary: 'x', status: 'completed' }, MOCK_CONTEXT);
+    const raw = await commitTool.execute({ task: '99-unknown-task', summary: 'x', status: 'completed' }, MOCK_CONTEXT);
     const result = parseResult(raw);
     expect(result.success).toBe(false);
+    expect(result.error).toContain('99-unknown-task');
     expect(result.error).toContain('not found');
+  });
+
+  it('returns toolError with sync guidance when no tasks are synced for feature', async () => {
+    const deps = createMockDeps({
+      taskService: {
+        ...createMockDeps().taskService,
+        get: () => null,
+        list: () => [],
+      } as any,
+    });
+    const tools = new WorktreeTools(deps);
+    const commitTool = tools.commitWorktreeTool(() => 'test-feature');
+    const raw = await commitTool.execute(
+      { task: '01-build-complexity-classifier-and-tests', summary: 'x', status: 'blocked' },
+      MOCK_CONTEXT,
+    );
+    const result = parseResult(raw);
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('warcraft_tasks_sync');
+    expect(result.error).toContain('No synced tasks found');
   });
 
   it('returns toolError for task not in progress', async () => {

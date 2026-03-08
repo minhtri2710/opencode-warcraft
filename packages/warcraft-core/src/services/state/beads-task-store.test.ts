@@ -1,4 +1,7 @@
 import { describe, expect, it, spyOn } from 'bun:test';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import { RepositoryError } from '../beads/BeadsRepository.js';
 import { BeadsTaskStore } from './beads-task-store.js';
 
@@ -58,7 +61,7 @@ describe('BeadsTaskStore fail-fast behavior', () => {
 });
 
 describe('BeadsTaskStore caching layer', () => {
-  it('get() uses cache after list() is called, avoiding O(n) search', () => {
+  it('get() uses cache for existing tasks after list() is called', () => {
     let listCallCount = 0;
     const repository = {
       getEpicByFeatureName: () => ({ success: true as const, value: 'epic-1' }),
@@ -83,20 +86,77 @@ describe('BeadsTaskStore caching layer', () => {
 
     const store = new BeadsTaskStore('/tmp/project', repository as any);
 
-    // First list() populates cache (listCallCount = 1)
     store.list('test-feature');
     expect(listCallCount).toBe(1);
 
-    // Subsequent get() calls should use cache (listCallCount stays at 1)
     store.get('test-feature', '01-task-1');
     expect(listCallCount).toBe(1);
 
     store.get('test-feature', '02-task-2');
     expect(listCallCount).toBe(1);
+  });
 
-    // Accessing non-existent task should still use cache (listCallCount stays at 1)
-    store.get('test-feature', '99-nonexistent');
+  it('get() refreshes stale cache miss and resolves task created externally', () => {
+    let listCallCount = 0;
+    const repository = {
+      getEpicByFeatureName: () => ({ success: true as const, value: 'epic-1' }),
+      listTaskBeadsForEpic: () => {
+        listCallCount++;
+        return {
+          success: true as const,
+          value:
+            listCallCount === 1
+              ? [{ id: 'task-1', title: 'Task 1', status: 'pending' }]
+              : [
+                  { id: 'task-1', title: 'Task 1', status: 'pending' },
+                  { id: 'task-2', title: 'Task 2', status: 'pending' },
+                ],
+        };
+      },
+      getTaskState: (beadId: string) => ({
+        success: true as const,
+        value:
+          beadId === 'task-1'
+            ? { folder: '01-task-1', status: 'pending', origin: 'plan', planTitle: 'Task 1' }
+            : { folder: '02-task-2', status: 'pending', origin: 'plan', planTitle: 'Task 2' },
+      }),
+    };
+
+    const store = new BeadsTaskStore('/tmp/project', repository as any);
+
+    store.list('test-feature');
     expect(listCallCount).toBe(1);
+
+    const resolved = store.get('test-feature', '02-task-2');
+    expect(resolved?.folder).toBe('02-task-2');
+    expect(listCallCount).toBe(2);
+  });
+
+  it('get() refreshes stale cache miss once and returns null for truly missing task', () => {
+    let listCallCount = 0;
+    const repository = {
+      getEpicByFeatureName: () => ({ success: true as const, value: 'epic-1' }),
+      listTaskBeadsForEpic: () => {
+        listCallCount++;
+        return {
+          success: true as const,
+          value: [{ id: 'task-1', title: 'Task 1', status: 'pending' }],
+        };
+      },
+      getTaskState: () => ({
+        success: true as const,
+        value: { folder: '01-task-1', status: 'pending', origin: 'plan', planTitle: 'Task 1' },
+      }),
+    };
+
+    const store = new BeadsTaskStore('/tmp/project', repository as any);
+
+    store.list('test-feature');
+    expect(listCallCount).toBe(1);
+
+    const missing = store.get('test-feature', '99-nonexistent');
+    expect(missing).toBeNull();
+    expect(listCallCount).toBe(2);
   });
 
   it('getRawStatus() uses cache after list() is called, avoiding O(n) search', () => {
@@ -130,6 +190,29 @@ describe('BeadsTaskStore caching layer', () => {
     expect(listCallCount).toBe(1);
   });
 
+  it('getRawStatus() does not read docs status.json fallback in beads mode', () => {
+    const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'beads-task-store-'));
+    const legacyStatusPath = path.join(projectRoot, 'docs', 'test-feature', 'tasks', '01-task-1', 'status.json');
+    fs.mkdirSync(path.dirname(legacyStatusPath), { recursive: true });
+    fs.writeFileSync(
+      legacyStatusPath,
+      JSON.stringify({ status: 'in_progress', origin: 'plan', planTitle: 'Task 1', baseCommit: 'legacy-base' }),
+      'utf-8',
+    );
+
+    const repository = {
+      getEpicByFeatureName: () => ({ success: true as const, value: 'epic-1' }),
+      listTaskBeadsForEpic: () => ({ success: true as const, value: [] }),
+      getTaskState: () => ({ success: true as const, value: null }),
+    };
+
+    const store = new BeadsTaskStore(projectRoot, repository as any);
+    try {
+      expect(store.getRawStatus('test-feature', '01-task-1')).toBeNull();
+    } finally {
+      fs.rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
   it('save() invalidates cache entry for the modified task', () => {
     let listCallCount = 0;
     const repository = {
@@ -167,9 +250,10 @@ describe('BeadsTaskStore caching layer', () => {
       folder: '01-task-1',
     });
 
-    // get() should still use cache for the task entry (no new list call)
-    store.get('test-feature', '01-task-1');
-    expect(listCallCount).toBe(1);
+    // get() refreshes stale cache entry and reloads once
+    const savedTask = store.get('test-feature', '01-task-1');
+    expect(savedTask?.folder).toBe('01-task-1');
+    expect(listCallCount).toBe(2);
   });
 
   it('createTask() invalidates cache for the feature', () => {
@@ -213,7 +297,7 @@ describe('BeadsTaskStore caching layer', () => {
         listCallCount++;
         return {
           success: true as const,
-          value: [{ id: 'task-1', title: 'Task 1', status: 'pending' }],
+          value: listCallCount === 1 ? [{ id: 'task-1', title: 'Task 1', status: 'pending' }] : [],
         };
       },
       getTaskState: () => ({
@@ -232,9 +316,10 @@ describe('BeadsTaskStore caching layer', () => {
     // delete() invalidates the cache entry
     store.delete('test-feature', '01-task-1');
 
-    // get() should still use cache for the task entry (returns null now) (listCallCount stays at 1)
-    store.get('test-feature', '01-task-1');
-    expect(listCallCount).toBe(1);
+    // get() refreshes after deletion and returns null when task is gone
+    const deletedTask = store.get('test-feature', '01-task-1');
+    expect(deletedTask).toBeNull();
+    expect(listCallCount).toBe(2);
   });
 
   it('patchBackground() invalidates cache entry for the patched task', () => {
@@ -266,9 +351,10 @@ describe('BeadsTaskStore caching layer', () => {
     // patchBackground() invalidates the cache entry
     store.patchBackground('test-feature', '01-task-1', { idempotencyKey: 'test-key' });
 
-    // get() should still use cache for the task entry (listCallCount stays at 1)
-    store.get('test-feature', '01-task-1');
-    expect(listCallCount).toBe(1);
+    // get() refreshes stale cache entry and reloads once
+    const patchedTask = store.get('test-feature', '01-task-1');
+    expect(patchedTask?.folder).toBe('01-task-1');
+    expect(listCallCount).toBe(2);
   });
 
   it('syncDependencies() invalidates cache for the feature', () => {

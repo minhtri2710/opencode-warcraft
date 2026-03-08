@@ -337,7 +337,19 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
         const feature = resolution.feature;
 
         const taskInfo = taskService.get(feature, task);
-        if (!taskInfo) return toolError(`Task "${task}" not found`);
+        if (!taskInfo) {
+          try {
+            const syncedTasks = taskService.list(feature);
+            if (syncedTasks.length === 0) {
+              return toolError(
+                `Task "${task}" not found. No synced tasks found for feature "${feature}". Run warcraft_tasks_sync first.`,
+              );
+            }
+          } catch {
+            // fall through to generic task-not-found error
+          }
+          return toolError(`Task "${task}" not found`);
+        }
         if (taskInfo.status !== 'in_progress' && taskInfo.status !== 'blocked')
           return toolError('Task not in progress');
 
@@ -401,7 +413,20 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
           `warcraft(${task}): ${summary.slice(0, 50)}`,
         );
 
-        const diff = await worktreeService.getDiff(feature, task);
+        const rawStatus = taskService.getRawStatus(feature, task);
+        const baseCommit =
+          typeof rawStatus?.baseCommit === 'string' && rawStatus.baseCommit.trim().length > 0
+            ? rawStatus.baseCommit
+            : null;
+        if (!baseCommit) {
+          return toolError(
+            `Task "${task}" is missing baseCommit. Recreate the worktree with warcraft_worktree_create before completing.`,
+          );
+        }
+        const diff = await worktreeService.getDiff(feature, task, baseCommit);
+        if (diff.error) {
+          return toolError(`Failed to generate diff for task "${task}": ${diff.error}`);
+        }
         const featureMeta = featureService.get(feature);
         const workflowPath = (featureMeta as { workflowPath?: string } | null)?.workflowPath || 'standard';
 

@@ -136,54 +136,82 @@ export function getContextPath(projectRoot: string, featureName: string, beadsMo
 
 /**
  * Get the tasks directory path for a feature.
- * Always resolves via off-mode (docs-based) path tree.
+ * Task filesystem paths are only valid in off-mode (docs-based) layout.
  * @param projectRoot - The project root directory
  * @param featureName - The feature name
+ * @param beadsMode - Must be 'off' for task filesystem paths
  */
-export function getTasksPath(projectRoot: string, featureName: string): string {
+export function getTasksPath(projectRoot: string, featureName: string, beadsMode: BeadsMode = 'off'): string {
+  if (beadsMode !== 'off') {
+    throw new Error('Task filesystem paths are only available when beadsMode is off');
+  }
   return path.join(getFeaturePath(projectRoot, featureName, 'off'), TASKS_DIR);
 }
 
 /**
  * Get the path for a specific task folder.
- * Always resolves via off-mode (docs-based) path tree.
+ * Task filesystem paths are only valid in off-mode (docs-based) layout.
  * @param projectRoot - The project root directory
  * @param featureName - The feature name
  * @param taskFolder - The task folder name
+ * @param beadsMode - Must be 'off' for task filesystem paths
  */
-export function getTaskPath(projectRoot: string, featureName: string, taskFolder: string): string {
-  return path.join(getTasksPath(projectRoot, featureName), taskFolder);
+export function getTaskPath(
+  projectRoot: string,
+  featureName: string,
+  taskFolder: string,
+  beadsMode: BeadsMode = 'off',
+): string {
+  return path.join(getTasksPath(projectRoot, featureName, beadsMode), taskFolder);
 }
 
 /**
  * Get the status.json path for a task.
- * Always resolves via off-mode (docs-based) path tree.
+ * Task filesystem paths are only valid in off-mode (docs-based) layout.
  * @param projectRoot - The project root directory
  * @param featureName - The feature name
  * @param taskFolder - The task folder name
+ * @param beadsMode - Must be 'off' for task filesystem paths
  */
-export function getTaskStatusPath(projectRoot: string, featureName: string, taskFolder: string): string {
-  return path.join(getTaskPath(projectRoot, featureName, taskFolder), STATUS_FILE);
+export function getTaskStatusPath(
+  projectRoot: string,
+  featureName: string,
+  taskFolder: string,
+  beadsMode: BeadsMode = 'off',
+): string {
+  return path.join(getTaskPath(projectRoot, featureName, taskFolder, beadsMode), STATUS_FILE);
 }
 
 /**
  * Get the report.md path for a task.
- * Always resolves via off-mode (docs-based) path tree.
+ * Task filesystem paths are only valid in off-mode (docs-based) layout.
  * @param projectRoot - The project root directory
  * @param featureName - The feature name
  * @param taskFolder - The task folder name
+ * @param beadsMode - Must be 'off' for task filesystem paths
  */
-export function getTaskReportPath(projectRoot: string, featureName: string, taskFolder: string): string {
-  return path.join(getTaskPath(projectRoot, featureName, taskFolder), REPORT_FILE);
+export function getTaskReportPath(
+  projectRoot: string,
+  featureName: string,
+  taskFolder: string,
+  beadsMode: BeadsMode = 'off',
+): string {
+  return path.join(getTaskPath(projectRoot, featureName, taskFolder, beadsMode), REPORT_FILE);
 }
 
 /**
  * Get the spec.md path for a task.
- * Always resolves via off-mode (docs-based) path tree.
+ * Task filesystem paths are only valid in off-mode (docs-based) layout.
  * @param projectRoot - The project root directory
  * @param featureName - The feature name
  * @param taskFolder - The task folder name
+ * @param beadsMode - Must be 'off' for task filesystem paths
  */
-export function getTaskSpecPath(projectRoot: string, featureName: string, taskFolder: string): string {
-  return path.join(getTaskPath(projectRoot, featureName, taskFolder), 'spec.md');
+export function getTaskSpecPath(
+  projectRoot: string,
+  featureName: string,
+  taskFolder: string,
+  beadsMode: BeadsMode = 'off',
+): string {
+  return path.join(getTaskPath(projectRoot, featureName, taskFolder, beadsMode), 'spec.md');
 }

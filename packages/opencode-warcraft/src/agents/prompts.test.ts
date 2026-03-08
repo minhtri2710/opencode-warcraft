@@ -340,8 +340,10 @@ describe('AGENTS.md architecture principles', () => {
   const AGENTS_MD_PATH = path.resolve(import.meta.dir, '..', '..', '..', '..', 'AGENTS.md');
   const agentsMdContent = readFileSync(AGENTS_MD_PATH, 'utf-8');
 
-  it('contains Cross-Model Prompts principle', () => {
-    expect(agentsMdContent).toContain('Cross-Model Prompts');
+  it('contains current architecture section for this monorepo', () => {
+    expect(agentsMdContent).toContain('## Architecture');
+    expect(agentsMdContent).toContain('Bun monorepo with two packages');
+    expect(agentsMdContent).toContain('Data flow: feature create');
   });
 });
 
@@ -412,13 +414,13 @@ describe('Saurfang verification model conditional prompt', () => {
   });
 });
 
-describe('AGENTS.md best-effort verification', () => {
+describe('AGENTS.md verification guidance', () => {
   const AGENTS_MD_PATH = path.resolve(import.meta.dir, '..', '..', '..', '..', 'AGENTS.md');
   const agentsMdContent = readFileSync(AGENTS_MD_PATH, 'utf-8');
 
-  it('principle #6 mentions best-effort', () => {
-    expect(agentsMdContent).toContain('best-effort');
-    expect(agentsMdContent).toContain('verificationModel');
+  it('documents test and typecheck commands', () => {
+    expect(agentsMdContent).toContain('**Test all**: `bun run test`');
+    expect(agentsMdContent).toContain('**Typecheck**: `bun run lint`');
   });
 });
 

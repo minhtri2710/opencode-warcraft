@@ -3,6 +3,8 @@ import * as os from 'os';
 import * as path from 'path';
 import { DEFAULT_WARCRAFT_CONFIG } from '../defaults.js';
 import type { BeadsMode, ParallelExecutionConfig, WarcraftConfig } from '../types.js';
+import type { Logger } from '../utils/logger.js';
+import { createNoopLogger } from '../utils/logger.js';
 import type { SandboxConfig } from './dockerSandboxService.js';
 
 /**
@@ -48,11 +50,13 @@ function mergeAgentConfigs(
 export class ConfigService {
   private configPath: string;
   private cachedConfig: WarcraftConfig | null = null;
+  private readonly logger: Logger;
 
-  constructor() {
+  constructor(logger: Logger = createNoopLogger()) {
     const homeDir = process.env.HOME || process.env.USERPROFILE || os.homedir();
     const configDir = path.join(homeDir, '.config', 'opencode');
     this.configPath = path.join(configDir, 'opencode_warcraft.json');
+    this.logger = logger;
   }
 
   /**
@@ -93,8 +97,12 @@ export class ConfigService {
       this.cachedConfig = result;
       return result;
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      console.warn(`[warcraft] Failed to read config at ${this.configPath}: ${message}`);
+      const reason = error instanceof Error ? error.message : String(error);
+      this.logger.warn('Failed to read Warcraft config; falling back to defaults', {
+        operation: 'read',
+        configPath: this.configPath,
+        reason,
+      });
       return { ...DEFAULT_WARCRAFT_CONFIG };
     }
   }
@@ -139,6 +147,10 @@ export class ConfigService {
    */
   init(): WarcraftConfig {
     if (!this.exists()) {
+      this.logger.info('Initializing Warcraft config with defaults', {
+        operation: 'init',
+        configPath: this.configPath,
+      });
       return this.set(DEFAULT_WARCRAFT_CONFIG);
     }
     return this.get();

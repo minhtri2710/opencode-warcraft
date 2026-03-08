@@ -52,6 +52,7 @@ export interface MergeResult {
 export interface WorktreeConfig {
   baseDir: string;
   warcraftDir: string;
+  beadsMode?: BeadsMode;
   gitFactory: GitClientFactory;
 }
 
@@ -71,7 +72,7 @@ export class WorktreeService {
   private config: WorktreeConfig;
 
   constructor(config: WorktreeConfig) {
-    this.config = config;
+    this.config = { ...config, beadsMode: config.beadsMode ?? 'off' };
   }
 
   private getGit(cwd?: string): GitClient {
@@ -86,8 +87,11 @@ export class WorktreeService {
     return path.join(this.getWorktreesDir(), sanitizeName(feature), sanitizeName(step));
   }
 
-  private getStepStatusPath(feature: string, step: string): string {
-    return getTaskStatusPath(this.config.baseDir, sanitizeName(feature), sanitizeName(step));
+  private getStepStatusPath(feature: string, step: string): string | null {
+    if (this.config.beadsMode === 'on') {
+      return null;
+    }
+    return getTaskStatusPath(this.config.baseDir, sanitizeName(feature), sanitizeName(step), this.config.beadsMode);
   }
 
   private getBranchName(feature: string, step: string): string {
@@ -165,10 +169,10 @@ export class WorktreeService {
     const statusPath = this.getStepStatusPath(feature, step);
 
     let base = baseCommit;
-    if (!base) {
+    if (!base && this.config.beadsMode === 'off' && statusPath) {
       try {
-        const status = JSON.parse(await fs.readFile(statusPath, 'utf-8'));
-        base = status.baseCommit; // Read baseCommit directly from task status
+        const status = JSON.parse(await fs.readFile(statusPath, 'utf-8')) as { baseCommit?: string };
+        base = status.baseCommit;
       } catch (error) {
         const reason = error instanceof Error ? error.message : String(error);
         console.warn(`[warcraft] Failed to read base commit from '${statusPath}' (falling back to HEAD): ${reason}`);
@@ -177,6 +181,16 @@ export class WorktreeService {
 
     const worktreeGit = this.getGit(worktreePath);
     if (!base) {
+      if (this.config.beadsMode === 'on') {
+        return {
+          hasDiff: false,
+          diffContent: '',
+          filesChanged: [],
+          insertions: 0,
+          deletions: 0,
+          error: `Missing base commit for '${feature}/${step}' in beads mode; pass baseCommit explicitly`,
+        };
+      }
       base = 'HEAD';
     }
 
@@ -188,6 +202,16 @@ export class WorktreeService {
       let stat = '';
 
       if (hasStaged) {
+        if (base !== 'HEAD') {
+          return {
+            hasDiff: false,
+            diffContent: '',
+            filesChanged: [],
+            insertions: 0,
+            deletions: 0,
+            error: `Staged diff for '${feature}/${step}' requires base HEAD; found base '${base}'`,
+          };
+        }
         diffContent = await worktreeGit.diffCached(worktreePath);
         stat = diffContent ? await worktreeGit.diffCachedStat(worktreePath) : '';
       } else {
@@ -719,6 +743,7 @@ export function createWorktreeService(projectDir: string, beadsMode: BeadsMode =
   return new WorktreeService({
     baseDir: projectDir,
     warcraftDir: getWarcraftPath(projectDir, beadsMode),
+    beadsMode,
     gitFactory,
   });
 }

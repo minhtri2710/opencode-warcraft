@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { createOpencodeClient } from '@opencode-ai/sdk';
 import * as fs from 'fs';
 import * as path from 'path';
 import plugin from '../index';
 import { BUILTIN_SKILLS } from '../skills/registry.generated.js';
+import { createTestOpencodeClient } from './helpers/opencode-client.js';
 
 /**
  * Helper to create a file-based skill in the given location.
@@ -19,7 +19,7 @@ ${body}`;
   fs.writeFileSync(skillPath, content);
 }
 
-const OPENCODE_CLIENT = createOpencodeClient({ baseUrl: 'http://localhost:1' });
+const { client: OPENCODE_CLIENT, logCalls: OPENCODE_LOG_CALLS } = createTestOpencodeClient();
 
 const TEST_ROOT_BASE = '/tmp/warcraft-config-autoload-skills-test';
 
@@ -41,6 +41,7 @@ describe('config hook autoLoadSkills injection', () => {
     fs.mkdirSync(TEST_ROOT_BASE, { recursive: true });
     testRoot = fs.mkdtempSync(path.join(TEST_ROOT_BASE, 'project-'));
     process.env.HOME = testRoot;
+    OPENCODE_LOG_CALLS.length = 0;
   });
 
   afterEach(() => {
@@ -206,8 +207,20 @@ describe('config hook autoLoadSkills injection', () => {
     const opencodeConfig: any = { agent: {} };
     await hooks.config!(opencodeConfig);
 
-    // khadgar should still be defined
+    // khadgar should still be defined and warning should be logged through client.app.log
     expect(opencodeConfig.agent.khadgar).toBeDefined();
+    expect(OPENCODE_LOG_CALLS).toContainEqual({
+      body: {
+        service: 'warcraft',
+        level: 'warn',
+        message: 'Unknown auto-load skill id; skipping',
+        extra: {
+          agentName: 'khadgar',
+          skillId: 'nonexistent-skill',
+          configPath,
+        },
+      },
+    });
   });
 
   it('injects autoLoadSkills for all agents in dedicated mode', async () => {
@@ -365,6 +378,7 @@ describe('file-based skill fallback in autoLoadSkills', () => {
     fs.mkdirSync(TEST_ROOT_BASE, { recursive: true });
     testRoot = fs.mkdtempSync(path.join(TEST_ROOT_BASE, 'project-'));
     process.env.HOME = testRoot;
+    OPENCODE_LOG_CALLS.length = 0;
   });
 
   afterEach(() => {

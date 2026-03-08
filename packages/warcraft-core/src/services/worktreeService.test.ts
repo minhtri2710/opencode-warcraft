@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -22,6 +22,7 @@ function createService(mode: 'on' | 'off'): WorktreeService {
   return new WorktreeService({
     baseDir: testRoot,
     warcraftDir: mode === 'off' ? path.join(testRoot, 'docs') : path.join(testRoot, '.beads', 'artifacts'),
+    beadsMode: mode,
     gitFactory: () => createMockGit() as any,
   });
 }
@@ -123,13 +124,11 @@ describe('WorktreeService helpers', () => {
     expect(statusPath).toBe(v2);
   });
 
-  it('returns canonical off-mode status path even in on-mode service', async () => {
+  it('returns null status path in on-mode service', async () => {
     const service = createService('on');
-    // Status path must always resolve via off-mode (docs) regardless of service beadsMode
-    const expected = path.join(testRoot, 'docs', 'feat', 'tasks', '01-task', 'status.json');
 
     const statusPath = await (service as any).getStepStatusPath('feat', '01-task');
-    expect(statusPath).toBe(expected);
+    expect(statusPath).toBeNull();
   });
 
   it('revertFromSavedDiff applies the saved patch file path in reverse', async () => {
@@ -924,6 +923,44 @@ describe('WorktreeService.getDiff', () => {
     await service.getDiff('feat', '05-step');
 
     expect(capturedBase).toBe('status-base-sha..HEAD');
+  });
+
+  it('returns explicit error in beads mode when baseCommit is missing', async () => {
+    const service = createService('on');
+    setupWorktreeDir(service, 'feat', '06-step');
+
+    const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const result = await service.getDiff('feat', '06-step');
+
+      expect(result.hasDiff).toBe(false);
+      expect(result.error).toContain('Missing base commit');
+      expect(warnSpy).not.toHaveBeenCalled();
+    } finally {
+      warnSpy.mockRestore();
+    }
+  });
+
+  it('returns explicit error when staged changes use non-HEAD base', async () => {
+    const service = createService('off');
+
+    const mockGit = createMockGit({
+      status: async () => ({
+        staged: ['src/staged.ts'],
+        modified: [],
+        not_added: [],
+        deleted: [],
+        created: [],
+      }),
+    });
+    (service as any).getGit = () => mockGit;
+
+    setupWorktreeDir(service, 'feat', '07-step');
+
+    const result = await service.getDiff('feat', '07-step', 'abc123');
+
+    expect(result.hasDiff).toBe(false);
+    expect(result.error).toContain('requires base HEAD');
   });
 });
 

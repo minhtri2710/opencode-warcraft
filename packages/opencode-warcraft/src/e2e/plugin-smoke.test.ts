@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import type { PluginInput } from '@opencode-ai/plugin';
-import { createOpencodeClient } from '@opencode-ai/sdk';
 import * as fs from 'fs';
 import * as path from 'path';
 import plugin from '../index';
 import { BUILTIN_SKILLS } from '../skills/registry.generated.js';
 import { ensureFeatureExists } from './helpers/feature-setup.js';
+import { createTestOpencodeClient } from './helpers/opencode-client.js';
 import {
   cleanupTempProjectRoot,
   createTempProjectRoot,
@@ -13,7 +13,7 @@ import {
   setupGitProject,
 } from './helpers/test-env.js';
 
-const OPENCODE_CLIENT = createOpencodeClient({ baseUrl: 'http://localhost:1' }) as unknown as PluginInput['client'];
+const { client: OPENCODE_CLIENT } = createTestOpencodeClient();
 
 type ToolContext = {
   sessionID: string;

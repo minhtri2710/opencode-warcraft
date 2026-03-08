@@ -59,6 +59,7 @@ function setupTask(featureName: string, taskFolder: string, status: Partial<Task
 
 describe('TaskService', () => {
   let service: TaskService;
+  let offModeService: TaskService;
   let execFileSyncSpy: ReturnType<typeof spyOn>;
   let childCounter = 0;
   const mockDescriptions: Map<string, string> = new Map();
@@ -165,6 +166,8 @@ describe('TaskService', () => {
     });
     const stores = createStores(PROJECT_ROOT, 'on', createRepository());
     service = new TaskService(PROJECT_ROOT, stores.taskStore, 'on');
+    const offStores = createStores(PROJECT_ROOT, 'off', createRepository('off'));
+    offModeService = new TaskService(PROJECT_ROOT, offStores.taskStore, 'off');
   });
 
   afterEach(() => {
@@ -178,7 +181,7 @@ describe('TaskService', () => {
       setupFeature(featureName);
       setupTask(featureName, '01-test-task', { beadId: 'bd-task-1' });
 
-      const result = service.update(featureName, '01-test-task', {
+      const result = offModeService.update(featureName, '01-test-task', {
         status: 'in_progress',
       });
 
@@ -196,7 +199,7 @@ describe('TaskService', () => {
       setupFeature(featureName);
       setupTask(featureName, '01-test-task', { beadId: 'bd-task-1', startedAt: new Date().toISOString() });
 
-      const result = service.update(featureName, '01-test-task', {
+      const result = offModeService.update(featureName, '01-test-task', {
         status: 'done',
         summary: 'Task completed successfully',
       });
@@ -210,7 +213,9 @@ describe('TaskService', () => {
       const featureName = 'test-feature';
       setupFeature(featureName);
 
-      expect(() => service.update(featureName, 'nonexistent-task', { status: 'in_progress' })).toThrow(/not found/);
+      expect(() => offModeService.update(featureName, 'nonexistent-task', { status: 'in_progress' })).toThrow(
+        /not found/,
+      );
     });
 
     it('preserves existing fields on update', () => {
@@ -222,7 +227,7 @@ describe('TaskService', () => {
         baseCommit: 'abc123',
       });
 
-      const result = service.update(featureName, '01-test-task', {
+      const result = offModeService.update(featureName, '01-test-task', {
         status: 'in_progress',
       });
 
@@ -240,7 +245,7 @@ describe('TaskService', () => {
         summary: 'Working on it',
       });
 
-      const result = service.patchBackgroundFields(featureName, '01-test-task', {
+      const result = offModeService.patchBackgroundFields(featureName, '01-test-task', {
         idempotencyKey: 'key-123',
         workerSession: {
           sessionId: 'session-abc',
@@ -273,9 +278,6 @@ describe('TaskService', () => {
 
       // Use off-mode service: setupTask writes to local filesystem,
       // and getRawStatus in on-mode reads from bead state (which has no patched session).
-      const offStores = createStores(PROJECT_ROOT, 'off', createRepository('off'));
-      const offModeService = new TaskService(PROJECT_ROOT, offStores.taskStore, 'off');
-
       // Patch only lastHeartbeatAt
       offModeService.patchBackgroundFields(featureName, '01-test-task', {
         workerSession: {
@@ -303,11 +305,11 @@ describe('TaskService', () => {
       });
 
       // Background patch should not touch these
-      service.patchBackgroundFields(featureName, '01-test-task', {
+      offModeService.patchBackgroundFields(featureName, '01-test-task', {
         workerSession: { sessionId: 'new-session' },
       });
 
-      const result = service.getRawStatus(featureName, '01-test-task');
+      const result = offModeService.getRawStatus(featureName, '01-test-task');
 
       expect(result?.status).toBe('done');
       expect(result?.summary).toBe('Completed successfully');
@@ -319,7 +321,7 @@ describe('TaskService', () => {
       setupFeature(featureName);
       setupTask(featureName, '01-test-task');
 
-      const result = service.patchBackgroundFields(featureName, '01-test-task', {
+      const result = offModeService.patchBackgroundFields(featureName, '01-test-task', {
         idempotencyKey: 'key-456',
       });
 
@@ -331,7 +333,7 @@ describe('TaskService', () => {
       setupFeature(featureName);
       setupTask(featureName, '01-test-task');
 
-      service.patchBackgroundFields(featureName, '01-test-task', {
+      offModeService.patchBackgroundFields(featureName, '01-test-task', {
         idempotencyKey: 'test',
       });
 
@@ -356,7 +358,7 @@ describe('TaskService', () => {
         },
       });
 
-      const result = service.getRawStatus(featureName, '01-test-task');
+      const result = offModeService.getRawStatus(featureName, '01-test-task');
 
       expect(result).not.toBeNull();
       expect(result?.schemaVersion).toBe(1);
@@ -372,7 +374,7 @@ describe('TaskService', () => {
       const featureName = 'test-feature';
       setupFeature(featureName);
 
-      const result = service.getRawStatus(featureName, 'nonexistent');
+      const result = offModeService.getRawStatus(featureName, 'nonexistent');
 
       expect(result).toBeNull();
     });
@@ -389,7 +391,7 @@ describe('TaskService', () => {
         // No dependsOn field
       });
 
-      const result = service.getRawStatus(featureName, '01-test-task');
+      const result = offModeService.getRawStatus(featureName, '01-test-task');
 
       expect(result).not.toBeNull();
       expect(result?.status).toBe('pending');
@@ -407,7 +409,7 @@ describe('TaskService', () => {
         dependsOn: ['01-setup', '01-core-api'],
       });
 
-      const result = service.getRawStatus(featureName, '02-dependent-task');
+      const result = offModeService.getRawStatus(featureName, '02-dependent-task');
 
       expect(result).not.toBeNull();
       expect(result?.dependsOn).toEqual(['01-setup', '01-core-api']);
@@ -422,7 +424,7 @@ describe('TaskService', () => {
         dependsOn: ['01-setup'],
       });
 
-      const result = service.update(featureName, '02-dependent-task', {
+      const result = offModeService.update(featureName, '02-dependent-task', {
         status: 'in_progress',
       });
 
@@ -438,7 +440,7 @@ describe('TaskService', () => {
         dependsOn: [],
       });
 
-      const result = service.getRawStatus(featureName, '01-independent-task');
+      const result = offModeService.getRawStatus(featureName, '01-independent-task');
 
       expect(result).not.toBeNull();
       expect(result?.dependsOn).toEqual([]);
@@ -1567,6 +1569,12 @@ Align documentation wording.
       const onRepo = createRepository('on');
       const onStores = createStores(PROJECT_ROOT, 'on', onRepo);
       const onModeService = new TaskService(PROJECT_ROOT, onStores.taskStore, 'on');
+      const getRawStatusSpy = spyOn(onStores.taskStore, 'getRawStatus').mockReturnValue({
+        status: 'pending',
+        origin: 'plan',
+        planTitle: 'Test Task',
+        beadId: 'bd-task-1',
+      } as TaskStatus);
 
       // Spy on importArtifacts
       const importSpy = spyOn(onRepo.getGateway(), 'importArtifacts').mockImplementation(() => {});
@@ -1580,6 +1588,7 @@ Align documentation wording.
 
       importSpy.mockRestore();
       readArtifactSpy.mockRestore();
+      getRawStatusSpy.mockRestore();
     });
 
     it('does not call importArtifacts when beadsMode is off', () => {
@@ -1620,6 +1629,12 @@ Align documentation wording.
       const onRepo = createRepository('on');
       const onStores = createStores(PROJECT_ROOT, 'on', onRepo);
       const onModeService = new TaskService(PROJECT_ROOT, onStores.taskStore, 'on');
+      const getRawStatusSpy = spyOn(onStores.taskStore, 'getRawStatus').mockReturnValue({
+        status: 'pending',
+        origin: 'plan',
+        planTitle: 'Test Task',
+        beadId: 'bd-task-1',
+      } as TaskStatus);
 
       // Spy on flushArtifacts
       const flushSpy = spyOn(onRepo.getGateway(), 'flushArtifacts').mockImplementation(() => {});
@@ -1633,6 +1648,7 @@ Align documentation wording.
 
       flushSpy.mockRestore();
       syncStatusSpy.mockRestore();
+      getRawStatusSpy.mockRestore();
     });
 
     it('does not sync bead status when status is unchanged', () => {
@@ -1644,6 +1660,12 @@ Align documentation wording.
       const onRepo = createRepository('on');
       const onStores = createStores(PROJECT_ROOT, 'on', onRepo);
       const onModeService = new TaskService(PROJECT_ROOT, onStores.taskStore, 'on');
+      const getRawStatusSpy = spyOn(onStores.taskStore, 'getRawStatus').mockReturnValue({
+        status: 'pending',
+        origin: 'plan',
+        planTitle: 'Test Task',
+        beadId: 'bd-task-1',
+      } as TaskStatus);
 
       // Spy on syncTaskStatus
       const syncStatusSpy = spyOn(onRepo.getGateway(), 'syncTaskStatus').mockImplementation(() => {});
@@ -1655,6 +1677,7 @@ Align documentation wording.
       expect(result.summary).toBe('Updated summary');
 
       syncStatusSpy.mockRestore();
+      getRawStatusSpy.mockRestore();
     });
 
     it('calls flushArtifacts after writeSpec when beadsMode is on', () => {
@@ -1666,6 +1689,12 @@ Align documentation wording.
       const onRepo = createRepository('on');
       const onStores = createStores(PROJECT_ROOT, 'on', onRepo);
       const onModeService = new TaskService(PROJECT_ROOT, onStores.taskStore, 'on');
+      const getRawStatusSpy = spyOn(onStores.taskStore, 'getRawStatus').mockReturnValue({
+        status: 'pending',
+        origin: 'plan',
+        planTitle: 'Test Task',
+        beadId: 'bd-task-1',
+      } as TaskStatus);
 
       // Spy on flushArtifacts
       const flushSpy = spyOn(onRepo.getGateway(), 'flushArtifacts').mockImplementation(() => {});
@@ -1679,6 +1708,7 @@ Align documentation wording.
 
       flushSpy.mockRestore();
       upsertSpy.mockRestore();
+      getRawStatusSpy.mockRestore();
     });
 
     it('does not call flushArtifacts in writeSpec when beadsMode is off', () => {
@@ -1741,6 +1771,12 @@ Align documentation wording.
       // Create service with beadsMode on and mock repository
       const onStores = createStores(PROJECT_ROOT, 'on', mockRepository as any);
       const onModeService = new TaskService(PROJECT_ROOT, onStores.taskStore, 'on');
+      const getRawStatusSpy = spyOn(onStores.taskStore, 'getRawStatus').mockReturnValue({
+        status: 'done',
+        origin: 'plan',
+        planTitle: 'Test Task',
+        beadId: 'bd-task-1',
+      } as TaskStatus);
 
       const reportContent = '# Task Report\n\nCompleted successfully.';
       const reportPath = onModeService.writeReport(featureName, '01-test-task', reportContent);
@@ -1757,6 +1793,7 @@ Align documentation wording.
 
       upsertSpy.mockRestore();
       flushSpy.mockRestore();
+      getRawStatusSpy.mockRestore();
     });
 
     it('writes report to filesystem only when beadsMode is off', () => {
@@ -2560,7 +2597,7 @@ Second task description.
       setupFeature(featureName);
       setupTask(featureName, '01-test-task', { status: 'pending', beadId: 'bd-task-1' });
 
-      const result = service.transition(featureName, '01-test-task', 'in_progress');
+      const result = offModeService.transition(featureName, '01-test-task', 'in_progress');
 
       expect(result.status).toBe('in_progress');
       expect(result.startedAt).toBeDefined();
@@ -2575,7 +2612,7 @@ Second task description.
         startedAt: new Date().toISOString(),
       });
 
-      const result = service.transition(featureName, '01-test-task', 'done', {
+      const result = offModeService.transition(featureName, '01-test-task', 'done', {
         summary: 'All done',
       });
 
@@ -2593,7 +2630,7 @@ Second task description.
         startedAt: new Date().toISOString(),
       });
 
-      const result = service.transition(featureName, '01-test-task', 'blocked', {
+      const result = offModeService.transition(featureName, '01-test-task', 'blocked', {
         summary: 'Waiting for input',
         blocker: { reason: 'Need decision' },
       });
@@ -2612,7 +2649,7 @@ Second task description.
         startedAt: new Date().toISOString(),
       });
 
-      const result = service.transition(featureName, '01-test-task', 'in_progress');
+      const result = offModeService.transition(featureName, '01-test-task', 'in_progress');
 
       expect(result.status).toBe('in_progress');
     });
@@ -2627,8 +2664,8 @@ Second task description.
       });
 
       // Default mode (strict=true) should throw
-      const strictStores = createStores(PROJECT_ROOT, 'on', createRepository());
-      const strictService = new TaskService(PROJECT_ROOT, strictStores.taskStore, 'on', {
+      const strictStores = createStores(PROJECT_ROOT, 'off', createRepository('off'));
+      const strictService = new TaskService(PROJECT_ROOT, strictStores.taskStore, 'off', {
         strictTaskTransitions: true,
       });
 
@@ -2646,8 +2683,8 @@ Second task description.
         completedAt: new Date().toISOString(),
       });
 
-      const compatStores = createStores(PROJECT_ROOT, 'on', createRepository());
-      const compatService = new TaskService(PROJECT_ROOT, compatStores.taskStore, 'on', {
+      const compatStores = createStores(PROJECT_ROOT, 'off', createRepository('off'));
+      const compatService = new TaskService(PROJECT_ROOT, compatStores.taskStore, 'off', {
         strictTaskTransitions: false,
       });
 
@@ -2662,7 +2699,7 @@ Second task description.
       setupTask(featureName, '01-test-task', { status: 'pending', beadId: 'bd-task-1' });
 
       const before = new Date().toISOString();
-      const result = service.transition(featureName, '01-test-task', 'in_progress');
+      const result = offModeService.transition(featureName, '01-test-task', 'in_progress');
       const after = new Date().toISOString();
 
       expect(result.startedAt).toBeDefined();
@@ -2680,7 +2717,7 @@ Second task description.
       });
 
       const before = new Date().toISOString();
-      const result = service.transition(featureName, '01-test-task', 'done', {
+      const result = offModeService.transition(featureName, '01-test-task', 'done', {
         summary: 'Complete',
       });
       const after = new Date().toISOString();
@@ -2694,7 +2731,7 @@ Second task description.
       const featureName = 'test-feature';
       setupFeature(featureName);
 
-      expect(() => service.transition(featureName, 'nonexistent-task', 'in_progress')).toThrow(/not found/);
+      expect(() => offModeService.transition(featureName, 'nonexistent-task', 'in_progress')).toThrow(/not found/);
     });
 
     it('preserves existing fields through transition', () => {
@@ -2707,7 +2744,7 @@ Second task description.
         dependsOn: ['00-setup'],
       });
 
-      const result = service.transition(featureName, '01-test-task', 'in_progress');
+      const result = offModeService.transition(featureName, '01-test-task', 'in_progress');
 
       expect(result.planTitle).toBe('My Task');
       expect(result.dependsOn).toEqual(['00-setup']);
@@ -2722,7 +2759,7 @@ Second task description.
         startedAt: '2026-01-01T00:00:00Z',
       });
 
-      const result = service.transition(featureName, '01-test-task', 'in_progress');
+      const result = offModeService.transition(featureName, '01-test-task', 'in_progress');
 
       // Should succeed and not re-stamp timestamps
       expect(result.status).toBe('in_progress');
@@ -2734,8 +2771,8 @@ Second task description.
       setupFeature(featureName);
       setupTask(featureName, '01-test-task', { status: 'pending', beadId: 'bd-task-1' });
 
-      const strictStores = createStores(PROJECT_ROOT, 'on', createRepository());
-      const strictService = new TaskService(PROJECT_ROOT, strictStores.taskStore, 'on', {
+      const strictStores = createStores(PROJECT_ROOT, 'off', createRepository('off'));
+      const strictService = new TaskService(PROJECT_ROOT, strictStores.taskStore, 'off', {
         strictTaskTransitions: true,
       });
 
@@ -2747,8 +2784,8 @@ Second task description.
       setupFeature(featureName);
       setupTask(featureName, '01-test-task', { status: 'pending', beadId: 'bd-task-1' });
 
-      const strictStores = createStores(PROJECT_ROOT, 'on', createRepository());
-      const strictService = new TaskService(PROJECT_ROOT, strictStores.taskStore, 'on', {
+      const strictStores = createStores(PROJECT_ROOT, 'off', createRepository('off'));
+      const strictService = new TaskService(PROJECT_ROOT, strictStores.taskStore, 'off', {
         strictTaskTransitions: true,
       });
 

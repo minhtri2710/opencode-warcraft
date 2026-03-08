@@ -1,5 +1,5 @@
 import * as os from 'os';
-import type { ConfigService } from 'warcraft-core';
+import type { ConfigService, Logger } from 'warcraft-core';
 import { ALGALON_PROMPT } from './agents/algalon.js';
 import { BRANN_PROMPT } from './agents/brann.js';
 import { buildKhadgarPrompt } from './agents/khadgar.js';
@@ -45,6 +45,7 @@ async function buildAutoLoadedSkillsContent(
   agentName: WarcraftAgentName,
   configService: ConfigService,
   projectRoot: string,
+  logger: Logger,
 ): Promise<string> {
   const agentConfig = configService.getAgentConfig(agentName);
   const autoLoadSkills = agentConfig.autoLoadSkills ?? [];
@@ -56,6 +57,7 @@ async function buildAutoLoadedSkillsContent(
   // Use process.env.HOME for testability, fallback to os.homedir()
   const homeDir = process.env.HOME || os.homedir();
   const skillTemplates: string[] = [];
+  const configPath = configService.getPath();
 
   for (const skillId of autoLoadSkills) {
     // 1. Try builtin skill first (builtin wins)
@@ -73,7 +75,11 @@ async function buildAutoLoadedSkillsContent(
     }
 
     // 3. Not found - warn and skip
-    console.warn(`[warcraft] Unknown skill id "${skillId}" for agent "${agentName}"`);
+    logger.warn('Unknown auto-load skill id; skipping', {
+      agentName,
+      skillId,
+      configPath,
+    });
   }
 
   if (skillTemplates.length === 0) {
@@ -92,9 +98,9 @@ interface AgentSpec {
   permission: Record<string, string>;
 }
 
-async function buildAgentConfig(spec: AgentSpec, configService: ConfigService, directory: string) {
+async function buildAgentConfig(spec: AgentSpec, configService: ConfigService, directory: string, logger: Logger) {
   const userConfig = configService.getAgentConfig(spec.name);
-  const autoLoadedSkills = await buildAutoLoadedSkillsContent(spec.name, configService, directory);
+  const autoLoadedSkills = await buildAutoLoadedSkillsContent(spec.name, configService, directory, logger);
   return {
     model: userConfig.model,
     variant: userConfig.variant,
@@ -114,6 +120,7 @@ export async function applyWarcraftConfig(
   configService: ConfigService,
   directory: string,
   builtinMcps: Record<string, unknown>,
+  logger: Logger,
 ): Promise<void> {
   // Auto-generate config file with defaults if it doesn't exist
   configService.init();
@@ -140,6 +147,7 @@ export async function applyWarcraftConfig(
         },
         configService,
         directory,
+        logger,
       ),
       buildAgentConfig(
         {
@@ -160,6 +168,7 @@ export async function applyWarcraftConfig(
         },
         configService,
         directory,
+        logger,
       ),
       buildAgentConfig(
         {
@@ -176,6 +185,7 @@ export async function applyWarcraftConfig(
         },
         configService,
         directory,
+        logger,
       ),
       buildAgentConfig(
         {
@@ -194,6 +204,7 @@ export async function applyWarcraftConfig(
         },
         configService,
         directory,
+        logger,
       ),
       buildAgentConfig(
         {
@@ -206,6 +217,7 @@ export async function applyWarcraftConfig(
         },
         configService,
         directory,
+        logger,
       ),
       buildAgentConfig(
         {
@@ -224,6 +236,7 @@ export async function applyWarcraftConfig(
         },
         configService,
         directory,
+        logger,
       ),
     ]);
 

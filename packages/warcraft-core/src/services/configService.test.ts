@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { DEFAULT_AGENT_MODELS, DEFAULT_WARCRAFT_CONFIG } from '../defaults';
+import type { Logger } from '../utils/logger';
 import { ConfigService } from './configService';
 
 let originalHome: string | undefined;
@@ -65,29 +66,59 @@ describe('ConfigService defaults', () => {
     });
   });
 
-  it('returns defaults and warns when config JSON is invalid', () => {
-    const service = new ConfigService();
+  it('returns defaults and logs warning metadata when config JSON is invalid', () => {
+    const warnings: Array<{ message: string; context?: Record<string, unknown> }> = [];
+    const logger: Logger = {
+      debug: () => {},
+      info: () => {},
+      warn: (message, context) => {
+        warnings.push({ message, context });
+      },
+      error: () => {},
+    };
+    const service = new ConfigService(logger);
     const configPath = service.getPath();
 
     fs.mkdirSync(path.dirname(configPath), { recursive: true });
     fs.writeFileSync(configPath, '{"agents":');
 
-    const originalWarn = console.warn;
-    const warnings: string[] = [];
-    console.warn = (...args: unknown[]) => {
-      warnings.push(args.join(' '));
+    const config = service.get();
+    expect(config).toEqual(DEFAULT_WARCRAFT_CONFIG);
+
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]?.message).toBe('Failed to read Warcraft config; falling back to defaults');
+    expect(warnings[0]?.context).toEqual({
+      operation: 'read',
+      configPath,
+      reason: expect.any(String),
+    });
+  });
+
+  it('logs info metadata when initializing missing config file', () => {
+    const infos: Array<{ message: string; context?: Record<string, unknown> }> = [];
+    const logger: Logger = {
+      debug: () => {},
+      info: (message, context) => {
+        infos.push({ message, context });
+      },
+      warn: () => {},
+      error: () => {},
     };
+    const service = new ConfigService(logger);
+    const configPath = service.getPath();
 
-    try {
-      const config = service.get();
-      expect(config).toEqual(DEFAULT_WARCRAFT_CONFIG);
-    } finally {
-      console.warn = originalWarn;
-    }
-
-    expect(warnings.length).toBe(1);
-    expect(warnings[0]).toContain('[warcraft] Failed to read config');
-    expect(warnings[0]).toContain(configPath);
+    const config = service.init();
+    expect(config).toEqual(DEFAULT_WARCRAFT_CONFIG);
+    expect(fs.existsSync(configPath)).toBe(true);
+    expect(infos).toEqual([
+      {
+        message: 'Initializing Warcraft config with defaults',
+        context: {
+          operation: 'init',
+          configPath,
+        },
+      },
+    ]);
   });
 
   it('deep-merges agent overrides with defaults', () => {

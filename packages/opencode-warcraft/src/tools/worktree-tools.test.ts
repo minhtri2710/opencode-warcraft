@@ -670,6 +670,7 @@ function createCommitDeps(overrides: Partial<WorktreeToolsDependencies> = {}) {
     planService: {} as WorktreeToolsDependencies['planService'],
     taskService: {
       get: () => ({ folder: '01-task', name: 'Task', status: 'in_progress', origin: 'plan' as const }),
+      getRawStatus: () => ({ baseCommit: 'base123' }),
       update: (feature: string, task: string, updates: Record<string, unknown>) => {
         updateCalls.push({ feature, task, updates });
         return { ...updates, origin: 'plan' };

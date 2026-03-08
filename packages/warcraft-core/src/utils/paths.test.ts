@@ -747,5 +747,29 @@ describe('Atomic + Locked JSON Utilities', () => {
       const result = getTaskSpecPath('/project', 'my-feature', '01-task');
       expect(result).toBe(path.join('/project', 'docs', 'my-feature', 'tasks', '01-task', 'spec.md'));
     });
+
+    it('getTaskPath throws when beadsMode is on', () => {
+      expect(() => getTaskPath('/project', 'my-feature', '01-task', 'on')).toThrow(
+        /Task filesystem paths are only available when beadsMode is off/,
+      );
+    });
+
+    it('getTaskStatusPath throws when beadsMode is on', () => {
+      expect(() => getTaskStatusPath('/project', 'my-feature', '01-task', 'on')).toThrow(
+        /Task filesystem paths are only available when beadsMode is off/,
+      );
+    });
+
+    it('getTaskReportPath throws when beadsMode is on', () => {
+      expect(() => getTaskReportPath('/project', 'my-feature', '01-task', 'on')).toThrow(
+        /Task filesystem paths are only available when beadsMode is off/,
+      );
+    });
+
+    it('getTaskSpecPath throws when beadsMode is on', () => {
+      expect(() => getTaskSpecPath('/project', 'my-feature', '01-task', 'on')).toThrow(
+        /Task filesystem paths are only available when beadsMode is off/,
+      );
+    });
   });
 });

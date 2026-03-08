@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import { createOpencodeClient } from '@opencode-ai/sdk';
 import * as fs from 'fs';
 import * as path from 'path';
 import plugin from '../index';
+import { createTestOpencodeClient } from './helpers/opencode-client.js';
 
-const OPENCODE_CLIENT = createOpencodeClient({ baseUrl: 'http://localhost:1' });
+const { client: OPENCODE_CLIENT } = createTestOpencodeClient();
 
 const TEST_ROOT_BASE = '/tmp/warcraft-agent-mode-test';
 

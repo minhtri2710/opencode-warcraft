@@ -4,7 +4,10 @@
  */
 import { beforeAll, describe, expect, it } from 'bun:test';
 import type { Plugin } from '@opencode-ai/plugin';
+import { createTestOpencodeClient } from './e2e/helpers/opencode-client.js';
 import plugin from './index.js';
+
+const { client: OPENCODE_CLIENT } = createTestOpencodeClient();
 
 describe('Warcraft Plugin Tool Registration', () => {
   let pluginInstance: Awaited<ReturnType<Plugin>>;
@@ -12,7 +15,7 @@ describe('Warcraft Plugin Tool Registration', () => {
   beforeAll(async () => {
     pluginInstance = await plugin({
       directory: '/tmp/test-warcraft',
-      client: {} as any,
+      client: OPENCODE_CLIENT,
     });
   });
 

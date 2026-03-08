@@ -1,4 +1,6 @@
 import type { Plugin } from '@opencode-ai/plugin';
+import * as os from 'os';
+import * as path from 'path';
 import { ConfigService } from 'warcraft-core';
 import { createWarcraftContainer } from './container.js';
 import { buildCompactionPrompt } from './hooks/compaction-hook.js';
@@ -6,6 +8,7 @@ import { resetHookCounters, shouldExecuteHook } from './hooks/hook-cadence.js';
 import { applySandboxHook } from './hooks/sandbox-hook.js';
 import { createVariantHook, isWarcraftAgent } from './hooks/variant-hook.js';
 import { applyWarcraftConfig } from './plugin-config.js';
+import { createOpencodeLogger } from './utils/opencode-logger.js';
 
 // ============================================================================
 // System prompt (static, agent-agnostic)
@@ -111,11 +114,29 @@ const STATUS_HINT_TTL_MS = 30_000;
 // ============================================================================
 
 const plugin: Plugin = async (ctx) => {
-  const { directory } = ctx;
+  const { directory, worktree } = ctx;
+  const resolvedWorktree = typeof worktree === 'string' && worktree.length > 0 ? worktree : directory;
 
-  const configService = new ConfigService();
+  const logger = createOpencodeLogger(ctx.client);
+  const configService = new ConfigService(logger);
+  const configPath = configService.getPath();
+  const homeDir = process.env.HOME || process.env.USERPROFILE || os.homedir();
+  const opencodeConfigCandidatePaths = Array.from(
+    new Set([
+      path.join(homeDir, '.config', 'opencode', 'opencode.json'),
+      path.join(directory, 'opencode.json'),
+      path.join(resolvedWorktree, 'opencode.json'),
+    ]),
+  );
+  logger.info('Warcraft plugin initializing config wiring', {
+    projectDirectory: directory,
+    worktreeDirectory: resolvedWorktree,
+    warcraftConfigPath: configPath,
+    opencodeConfigCandidatePaths,
+    warcraftConfigExists: configService.exists(),
+  });
+
   const container = createWarcraftContainer(directory, configService);
-
   // Reset hook cadence counters on plugin init to ensure clean state
   resetHookCounters();
 
@@ -201,7 +222,7 @@ const plugin: Plugin = async (ctx) => {
     },
 
     config: (opencodeConfig: Record<string, unknown>) =>
-      applyWarcraftConfig(opencodeConfig, configService, directory, container.builtinMcps),
+      applyWarcraftConfig(opencodeConfig, configService, directory, container.builtinMcps, logger),
   };
 };
 

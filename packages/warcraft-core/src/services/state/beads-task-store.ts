@@ -1,8 +1,6 @@
-import * as fs from 'fs';
 import type { TaskInfo, TaskOrigin, TaskStatus, WorkerSession } from '../../types.js';
-import { fileExists, readJson } from '../../utils/fs.js';
 import type { LockOptions } from '../../utils/json-lock.js';
-import { getTaskPath, getTaskReportPath, getTaskStatusPath } from '../../utils/paths.js';
+import { getTaskReportPath } from '../../utils/paths.js';
 import { deriveTaskFolder, slugifyTaskName } from '../../utils/slug.js';
 import { type BeadsRepository, throwIfInitFailure } from '../beads/BeadsRepository.js';
 import { mapBeadStatusToTaskStatus } from '../beads/beadStatus.js';
@@ -39,7 +37,7 @@ export interface TransitionEvent {
  * TaskStore implementation for beadsMode='on'.
  *
  * All task state is canonical in bead artifacts.
- * Local filesystem is used only for delete (cleanup) and as fallback reads.
+ * Task filesystem paths are referenced only for compatibility return values.
  */
 export class BeadsTaskStore implements TaskStore {
   /**
@@ -136,13 +134,13 @@ export class BeadsTaskStore implements TaskStore {
       if (cachedTask) {
         return cachedTask;
       }
-      // Folder exists in cache but not found, return null
-      return null;
+      // Cache may be stale after external mutations; refresh and retry once
+      this.refreshIndex(featureName);
+      return this.list(featureName).find((t) => t.folder === folder) ?? null;
     }
 
     // Cache miss: populate index via list()
-    const tasks = this.list(featureName);
-    return tasks.find((t) => t.folder === folder) ?? null;
+    return this.list(featureName).find((t) => t.folder === folder) ?? null;
   }
 
   getRawStatus(featureName: string, folder: string): TaskStatus | null {
@@ -184,15 +182,7 @@ export class BeadsTaskStore implements TaskStore {
       }
     }
 
-    // Filesystem fallback
-    const status = readJson<TaskStatus>(getTaskStatusPath(this.projectRoot, featureName, folder));
-    if (!status) {
-      return null;
-    }
-    return {
-      ...status,
-      folder: (status as TaskStatus & { folder?: string }).folder ?? folder,
-    };
+    return null;
   }
 
   list(featureName: string): TaskInfo[] {
@@ -386,12 +376,6 @@ export class BeadsTaskStore implements TaskStore {
       }
     }
 
-    // Local shadow cleanup
-    const taskPath = getTaskPath(this.projectRoot, featureName, folder);
-    if (fileExists(taskPath)) {
-      fs.rmSync(taskPath, { recursive: true });
-    }
-
     // Invalidate cache entry for the deleted task
     this.invalidateCacheEntry(featureName, folder);
   }
@@ -442,7 +426,7 @@ export class BeadsTaskStore implements TaskStore {
 
   writeReport(featureName: string, folder: string, report: string): string {
     this.writeArtifact(featureName, folder, 'report', report);
-    return getTaskReportPath(this.projectRoot, featureName, folder);
+    return getTaskReportPath(this.projectRoot, featureName, folder, 'off');
   }
 
   getRunnableTasks(featureName: string): RunnableTasksResult | null {

@@ -23,7 +23,7 @@ function cleanup() {
 function writeEventsJsonl(events: Record<string, unknown>[]): void {
   const beadsDir = path.join(TEST_DIR, '.beads');
   fs.mkdirSync(beadsDir, { recursive: true });
-  fs.writeFileSync(path.join(beadsDir, 'events.jsonl'), events.map((e) => JSON.stringify(e)).join('\n') + '\n');
+  fs.writeFileSync(path.join(beadsDir, 'events.jsonl'), `${events.map((e) => JSON.stringify(e)).join('\n')}\n`);
 }
 
 function createMockDeps(overrides: Partial<Record<string, unknown>> = {}) {
