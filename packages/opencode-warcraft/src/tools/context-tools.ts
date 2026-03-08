@@ -138,15 +138,31 @@ export class ContextTools {
         const staleWorktrees = allWorktrees.filter((wt: StaleWorktreeInfo) => wt.isStale);
         const staleWarning =
           staleWorktrees.length > 0
-            ? {
-                count: staleWorktrees.length,
-                message: `${staleWorktrees.length} stale worktree(s) detected. Run warcraft_worktree_prune to review and clean up.`,
-                worktrees: staleWorktrees.map((wt: StaleWorktreeInfo) => ({
-                  feature: wt.feature,
-                  step: wt.step,
-                  path: wt.path,
-                })),
-              }
+            ? (() => {
+                const worktreesWithAge = staleWorktrees.map((wt: StaleWorktreeInfo) => {
+                  const entry: { feature: string; step: string; path: string; ageInDays?: number } = {
+                    feature: wt.feature,
+                    step: wt.step,
+                    path: wt.path,
+                  };
+                  if (wt.lastCommitAge != null && Number.isFinite(wt.lastCommitAge)) {
+                    entry.ageInDays = Math.floor(wt.lastCommitAge / 86_400_000);
+                  }
+                  return entry;
+                });
+                const ages = worktreesWithAge.map((w) => w.ageInDays).filter((a): a is number => a != null);
+                const oldestAge = ages.length > 0 ? Math.max(...ages) : null;
+                const agePart = oldestAge != null ? ` (oldest: ${oldestAge} day${oldestAge === 1 ? '' : 's'})` : '';
+                const message =
+                  `${staleWorktrees.length} stale worktree(s) detected${agePart}. ` +
+                  'Run warcraft_worktree_prune to review and clean up, ' +
+                  'or use warcraft_merge with cleanup: true to merge and remove.';
+                return {
+                  count: staleWorktrees.length,
+                  message,
+                  worktrees: worktreesWithAge,
+                };
+              })()
             : null;
 
         const { runnable, blocked: blockedBy } = taskService.computeRunnableStatus(featureName);
