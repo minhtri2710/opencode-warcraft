@@ -367,4 +367,444 @@ describe('ContextTools', () => {
       expect(typeof result.data.nextAction).toBe('string');
     });
   });
+
+  describe('stale worktree age context', () => {
+    it('includes ageInDays for stale worktrees with known lastCommitAge', async () => {
+      const threeDaysMs = 3 * 86_400_000;
+      const worktreeService = {
+        listAll: () =>
+          Promise.resolve([
+            {
+              path: '/tmp/wt/feat/step1',
+              branch: 'warcraft/feat/step1',
+              commit: 'abc123',
+              feature: 'feat',
+              step: 'step1',
+              isStale: true,
+              lastCommitAge: threeDaysMs,
+            },
+          ]),
+        get: () => Promise.resolve(null),
+      } as unknown as WorktreeService;
+
+      const result = await getStatusHealth({ worktreeService });
+
+      expect(result.data.worktreeHygiene).not.toBeNull();
+      const hygiene = result.data.worktreeHygiene as {
+        count: number;
+        message: string;
+        worktrees: Array<{ feature: string; step: string; path: string; ageInDays?: number }>;
+      };
+      expect(hygiene.count).toBe(1);
+      expect(hygiene.worktrees[0].ageInDays).toBe(3);
+    });
+
+    it('omits ageInDays when lastCommitAge is null', async () => {
+      const worktreeService = {
+        listAll: () =>
+          Promise.resolve([
+            {
+              path: '/tmp/wt/feat/step1',
+              branch: 'warcraft/feat/step1',
+              commit: '',
+              feature: 'feat',
+              step: 'step1',
+              isStale: true,
+              lastCommitAge: null,
+            },
+          ]),
+        get: () => Promise.resolve(null),
+      } as unknown as WorktreeService;
+
+      const result = await getStatusHealth({ worktreeService });
+
+      const hygiene = result.data.worktreeHygiene as {
+        count: number;
+        message: string;
+        worktrees: Array<{ feature: string; step: string; path: string; ageInDays?: number }>;
+      };
+      expect(hygiene.worktrees[0]).not.toHaveProperty('ageInDays');
+    });
+
+    it('includes oldest stale age and actionable guidance in warning message', async () => {
+      const fiveDaysMs = 5 * 86_400_000;
+      const twoDaysMs = 2 * 86_400_000;
+      const worktreeService = {
+        listAll: () =>
+          Promise.resolve([
+            {
+              path: '/tmp/wt/feat/step1',
+              branch: 'warcraft/feat/step1',
+              commit: 'abc123',
+              feature: 'feat',
+              step: 'step1',
+              isStale: true,
+              lastCommitAge: fiveDaysMs,
+            },
+            {
+              path: '/tmp/wt/feat/step2',
+              branch: 'warcraft/feat/step2',
+              commit: 'def456',
+              feature: 'feat',
+              step: 'step2',
+              isStale: true,
+              lastCommitAge: twoDaysMs,
+            },
+          ]),
+        get: () => Promise.resolve(null),
+      } as unknown as WorktreeService;
+
+      const result = await getStatusHealth({ worktreeService });
+
+      const hygiene = result.data.worktreeHygiene as {
+        count: number;
+        message: string;
+        worktrees: Array<{ feature: string; step: string; path: string; ageInDays?: number }>;
+      };
+      expect(hygiene.message).toContain('oldest: 5 days');
+      expect(hygiene.message).toContain('warcraft_worktree_prune');
+      expect(hygiene.message).toContain('warcraft_merge');
+      expect(hygiene.message).toContain('cleanup: true');
+    });
+
+    it('uses floor for ageInDays computation', async () => {
+      // 2.9 days should floor to 2
+      const almostThreeDaysMs = 2.9 * 86_400_000;
+      const worktreeService = {
+        listAll: () =>
+          Promise.resolve([
+            {
+              path: '/tmp/wt/feat/step1',
+              branch: 'warcraft/feat/step1',
+              commit: 'abc123',
+              feature: 'feat',
+              step: 'step1',
+              isStale: true,
+              lastCommitAge: almostThreeDaysMs,
+            },
+          ]),
+        get: () => Promise.resolve(null),
+      } as unknown as WorktreeService;
+
+      const result = await getStatusHealth({ worktreeService });
+
+      const hygiene = result.data.worktreeHygiene as {
+        count: number;
+        message: string;
+        worktrees: Array<{ feature: string; step: string; path: string; ageInDays?: number }>;
+      };
+      expect(hygiene.worktrees[0].ageInDays).toBe(2);
+    });
+
+    it('worktreeHygiene is null when no stale worktrees exist', async () => {
+      const worktreeService = {
+        listAll: () =>
+          Promise.resolve([
+            {
+              path: '/tmp/wt/feat/step1',
+              branch: 'warcraft/feat/step1',
+              commit: 'abc123',
+              feature: 'feat',
+              step: 'step1',
+              isStale: false,
+              lastCommitAge: 1000,
+            },
+          ]),
+        get: () => Promise.resolve(null),
+      } as unknown as WorktreeService;
+
+      const result = await getStatusHealth({ worktreeService });
+
+      expect(result.data.worktreeHygiene).toBeNull();
+    });
+
+    it('preserves existing worktree fields (feature, step, path) in stale response', async () => {
+      const oneDayMs = 86_400_000;
+      const worktreeService = {
+        listAll: () =>
+          Promise.resolve([
+            {
+              path: '/tmp/wt/my-feat/my-step',
+              branch: 'warcraft/my-feat/my-step',
+              commit: 'abc',
+              feature: 'my-feat',
+              step: 'my-step',
+              isStale: true,
+              lastCommitAge: oneDayMs,
+            },
+          ]),
+        get: () => Promise.resolve(null),
+      } as unknown as WorktreeService;
+
+      const result = await getStatusHealth({ worktreeService });
+
+      const hygiene = result.data.worktreeHygiene as {
+        count: number;
+        worktrees: Array<{ feature: string; step: string; path: string; ageInDays?: number }>;
+      };
+      expect(hygiene.worktrees[0].feature).toBe('my-feat');
+      expect(hygiene.worktrees[0].step).toBe('my-step');
+      expect(hygiene.worktrees[0].path).toBe('/tmp/wt/my-feat/my-step');
+      expect(hygiene.worktrees[0].ageInDays).toBe(1);
+    });
+  });
+
+  describe('stale warning payload shape and content', () => {
+    it('stale warning has exactly the keys: count, message, worktrees', async () => {
+      const worktreeService = {
+        listAll: () =>
+          Promise.resolve([
+            {
+              path: '/tmp/wt/feat/step1',
+              branch: 'warcraft/feat/step1',
+              commit: 'abc123',
+              feature: 'feat',
+              step: 'step1',
+              isStale: true,
+              lastCommitAge: 2 * 86_400_000,
+            },
+          ]),
+        get: () => Promise.resolve(null),
+      } as unknown as WorktreeService;
+
+      const result = await getStatusHealth({ worktreeService });
+
+      expect(result.data.worktreeHygiene).not.toBeNull();
+      const hygiene = result.data.worktreeHygiene as Record<string, unknown>;
+      const keys = Object.keys(hygiene).sort();
+      expect(keys).toEqual(['count', 'message', 'worktrees']);
+    });
+
+    it('each worktree entry has exactly feature, step, path, and ageInDays when age is known', async () => {
+      const worktreeService = {
+        listAll: () =>
+          Promise.resolve([
+            {
+              path: '/tmp/wt/feat/s1',
+              branch: 'warcraft/feat/s1',
+              commit: 'abc',
+              feature: 'feat',
+              step: 's1',
+              isStale: true,
+              lastCommitAge: 86_400_000,
+            },
+          ]),
+        get: () => Promise.resolve(null),
+      } as unknown as WorktreeService;
+
+      const result = await getStatusHealth({ worktreeService });
+
+      const hygiene = result.data.worktreeHygiene as {
+        worktrees: Array<Record<string, unknown>>;
+      };
+      const entryKeys = Object.keys(hygiene.worktrees[0]).sort();
+      expect(entryKeys).toEqual(['ageInDays', 'feature', 'path', 'step']);
+    });
+
+    it('worktree entry without lastCommitAge has exactly feature, step, path (no ageInDays)', async () => {
+      const worktreeService = {
+        listAll: () =>
+          Promise.resolve([
+            {
+              path: '/tmp/wt/feat/s1',
+              branch: 'warcraft/feat/s1',
+              commit: '',
+              feature: 'feat',
+              step: 's1',
+              isStale: true,
+              lastCommitAge: null,
+            },
+          ]),
+        get: () => Promise.resolve(null),
+      } as unknown as WorktreeService;
+
+      const result = await getStatusHealth({ worktreeService });
+
+      const hygiene = result.data.worktreeHygiene as {
+        worktrees: Array<Record<string, unknown>>;
+      };
+      const entryKeys = Object.keys(hygiene.worktrees[0]).sort();
+      expect(entryKeys).toEqual(['feature', 'path', 'step']);
+    });
+
+    it('message uses singular "day" when oldest worktree is exactly 1 day old', async () => {
+      const worktreeService = {
+        listAll: () =>
+          Promise.resolve([
+            {
+              path: '/tmp/wt/feat/s1',
+              branch: 'warcraft/feat/s1',
+              commit: 'abc',
+              feature: 'feat',
+              step: 's1',
+              isStale: true,
+              lastCommitAge: 86_400_000,
+            },
+          ]),
+        get: () => Promise.resolve(null),
+      } as unknown as WorktreeService;
+
+      const result = await getStatusHealth({ worktreeService });
+
+      const hygiene = result.data.worktreeHygiene as { message: string };
+      expect(hygiene.message).toContain('oldest: 1 day');
+      expect(hygiene.message).not.toContain('1 days');
+    });
+
+    it('message uses plural "days" when oldest worktree is more than 1 day old', async () => {
+      const worktreeService = {
+        listAll: () =>
+          Promise.resolve([
+            {
+              path: '/tmp/wt/feat/s1',
+              branch: 'warcraft/feat/s1',
+              commit: 'abc',
+              feature: 'feat',
+              step: 's1',
+              isStale: true,
+              lastCommitAge: 3 * 86_400_000,
+            },
+          ]),
+        get: () => Promise.resolve(null),
+      } as unknown as WorktreeService;
+
+      const result = await getStatusHealth({ worktreeService });
+
+      const hygiene = result.data.worktreeHygiene as { message: string };
+      expect(hygiene.message).toContain('oldest: 3 days');
+    });
+
+    it('worktreeHygiene is null when worktreeService returns empty array', async () => {
+      const worktreeService = {
+        listAll: () => Promise.resolve([]),
+        get: () => Promise.resolve(null),
+      } as unknown as WorktreeService;
+
+      const result = await getStatusHealth({ worktreeService });
+
+      expect(result.data.worktreeHygiene).toBeNull();
+    });
+
+    it('worktreeHygiene is null with default mock (no stale worktrees)', async () => {
+      // Default createMockDeps returns empty array from listAll
+      const result = await getStatusHealth();
+
+      expect(result.data.worktreeHygiene).toBeNull();
+    });
+
+    it('count matches the number of stale worktrees excluding non-stale ones', async () => {
+      const worktreeService = {
+        listAll: () =>
+          Promise.resolve([
+            {
+              path: '/tmp/wt/feat/s1',
+              branch: 'warcraft/feat/s1',
+              commit: 'abc',
+              feature: 'feat',
+              step: 's1',
+              isStale: true,
+              lastCommitAge: 7 * 86_400_000,
+            },
+            {
+              path: '/tmp/wt/feat/s2',
+              branch: 'warcraft/feat/s2',
+              commit: 'def',
+              feature: 'feat',
+              step: 's2',
+              isStale: true,
+              lastCommitAge: 2 * 86_400_000,
+            },
+            {
+              path: '/tmp/wt/feat/s3',
+              branch: 'warcraft/feat/s3',
+              commit: 'ghi',
+              feature: 'feat',
+              step: 's3',
+              isStale: false,
+              lastCommitAge: 1000,
+            },
+          ]),
+        get: () => Promise.resolve(null),
+      } as unknown as WorktreeService;
+
+      const result = await getStatusHealth({ worktreeService });
+
+      const hygiene = result.data.worktreeHygiene as {
+        count: number;
+        message: string;
+        worktrees: Array<{ feature: string; step: string; path: string; ageInDays?: number }>;
+      };
+      // Only 2 stale worktrees (s3 is not stale)
+      expect(hygiene.count).toBe(2);
+      expect(hygiene.worktrees).toHaveLength(2);
+      expect(hygiene.worktrees[0].ageInDays).toBe(7);
+      expect(hygiene.worktrees[1].ageInDays).toBe(2);
+      // Oldest is 7 days
+      expect(hygiene.message).toContain('oldest: 7 days');
+      expect(hygiene.message).toContain('2 stale worktree(s)');
+    });
+
+    it('message omits age part when all stale worktrees have null lastCommitAge', async () => {
+      const worktreeService = {
+        listAll: () =>
+          Promise.resolve([
+            {
+              path: '/tmp/wt/feat/s1',
+              branch: 'warcraft/feat/s1',
+              commit: '',
+              feature: 'feat',
+              step: 's1',
+              isStale: true,
+              lastCommitAge: null,
+            },
+          ]),
+        get: () => Promise.resolve(null),
+      } as unknown as WorktreeService;
+
+      const result = await getStatusHealth({ worktreeService });
+
+      const hygiene = result.data.worktreeHygiene as { message: string };
+      // No "(oldest: N day(s))" when age is unknown
+      expect(hygiene.message).not.toContain('oldest');
+      // But still contains the actionable guidance
+      expect(hygiene.message).toContain('warcraft_worktree_prune');
+      expect(hygiene.message).toContain('warcraft_merge');
+    });
+
+    it('message starts with the stale count and includes full actionable guidance', async () => {
+      const worktreeService = {
+        listAll: () =>
+          Promise.resolve([
+            {
+              path: '/tmp/wt/feat/s1',
+              branch: 'warcraft/feat/s1',
+              commit: 'abc',
+              feature: 'feat',
+              step: 's1',
+              isStale: true,
+              lastCommitAge: 4 * 86_400_000,
+            },
+            {
+              path: '/tmp/wt/feat/s2',
+              branch: 'warcraft/feat/s2',
+              commit: 'def',
+              feature: 'feat',
+              step: 's2',
+              isStale: true,
+              lastCommitAge: 1 * 86_400_000,
+            },
+          ]),
+        get: () => Promise.resolve(null),
+      } as unknown as WorktreeService;
+
+      const result = await getStatusHealth({ worktreeService });
+
+      const hygiene = result.data.worktreeHygiene as { message: string };
+      // Message format: "{N} stale worktree(s) detected (oldest: M day(s)). Run warcraft_worktree_prune ... or use warcraft_merge with cleanup: true ..."
+      expect(hygiene.message).toMatch(/^2 stale worktree\(s\) detected/);
+      expect(hygiene.message).toContain('oldest: 4 days');
+      expect(hygiene.message).toContain('Run warcraft_worktree_prune to review and clean up');
+      expect(hygiene.message).toContain('warcraft_merge with cleanup: true');
+    });
+  });
 });
