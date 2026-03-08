@@ -10,6 +10,8 @@
  * - **complex**: Large spec, many files, retries, or high reopen rate — add incremental verification guidance.
  *
  * Classification is O(1) relative to task history size (FR-010, NFR-002).
+ *
+ * @see specs/004-adaptive-prompts/spec.md — FR-001 through FR-004
  */
 
 // ============================================================================
