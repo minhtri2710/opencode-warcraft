@@ -778,4 +778,95 @@ describe('dispatch-task', () => {
       expect(batchResult.taskToolCall?.prompt).toContain('Previous Attempt Context');
     });
   });
+
+  // --------------------------------------------------------------------------
+  // featureReopenRate wiring — ensures reopen rate reaches classifier
+  // --------------------------------------------------------------------------
+
+  describe('featureReopenRate wiring', () => {
+    it('classifies as complex when featureReopenRate > 0.2 is provided', async () => {
+      const services = createMockServices({
+        featureReopenRate: 0.3,
+      });
+
+      const result = await dispatchOneTask(createInput(), services);
+
+      expect(result.success).toBe(true);
+      expect(result.taskToolCall?.prompt).toContain('Complex Task Guidance');
+    });
+
+    it('does NOT classify as complex when featureReopenRate <= 0.2', async () => {
+      const services = createMockServices({
+        featureReopenRate: 0.2,
+      });
+
+      const result = await dispatchOneTask(createInput(), services);
+
+      expect(result.success).toBe(true);
+      expect(result.taskToolCall?.prompt).not.toContain('Complex Task Guidance');
+    });
+
+    it('treats missing featureReopenRate as 0 (not complex)', async () => {
+      const services = createMockServices();
+      // featureReopenRate is undefined by default
+
+      const result = await dispatchOneTask(createInput(), services);
+
+      expect(result.success).toBe(true);
+      expect(result.taskToolCall?.prompt).not.toContain('Complex Task Guidance');
+    });
+
+    it('normalizes invalid featureReopenRate values (NaN, negative, >1)', async () => {
+      // NaN should be normalized to 0, not trigger complex
+      const nanServices = createMockServices({ featureReopenRate: NaN });
+      const nanResult = await dispatchOneTask(createInput(), nanServices);
+      expect(nanResult.success).toBe(true);
+      expect(nanResult.taskToolCall?.prompt).not.toContain('Complex Task Guidance');
+
+      releaseAllDispatchLocks();
+
+      // Negative should be normalized to 0
+      const negServices = createMockServices({ featureReopenRate: -0.5 });
+      const negResult = await dispatchOneTask(createInput(), negServices);
+      expect(negResult.success).toBe(true);
+      expect(negResult.taskToolCall?.prompt).not.toContain('Complex Task Guidance');
+
+      releaseAllDispatchLocks();
+
+      // >1 should be normalized to 0
+      const overServices = createMockServices({ featureReopenRate: 1.5 });
+      const overResult = await dispatchOneTask(createInput(), overServices);
+      expect(overResult.success).toBe(true);
+      expect(overResult.taskToolCall?.prompt).not.toContain('Complex Task Guidance');
+    });
+
+    it('featureReopenRate parity: same classification via shared and non-shared dispatch', async () => {
+      const services = createMockServices({
+        featureReopenRate: 0.3,
+      });
+
+      // Single-task dispatch (no shared data)
+      const singleResult = await dispatchOneTask(createInput(), services);
+
+      // Batch-style dispatch (with shared data pre-fetched)
+      const shared = fetchSharedDispatchData('test-feature', {
+        planService: services.planService as any,
+        taskService: services.taskService as any,
+        contextService: services.contextService,
+        verificationModel: services.verificationModel,
+        featureReopenRate: 0.3,
+      });
+
+      releaseAllDispatchLocks();
+
+      const batchResult = await dispatchOneTask(createInput(), services, shared);
+
+      expect(singleResult.success).toBe(true);
+      expect(batchResult.success).toBe(true);
+
+      // Both should classify as complex due to high reopen rate
+      expect(singleResult.taskToolCall?.prompt).toContain('Complex Task Guidance');
+      expect(batchResult.taskToolCall?.prompt).toContain('Complex Task Guidance');
+    });
+  });
 });

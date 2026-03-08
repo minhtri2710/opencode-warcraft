@@ -52,6 +52,8 @@ export interface WorktreeToolsDependencies {
   verificationModel: 'tdd' | 'best-effort';
   workflowGatesMode: 'enforce' | 'warn';
   structuredVerificationMode?: 'compat' | 'enforce';
+  /** Lazy getter for feature-level reopen rate from trust metrics (0.0–1.0). Called at dispatch time. */
+  getFeatureReopenRate?: () => number;
   lockDir?: string;
   execAsync?: ExecAsyncFn;
   eventLogger: EventLogger;
@@ -76,6 +78,7 @@ export class WorktreeTools {
       contextService,
       worktreeService,
       verificationModel,
+      getFeatureReopenRate,
       eventLogger,
     } = this.deps;
     return tool({
@@ -148,7 +151,7 @@ export class WorktreeTools {
                   }
                 : undefined,
           },
-          { planService, taskService, contextService, verificationModel },
+          { planService, taskService, contextService, verificationModel, featureReopenRate: getFeatureReopenRate?.() },
         );
 
         const {

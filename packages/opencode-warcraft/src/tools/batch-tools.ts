@@ -21,6 +21,8 @@ export interface BatchToolsDependencies {
     maxConcurrency?: number;
   };
   verificationModel: 'tdd' | 'best-effort';
+  /** Lazy getter for feature-level reopen rate from trust metrics (0.0–1.0). Called at dispatch time. */
+  getFeatureReopenRate?: () => number;
   /** Directory for per-task dispatch locks. */
   lockDir?: string;
 }
@@ -105,6 +107,7 @@ export class BatchTools {
       checkBlocked,
       checkDependencies,
       verificationModel,
+      getFeatureReopenRate,
       lockDir,
     } = this.deps;
     const parallelPolicy = resolveParallelPolicy(this.deps.parallelExecution);
@@ -215,11 +218,13 @@ export class BatchTools {
         }
 
         // Dispatch all tasks in parallel
+        const featureReopenRate = getFeatureReopenRate?.();
         const shared = fetchSharedDispatchData(feature, {
           planService,
           taskService,
           contextService,
           verificationModel,
+          featureReopenRate,
         });
 
         const dispatchTask = async (task: string): Promise<TaskDispatchResult> => {
@@ -231,6 +236,7 @@ export class BatchTools {
             checkBlocked,
             checkDependencies,
             verificationModel,
+            featureReopenRate,
             lockDir,
           };
           return dispatchOneTask({ feature, task }, unifiedServices, shared);
