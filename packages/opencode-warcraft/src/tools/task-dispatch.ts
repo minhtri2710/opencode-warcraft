@@ -6,6 +6,7 @@ import {
   DEFAULT_BUDGET,
   type TruncationEvent,
 } from '../utils/prompt-budgeting.js';
+import { classifyComplexity, type TaskComplexity } from '../utils/task-complexity.js';
 import type { CompletedTask, ContinueFromBlocked, WorkerContextFile } from '../utils/worker-prompt.js';
 import { buildWorkerPrompt } from '../utils/worker-prompt.js';
 
@@ -25,6 +26,8 @@ export interface TaskDispatchServices {
   taskService: TaskService;
   contextService: { list: (feature: string) => Array<{ name: string; content: string }> };
   verificationModel: 'tdd' | 'best-effort';
+  /** Feature-level reopen rate from trust metrics (0.0–1.0). Defaults to 0. */
+  featureReopenRate?: number;
 }
 
 /**
@@ -48,6 +51,10 @@ export interface TaskDispatchPrep {
   droppedTasksHint?: string;
   taskBeadId: string;
   planContent: string | null;
+  /** Classified task complexity level. */
+  complexity: TaskComplexity;
+  /** Prior-attempt context (present when previousAttempts > 0 and summary exists). */
+  failureContext?: string;
 }
 
 /**
@@ -59,6 +66,15 @@ function sanitizeLearnings(raw: unknown): string[] | undefined {
   if (!Array.isArray(raw)) return undefined;
   const valid = raw.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
   return valid.length > 0 ? valid : undefined;
+}
+
+/**
+ * Normalize an optional reopen rate to a valid 0–1 number.
+ * Returns 0 for missing, NaN, negative, or out-of-range values.
+ */
+function normalizeReopenRate(rate: number | undefined | null): number {
+  if (rate == null || !Number.isFinite(rate) || rate < 0 || rate > 1) return 0;
+  return rate;
 }
 
 /**
@@ -186,6 +202,25 @@ export function prepareTaskDispatch(
   // Write spec and get bead ID
   const taskBeadId = taskService.writeSpec(feature, task, specContent);
 
+  // --- Compute complexity signals (FR-001 through FR-004, FR-009) ---
+  const previousAttempts = status?.workerSession?.attempt ?? 0;
+  const featureReopenRate = normalizeReopenRate(services.featureReopenRate);
+
+  // Count file references in spec: paths like `src/foo.ts`, `file:`, or backtick-quoted paths
+  const fileReferencePattern = /(?:`[^`]*\/[^`]+\.\w+`|[\w-]+\/[\w./-]+\.\w+)/g;
+  const fileCount = (specContent.match(fileReferencePattern) || []).length;
+
+  const complexity = classifyComplexity({
+    specLength: specContent.length,
+    fileCount,
+    dependencyCount: dependsOn.length,
+    previousAttempts,
+    featureReopenRate,
+  });
+
+  // --- Build failure context (FR-008) ---
+  const failureContext = previousAttempts > 0 && status?.summary ? status.summary : undefined;
+
   // Build and write worker prompt
   const workerPrompt = buildWorkerPrompt({
     feature,
@@ -199,6 +234,8 @@ export function prepareTaskDispatch(
     previousTasks,
     continueFrom,
     verificationModel: services.verificationModel,
+    complexity,
+    failureContext,
   });
 
   taskService.writeWorkerPrompt(feature, task, workerPrompt);
@@ -215,5 +252,7 @@ export function prepareTaskDispatch(
     droppedTasksHint,
     taskBeadId,
     planContent: data.planContent,
+    complexity,
+    failureContext,
   };
 }
