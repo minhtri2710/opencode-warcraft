@@ -114,35 +114,411 @@ describe('WorktreeTools', () => {
   });
 });
 
-describe('mergeTaskTool verification defaults', () => {
+/** Parse tool result JSON string into data object */
+function parseToolResult(result: unknown): Record<string, unknown> {
+  const json = JSON.parse(result as string);
+  return json.data ?? json;
+}
+
+/** Create a mock execAsync that tracks calls and returns success */
+function createMockExec(options: { shouldFail?: boolean; failOnCall?: number } = {}) {
+  let callCount = 0;
+  const calls: Array<{ command: string; options: { cwd: string; timeout: number } }> = [];
+
+  const mockExec = async (command: string, opts: { cwd: string; timeout: number }) => {
+    callCount++;
+    calls.push({ command, options: opts });
+
+    if (options.shouldFail || (options.failOnCall && callCount >= options.failOnCall)) {
+      const err = new Error('Command failed') as Error & { stdout: string; stderr: string };
+      err.stdout = 'FAIL src/test.ts';
+      err.stderr = 'Error: assertion failed';
+      throw err;
+    }
+    return { stdout: `${command} passed\n`, stderr: '' };
+  };
+
+  return { mockExec, getCalls: () => calls, getCallCount: () => callCount };
+}
+
+describe('mergeTaskTool cleanup', () => {
   const resolveFeature = () => 'test-feature';
 
-  /** Parse tool result JSON string into data object */
-  function parseToolResult(result: unknown): Record<string, unknown> {
+  it('includes cleanup.requested=false and cleanup.removed=false when cleanup is omitted', async () => {
+    const { mockExec } = createMockExec();
+    const deps = createMergeDeps({ verificationModel: 'best-effort', execAsync: mockExec });
+    const tools = new WorktreeTools(deps);
+    const mergeTool = tools.mergeTaskTool(resolveFeature);
+
+    const result = await mergeTool.execute(
+      { task: '01-task', strategy: 'merge', feature: 'test-feature' },
+      {} as never,
+    );
+
+    const data = parseToolResult(result);
+    expect(data.cleanup).toBeDefined();
+    const cleanup = data.cleanup as Record<string, unknown>;
+    expect(cleanup.requested).toBe(false);
+    expect(cleanup.removed).toBe(false);
+    expect(cleanup.reason).toBe('not-requested');
+  });
+
+  it('includes cleanup.requested=false and cleanup.removed=false when cleanup is false', async () => {
+    const { mockExec } = createMockExec();
+    const deps = createMergeDeps({ verificationModel: 'best-effort', execAsync: mockExec });
+    const tools = new WorktreeTools(deps);
+    const mergeTool = tools.mergeTaskTool(resolveFeature);
+
+    const result = await mergeTool.execute(
+      { task: '01-task', strategy: 'merge', feature: 'test-feature', cleanup: false },
+      {} as never,
+    );
+
+    const data = parseToolResult(result);
+    expect(data.cleanup).toBeDefined();
+    const cleanup = data.cleanup as Record<string, unknown>;
+    expect(cleanup.requested).toBe(false);
+    expect(cleanup.removed).toBe(false);
+    expect(cleanup.reason).toBe('not-requested');
+  });
+
+  it('removes worktree when cleanup is true and reports cleanup.removed=true', async () => {
+    const removeCalls: Array<{ feature: string; step: string; deleteBranch: boolean }> = [];
+    const { mockExec } = createMockExec();
+    const deps = createMergeDeps({
+      verificationModel: 'best-effort',
+      execAsync: mockExec,
+      worktreeServiceOverrides: {
+        merge: async () => ({ success: true, sha: 'abc123', filesChanged: ['a.ts'] }),
+        remove: async (feature: string, step: string, deleteBranch: boolean) => {
+          removeCalls.push({ feature, step, deleteBranch });
+        },
+      },
+    } as unknown as Partial<WorktreeToolsDependencies>);
+    const tools = new WorktreeTools(deps);
+    const mergeTool = tools.mergeTaskTool(resolveFeature);
+
+    const result = await mergeTool.execute(
+      { task: '01-task', strategy: 'merge', feature: 'test-feature', cleanup: true },
+      {} as never,
+    );
+
+    const data = parseToolResult(result);
+    expect(data.cleanup).toBeDefined();
+    const cleanup = data.cleanup as Record<string, unknown>;
+    expect(cleanup.requested).toBe(true);
+    expect(cleanup.removed).toBe(true);
+    // Verify remove was called with deleteBranch=false
+    expect(removeCalls).toHaveLength(1);
+    expect(removeCalls[0].feature).toBe('test-feature');
+    expect(removeCalls[0].step).toBe('01-task');
+    expect(removeCalls[0].deleteBranch).toBe(false);
+  });
+
+  it('reports cleanup error as non-fatal when cleanup fails after successful merge', async () => {
+    const { mockExec } = createMockExec();
+    const deps = createMergeDeps({
+      verificationModel: 'best-effort',
+      execAsync: mockExec,
+      worktreeServiceOverrides: {
+        merge: async () => ({ success: true, sha: 'abc123', filesChanged: ['a.ts'] }),
+        remove: async () => {
+          throw new Error('Permission denied');
+        },
+      },
+    } as unknown as Partial<WorktreeToolsDependencies>);
+    const tools = new WorktreeTools(deps);
+    const mergeTool = tools.mergeTaskTool(resolveFeature);
+
+    const result = await mergeTool.execute(
+      { task: '01-task', strategy: 'merge', feature: 'test-feature', cleanup: true },
+      {} as never,
+    );
+
+    // Merge should still succeed (non-fatal cleanup error)
+    const data = parseToolResult(result);
+    expect(data.message).toContain('merged successfully');
+    const cleanup = data.cleanup as Record<string, unknown>;
+    expect(cleanup.requested).toBe(true);
+    expect(cleanup.removed).toBe(false);
+    expect(cleanup.error).toBe('Permission denied');
+  });
+
+  it('does not perform cleanup when merge fails', async () => {
+    const removeCalls: string[] = [];
+    const { mockExec } = createMockExec();
+    const deps = createMergeDeps({
+      verificationModel: 'best-effort',
+      execAsync: mockExec,
+      worktreeServiceOverrides: {
+        merge: async () => ({ success: false, error: 'Merge conflict' }),
+        remove: async () => {
+          removeCalls.push('called');
+        },
+      },
+    } as unknown as Partial<WorktreeToolsDependencies>);
+    const tools = new WorktreeTools(deps);
+    const mergeTool = tools.mergeTaskTool(resolveFeature);
+
+    const result = await mergeTool.execute(
+      { task: '01-task', strategy: 'merge', feature: 'test-feature', cleanup: true },
+      {} as never,
+    );
+
+    // Merge failed, so cleanup should not have been called
+    expect(removeCalls).toHaveLength(0);
+    // Result should be an error (toolError)
     const json = JSON.parse(result as string);
-    return json.data ?? json;
-  }
+    expect(json.error).toBeDefined();
+  });
 
-  /** Create a mock execAsync that tracks calls and returns success */
-  function createMockExec(options: { shouldFail?: boolean; failOnCall?: number } = {}) {
-    let callCount = 0;
-    const calls: Array<{ command: string; options: { cwd: string; timeout: number } }> = [];
+  it('includes cleanup object even when verification runs after merge', async () => {
+    const removeCalls: string[] = [];
+    const { mockExec } = createMockExec();
+    const deps = createMergeDeps({
+      verificationModel: 'tdd',
+      execAsync: mockExec,
+      worktreeServiceOverrides: {
+        merge: async () => ({ success: true, sha: 'abc123', filesChanged: ['a.ts'] }),
+        remove: async () => {
+          removeCalls.push('called');
+        },
+      },
+    } as unknown as Partial<WorktreeToolsDependencies>);
+    const tools = new WorktreeTools(deps);
+    const mergeTool = tools.mergeTaskTool(resolveFeature);
 
-    const mockExec = async (command: string, opts: { cwd: string; timeout: number }) => {
-      callCount++;
-      calls.push({ command, options: opts });
+    const result = await mergeTool.execute(
+      { task: '01-task', strategy: 'merge', feature: 'test-feature', cleanup: true },
+      {} as never,
+    );
 
-      if (options.shouldFail || (options.failOnCall && callCount >= options.failOnCall)) {
-        const err = new Error('Command failed') as Error & { stdout: string; stderr: string };
-        err.stdout = 'FAIL src/test.ts';
-        err.stderr = 'Error: assertion failed';
-        throw err;
-      }
-      return { stdout: `${command} passed\n`, stderr: '' };
-    };
+    const data = parseToolResult(result);
+    expect(data.cleanup).toBeDefined();
+    const cleanup = data.cleanup as Record<string, unknown>;
+    expect(cleanup.requested).toBe(true);
+    expect(cleanup.removed).toBe(true);
+    // Verification should also have run
+    expect(data.verification).toBeDefined();
+    expect(removeCalls).toHaveLength(1);
+  });
+});
 
-    return { mockExec, getCalls: () => calls, getCallCount: () => callCount };
-  }
+describe('mergeTaskTool cleanup edge cases', () => {
+  const resolveFeature = () => 'test-feature';
+
+  it('does not attempt cleanup when merge fails with conflicts', async () => {
+    const removeCalls: string[] = [];
+    const { mockExec } = createMockExec();
+    const deps = createMergeDeps({
+      verificationModel: 'best-effort',
+      execAsync: mockExec,
+      worktreeServiceOverrides: {
+        merge: async () => ({ success: false, conflicts: ['src/a.ts', 'src/b.ts'] }),
+        remove: async () => {
+          removeCalls.push('called');
+        },
+      },
+    } as unknown as Partial<WorktreeToolsDependencies>);
+    const tools = new WorktreeTools(deps);
+    const mergeTool = tools.mergeTaskTool(resolveFeature);
+
+    const result = await mergeTool.execute(
+      { task: '01-task', strategy: 'merge', feature: 'test-feature', cleanup: true },
+      {} as never,
+    );
+
+    // Merge failed with conflicts, so cleanup should not have been called
+    expect(removeCalls).toHaveLength(0);
+    // Result should be an error mentioning conflicts
+    const json = JSON.parse(result as string);
+    expect(json.error).toBeDefined();
+    expect(json.error).toContain('conflicts');
+  });
+
+  it('performs cleanup with squash strategy after successful merge', async () => {
+    const removeCalls: Array<{ feature: string; step: string; deleteBranch: boolean }> = [];
+    const { mockExec } = createMockExec();
+    const deps = createMergeDeps({
+      verificationModel: 'best-effort',
+      execAsync: mockExec,
+      worktreeServiceOverrides: {
+        merge: async () => ({ success: true, sha: 'def456', filesChanged: ['b.ts'] }),
+        remove: async (feature: string, step: string, deleteBranch: boolean) => {
+          removeCalls.push({ feature, step, deleteBranch });
+        },
+      },
+    } as unknown as Partial<WorktreeToolsDependencies>);
+    const tools = new WorktreeTools(deps);
+    const mergeTool = tools.mergeTaskTool(resolveFeature);
+
+    const result = await mergeTool.execute(
+      { task: '01-task', strategy: 'squash', feature: 'test-feature', cleanup: true },
+      {} as never,
+    );
+
+    const data = parseToolResult(result);
+    expect(data.message).toContain('squash');
+    const cleanup = data.cleanup as Record<string, unknown>;
+    expect(cleanup.requested).toBe(true);
+    expect(cleanup.removed).toBe(true);
+    expect(removeCalls).toHaveLength(1);
+    expect(removeCalls[0].deleteBranch).toBe(false);
+  });
+
+  it('uses fallback message when cleanup error has no message property', async () => {
+    const { mockExec } = createMockExec();
+    const deps = createMergeDeps({
+      verificationModel: 'best-effort',
+      execAsync: mockExec,
+      worktreeServiceOverrides: {
+        merge: async () => ({ success: true, sha: 'abc123', filesChanged: ['a.ts'] }),
+        remove: async () => {
+          throw { code: 'ENOENT' }; // Error object without message property
+        },
+      },
+    } as unknown as Partial<WorktreeToolsDependencies>);
+    const tools = new WorktreeTools(deps);
+    const mergeTool = tools.mergeTaskTool(resolveFeature);
+
+    const result = await mergeTool.execute(
+      { task: '01-task', strategy: 'merge', feature: 'test-feature', cleanup: true },
+      {} as never,
+    );
+
+    const data = parseToolResult(result);
+    expect(data.message).toContain('merged successfully');
+    const cleanup = data.cleanup as Record<string, unknown>;
+    expect(cleanup.requested).toBe(true);
+    expect(cleanup.removed).toBe(false);
+    expect(cleanup.error).toBe('Worktree cleanup failed');
+  });
+
+  it('includes both cleanup error and verification when cleanup fails and verify runs', async () => {
+    const { mockExec } = createMockExec();
+    const deps = createMergeDeps({
+      verificationModel: 'tdd',
+      execAsync: mockExec,
+      worktreeServiceOverrides: {
+        merge: async () => ({ success: true, sha: 'abc123', filesChanged: ['a.ts'] }),
+        remove: async () => {
+          throw new Error('Stale lock file');
+        },
+      },
+    } as unknown as Partial<WorktreeToolsDependencies>);
+    const tools = new WorktreeTools(deps);
+    const mergeTool = tools.mergeTaskTool(resolveFeature);
+
+    const result = await mergeTool.execute(
+      { task: '01-task', strategy: 'merge', feature: 'test-feature', cleanup: true },
+      {} as never,
+    );
+
+    const data = parseToolResult(result);
+    // Cleanup error should be present
+    const cleanup = data.cleanup as Record<string, unknown>;
+    expect(cleanup.requested).toBe(true);
+    expect(cleanup.removed).toBe(false);
+    expect(cleanup.error).toBe('Stale lock file');
+    // Verification should also have run despite cleanup failure
+    const verification = data.verification as Record<string, unknown>;
+    expect(verification).toBeDefined();
+    expect(verification.passed).toBe(true);
+  });
+
+  it('does not attempt cleanup when task is not found', async () => {
+    const removeCalls: string[] = [];
+    const { mockExec } = createMockExec();
+    const deps = createMergeDeps({
+      verificationModel: 'best-effort',
+      execAsync: mockExec,
+      taskServiceOverrides: {
+        get: () => null, // Task not found
+      },
+      worktreeServiceOverrides: {
+        merge: async () => ({ success: true, sha: 'abc123', filesChanged: [] }),
+        remove: async () => {
+          removeCalls.push('called');
+        },
+      },
+    } as unknown as Partial<WorktreeToolsDependencies>);
+    const tools = new WorktreeTools(deps);
+    const mergeTool = tools.mergeTaskTool(resolveFeature);
+
+    const result = await mergeTool.execute(
+      { task: '01-missing', strategy: 'merge', feature: 'test-feature', cleanup: true },
+      {} as never,
+    );
+
+    expect(removeCalls).toHaveLength(0);
+    const json = JSON.parse(result as string);
+    expect(json.error).toBeDefined();
+  });
+
+  it('does not attempt cleanup when task status is not done', async () => {
+    const removeCalls: string[] = [];
+    const { mockExec } = createMockExec();
+    const deps = createMergeDeps({
+      verificationModel: 'best-effort',
+      execAsync: mockExec,
+      taskServiceOverrides: {
+        get: () => ({ folder: '01-task', name: 'Task', status: 'in_progress', origin: 'plan' as const }),
+      },
+      worktreeServiceOverrides: {
+        merge: async () => ({ success: true, sha: 'abc123', filesChanged: [] }),
+        remove: async () => {
+          removeCalls.push('called');
+        },
+      },
+    } as unknown as Partial<WorktreeToolsDependencies>);
+    const tools = new WorktreeTools(deps);
+    const mergeTool = tools.mergeTaskTool(resolveFeature);
+
+    const result = await mergeTool.execute(
+      { task: '01-task', strategy: 'merge', feature: 'test-feature', cleanup: true },
+      {} as never,
+    );
+
+    expect(removeCalls).toHaveLength(0);
+    const json = JSON.parse(result as string);
+    expect(json.error).toBeDefined();
+  });
+
+  it('performs cleanup with rebase strategy after successful merge', async () => {
+    const removeCalls: Array<{ feature: string; step: string; deleteBranch: boolean }> = [];
+    const { mockExec } = createMockExec();
+    const deps = createMergeDeps({
+      verificationModel: 'best-effort',
+      execAsync: mockExec,
+      worktreeServiceOverrides: {
+        merge: async () => ({ success: true, sha: 'ghi789', filesChanged: ['c.ts'] }),
+        remove: async (feature: string, step: string, deleteBranch: boolean) => {
+          removeCalls.push({ feature, step, deleteBranch });
+        },
+      },
+    } as unknown as Partial<WorktreeToolsDependencies>);
+    const tools = new WorktreeTools(deps);
+    const mergeTool = tools.mergeTaskTool(resolveFeature);
+
+    const result = await mergeTool.execute(
+      { task: '01-task', strategy: 'rebase', feature: 'test-feature', cleanup: true },
+      {} as never,
+    );
+
+    const data = parseToolResult(result);
+    expect(data.message).toContain('rebase');
+    const cleanup = data.cleanup as Record<string, unknown>;
+    expect(cleanup.requested).toBe(true);
+    expect(cleanup.removed).toBe(true);
+    expect(removeCalls).toHaveLength(1);
+    expect(removeCalls[0].feature).toBe('test-feature');
+    expect(removeCalls[0].step).toBe('01-task');
+    expect(removeCalls[0].deleteBranch).toBe(false);
+  });
+});
+
+describe('mergeTaskTool verification defaults', () => {
+  const resolveFeature = () => 'test-feature';
 
   it('defaults verify to true in TDD verification model when verify not provided', async () => {
     const { mockExec, getCallCount } = createMockExec();
