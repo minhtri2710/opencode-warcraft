@@ -583,8 +583,13 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
           .optional()
           .default(false)
           .describe('Run build+test after merge to verify integration'),
+        cleanup: tool.schema
+          .boolean()
+          .optional()
+          .default(false)
+          .describe('Remove worktree after successful merge (keeps branch)'),
       },
-      async execute({ task, strategy = 'merge', feature: explicitFeature, verify }) {
+      async execute({ task, strategy = 'merge', feature: explicitFeature, verify, cleanup: cleanupRequested }) {
         validateTaskInput(task);
         const resolution = resolveFeatureInput(resolveFeature, explicitFeature);
         if (!resolution.ok) return toolError(resolution.error);
@@ -606,9 +611,27 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
           return toolError(`Merge failed: ${result.error}`);
         }
 
-        const mergeResult = {
+        const mergeResult: Record<string, unknown> = {
           message: `Task "${task}" merged successfully using ${strategy} strategy.\nCommit: ${result.sha}\nFiles changed: ${result.filesChanged?.length || 0}`,
         };
+
+        // Perform opt-in worktree cleanup (non-fatal)
+        const effectiveCleanup = cleanupRequested ?? false;
+        if (effectiveCleanup) {
+          try {
+            await worktreeService.remove(feature, task, false);
+            mergeResult.cleanup = { requested: true, removed: true };
+          } catch (err: unknown) {
+            const cleanupErr = err as { message?: string };
+            mergeResult.cleanup = {
+              requested: true,
+              removed: false,
+              error: cleanupErr.message || 'Worktree cleanup failed',
+            };
+          }
+        } else {
+          mergeResult.cleanup = { requested: false, removed: false, reason: 'not-requested' };
+        }
 
         const effectiveVerify = verify ?? verificationModel === 'tdd';
         if (effectiveVerify) {
