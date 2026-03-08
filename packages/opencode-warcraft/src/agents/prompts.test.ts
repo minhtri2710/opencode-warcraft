@@ -347,6 +347,182 @@ describe('AGENTS.md architecture principles', () => {
   });
 });
 
+describe('Mekkatorque complexity-adaptive prompt', () => {
+  describe('standard-mode regression (no semantic drift)', () => {
+    it('standard complexity produces identical output to omitted complexity', () => {
+      const baseline = buildMekkatorquePrompt({ verificationModel: 'tdd' });
+      const explicit = buildMekkatorquePrompt({ verificationModel: 'tdd', complexity: 'standard' });
+      expect(explicit).toBe(baseline);
+    });
+
+    it('standard complexity with best-effort produces identical output to omitted complexity', () => {
+      const baseline = buildMekkatorquePrompt({ verificationModel: 'best-effort' });
+      const explicit = buildMekkatorquePrompt({ verificationModel: 'best-effort', complexity: 'standard' });
+      expect(explicit).toBe(baseline);
+    });
+
+    it('undefined complexity defaults to standard behavior', () => {
+      const withUndefined = buildMekkatorquePrompt({ verificationModel: 'tdd', complexity: undefined });
+      const baseline = buildMekkatorquePrompt({ verificationModel: 'tdd' });
+      expect(withUndefined).toBe(baseline);
+    });
+  });
+
+  describe('trivial mode', () => {
+    it('produces a shorter prompt than standard', () => {
+      const standard = buildMekkatorquePrompt({ verificationModel: 'tdd' });
+      const trivial = buildMekkatorquePrompt({ verificationModel: 'tdd', complexity: 'trivial' });
+      expect(trivial.length).toBeLessThan(standard.length);
+    });
+
+    it('uses a compact execution guidance', () => {
+      const trivial = buildMekkatorquePrompt({ verificationModel: 'tdd', complexity: 'trivial' });
+      expect(trivial).toContain('Read spec');
+      expect(trivial).toContain('Implement');
+      expect(trivial).toContain('Verify');
+      expect(trivial).toContain('Commit');
+    });
+
+    it('omits the full Execution Flow section', () => {
+      const trivial = buildMekkatorquePrompt({ verificationModel: 'tdd', complexity: 'trivial' });
+      expect(trivial).not.toContain('## Execution Flow');
+    });
+
+    it('still contains core sections (Iron Laws, Completion Checklist)', () => {
+      const trivial = buildMekkatorquePrompt({ verificationModel: 'tdd', complexity: 'trivial' });
+      expect(trivial).toContain('Iron Laws');
+      expect(trivial).toContain('Completion Checklist');
+    });
+
+    it('works with both verification models', () => {
+      const tdd = buildMekkatorquePrompt({ verificationModel: 'tdd', complexity: 'trivial' });
+      const bestEffort = buildMekkatorquePrompt({ verificationModel: 'best-effort', complexity: 'trivial' });
+      expect(tdd).toContain('Read spec');
+      expect(bestEffort).toContain('Read spec');
+    });
+  });
+
+  describe('complex mode', () => {
+    it('produces a longer prompt than standard', () => {
+      const standard = buildMekkatorquePrompt({ verificationModel: 'tdd' });
+      const complex = buildMekkatorquePrompt({ verificationModel: 'tdd', complexity: 'complex' });
+      expect(complex.length).toBeGreaterThan(standard.length);
+    });
+
+    it('contains stepwise verification guidance', () => {
+      const complex = buildMekkatorquePrompt({ verificationModel: 'tdd', complexity: 'complex' });
+      expect(complex).toContain('complex task');
+      expect(complex).toContain('smaller verified steps');
+    });
+
+    it('contains intermediate progress guidance', () => {
+      const complex = buildMekkatorquePrompt({ verificationModel: 'tdd', complexity: 'complex' });
+      expect(complex).toContain('intermediate progress');
+    });
+
+    it('preserves standard Execution Flow section', () => {
+      const complex = buildMekkatorquePrompt({ verificationModel: 'tdd', complexity: 'complex' });
+      expect(complex).toContain('## Execution Flow');
+    });
+
+    it('adds no more than approximately 10 extra lines beyond standard', () => {
+      const standard = buildMekkatorquePrompt({ verificationModel: 'tdd' });
+      const complex = buildMekkatorquePrompt({ verificationModel: 'tdd', complexity: 'complex' });
+      const standardLines = standard.split('\n').length;
+      const complexLines = complex.split('\n').length;
+      expect(complexLines - standardLines).toBeLessThanOrEqual(15);
+    });
+
+    it('works with both verification models', () => {
+      const tdd = buildMekkatorquePrompt({ verificationModel: 'tdd', complexity: 'complex' });
+      const bestEffort = buildMekkatorquePrompt({ verificationModel: 'best-effort', complexity: 'complex' });
+      expect(tdd).toContain('complex task');
+      expect(bestEffort).toContain('complex task');
+    });
+  });
+
+  describe('failure context injection', () => {
+    it('injects Previous Attempt Context block when failureContext provided', () => {
+      const prompt = buildMekkatorquePrompt({
+        verificationModel: 'tdd',
+        failureContext: 'Worker failed because imports were wrong.',
+      });
+      expect(prompt).toContain('## Previous Attempt Context');
+      expect(prompt).toContain('Worker failed because imports were wrong.');
+    });
+
+    it('includes avoidance guidance', () => {
+      const prompt = buildMekkatorquePrompt({
+        verificationModel: 'tdd',
+        failureContext: 'Build failed due to missing dependency.',
+      });
+      expect(prompt).toContain('Avoid repeating the same approach');
+    });
+
+    it('places failure context before Execution Flow', () => {
+      const prompt = buildMekkatorquePrompt({
+        verificationModel: 'tdd',
+        failureContext: 'Previous error context',
+      });
+      const failureIdx = prompt.indexOf('## Previous Attempt Context');
+      const executionIdx = prompt.indexOf('## Execution Flow');
+      expect(failureIdx).toBeGreaterThan(-1);
+      expect(executionIdx).toBeGreaterThan(-1);
+      expect(failureIdx).toBeLessThan(executionIdx);
+    });
+
+    it('does NOT inject block when failureContext is undefined', () => {
+      const prompt = buildMekkatorquePrompt({ verificationModel: 'tdd' });
+      expect(prompt).not.toContain('Previous Attempt Context');
+    });
+
+    it('does NOT inject block when failureContext is empty string', () => {
+      const prompt = buildMekkatorquePrompt({ verificationModel: 'tdd', failureContext: '' });
+      expect(prompt).not.toContain('Previous Attempt Context');
+    });
+
+    it('combines with complexity modes', () => {
+      const prompt = buildMekkatorquePrompt({
+        verificationModel: 'tdd',
+        complexity: 'complex',
+        failureContext: 'Prior attempt hit import errors.',
+      });
+      expect(prompt).toContain('## Previous Attempt Context');
+      expect(prompt).toContain('complex task');
+    });
+
+    it('failure context with trivial mode still injects the block', () => {
+      const prompt = buildMekkatorquePrompt({
+        verificationModel: 'tdd',
+        complexity: 'trivial',
+        failureContext: 'Prior attempt failed on validation.',
+      });
+      expect(prompt).toContain('## Previous Attempt Context');
+      expect(prompt).toContain('Prior attempt failed on validation.');
+    });
+  });
+
+  describe('deterministic output', () => {
+    it('produces identical output for same complexity input', () => {
+      const a = buildMekkatorquePrompt({ verificationModel: 'tdd', complexity: 'trivial' });
+      const b = buildMekkatorquePrompt({ verificationModel: 'tdd', complexity: 'trivial' });
+      expect(a).toBe(b);
+    });
+
+    it('produces identical output for same complex input', () => {
+      const a = buildMekkatorquePrompt({ verificationModel: 'tdd', complexity: 'complex' });
+      const b = buildMekkatorquePrompt({ verificationModel: 'tdd', complexity: 'complex' });
+      expect(a).toBe(b);
+    });
+
+    it('produces identical output for same failureContext input', () => {
+      const a = buildMekkatorquePrompt({ verificationModel: 'tdd', failureContext: 'context A' });
+      const b = buildMekkatorquePrompt({ verificationModel: 'tdd', failureContext: 'context A' });
+      expect(a).toBe(b);
+    });
+  });
+});
+
 describe('Mekkatorque verification model conditional prompt', () => {
   it('tdd mode contains TDD-specific content', () => {
     const prompt = buildMekkatorquePrompt({ verificationModel: 'tdd' });
