@@ -657,6 +657,55 @@ describe('mergeTaskTool verification defaults', () => {
   });
 });
 
+describe('mergeTaskTool verification uses projectDir not process.cwd()', () => {
+  const resolveFeature = () => 'test-feature';
+
+  it('passes projectDir as cwd to verification commands instead of process.cwd()', async () => {
+    const { mockExec, getCalls } = createMockExec();
+    const projectDir = '/fake/project/root';
+
+    const deps = createMergeDeps({
+      verificationModel: 'tdd',
+      execAsync: mockExec,
+      projectDir,
+    });
+    const tools = new WorktreeTools(deps);
+    const mergeTool = tools.mergeTaskTool(resolveFeature);
+
+    await mergeTool.execute({ task: '01-task', strategy: 'merge', feature: 'test-feature' }, {} as never);
+
+    // Verification should have been invoked (TDD model defaults verify=true)
+    const calls = getCalls();
+    expect(calls.length).toBeGreaterThan(0);
+
+    // Every exec call should use the injected projectDir, NOT process.cwd()
+    for (const call of calls) {
+      expect(call.options.cwd).toBe(projectDir);
+      expect(call.options.cwd).not.toBe(process.cwd());
+    }
+  });
+
+  it('falls back to process.cwd() when projectDir is not provided', async () => {
+    const { mockExec, getCalls } = createMockExec();
+
+    // Omit projectDir — should fall back to process.cwd()
+    const deps = createMergeDeps({
+      verificationModel: 'tdd',
+      execAsync: mockExec,
+    });
+    const tools = new WorktreeTools(deps);
+    const mergeTool = tools.mergeTaskTool(resolveFeature);
+
+    await mergeTool.execute({ task: '01-task', strategy: 'merge', feature: 'test-feature' }, {} as never);
+
+    const calls = getCalls();
+    expect(calls.length).toBeGreaterThan(0);
+    for (const call of calls) {
+      expect(call.options.cwd).toBe(process.cwd());
+    }
+  });
+});
+
 /**
  * Create mock deps for commitWorktreeTool that track taskService.transition() and update() calls.
  */

@@ -58,6 +58,8 @@ export interface WorktreeToolsDependencies {
   lockDir?: string;
   execAsync?: ExecAsyncFn;
   eventLogger: EventLogger;
+  /** Project root directory for merge verification commands. Falls back to process.cwd() if not provided. */
+  projectDir?: string;
 }
 
 /**
@@ -568,6 +570,7 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
     // Capture deps in closure to avoid 'this' binding issues
     const { taskService, worktreeService, verificationModel, execAsync: injectedExecAsync } = this.deps;
     const execAsync = injectedExecAsync ?? defaultExecAsync;
+    const projectDir = this.deps.projectDir ?? process.cwd();
     return tool({
       description: 'Merge completed task branch into current branch (explicit integration)',
       args: {
@@ -634,7 +637,7 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
 
         const effectiveVerify = verify ?? verificationModel === 'tdd';
         if (effectiveVerify) {
-          const execOpts = { cwd: process.cwd(), timeout: 300_000 };
+          const execOpts = { cwd: projectDir, timeout: 300_000 };
           const cmds = getVerificationCommandsForCwd(execOpts.cwd);
           try {
             const buildResult = await execAsync(cmds.build, execOpts);

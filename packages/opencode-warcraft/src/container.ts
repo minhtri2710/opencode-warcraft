@@ -287,6 +287,7 @@ To unblock: Remove ${blockedPath}`;
     getFeatureReopenRate,
     eventLogger,
     lockDir,
+    projectDir: directory,
   });
   const batchTools = new BatchTools({
     featureService,
