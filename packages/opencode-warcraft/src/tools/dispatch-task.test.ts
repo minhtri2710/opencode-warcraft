@@ -869,4 +869,80 @@ describe('dispatch-task', () => {
       expect(batchResult.taskToolCall?.prompt).toContain('Complex Task Guidance');
     });
   });
+
+  // --------------------------------------------------------------------------
+  // REGRESSION: Premature state mutation — prep failure must not strand task
+  // --------------------------------------------------------------------------
+
+  describe('premature state mutation regression', () => {
+    it('does NOT set task to in_progress when prep (buildSpecData) fails', async () => {
+      const statusUpdates: string[] = [];
+      const services = createMockServices({
+        taskService: {
+          ...createMockServices().taskService,
+          update: (_f: string, _t: string, patch: Record<string, unknown>) => {
+            if (patch.status) statusUpdates.push(patch.status as string);
+          },
+          buildSpecData: () => {
+            throw new Error('Spec assembly explosion');
+          },
+        },
+      });
+
+      const result = await dispatchOneTask(createInput(), services);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Spec assembly explosion');
+      // CRITICAL: task should NOT have been set to in_progress
+      expect(statusUpdates).not.toContain('in_progress');
+    });
+
+    it('does NOT set task to in_progress when writeWorkerPrompt fails', async () => {
+      const statusUpdates: string[] = [];
+      const services = createMockServices({
+        taskService: {
+          ...createMockServices().taskService,
+          update: (_f: string, _t: string, patch: Record<string, unknown>) => {
+            if (patch.status) statusUpdates.push(patch.status as string);
+          },
+          writeWorkerPrompt: () => {
+            throw new Error('Prompt write failure');
+          },
+        },
+      });
+
+      const result = await dispatchOneTask(createInput(), services);
+
+      expect(result.success).toBe(false);
+      // CRITICAL: task should NOT have been set to in_progress
+      expect(statusUpdates).not.toContain('in_progress');
+    });
+
+    it('sets task to in_progress only after prep succeeds', async () => {
+      let inProgressSet = false;
+      let prepCompleted = false;
+
+      const services = createMockServices({
+        taskService: {
+          ...createMockServices().taskService,
+          update: (_f: string, _t: string, patch: Record<string, unknown>) => {
+            if (patch.status === 'in_progress') {
+              inProgressSet = true;
+              // At this point, prep should have already completed
+              expect(prepCompleted).toBe(true);
+            }
+          },
+          writeWorkerPrompt: (_f: string, _t: string, _prompt: string) => {
+            prepCompleted = true;
+          },
+        },
+      });
+
+      const result = await dispatchOneTask(createInput(), services);
+
+      expect(result.success).toBe(true);
+      expect(prepCompleted).toBe(true);
+      expect(inProgressSet).toBe(true);
+    });
+  });
 });

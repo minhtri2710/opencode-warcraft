@@ -1,13 +1,15 @@
-import * as fs from 'fs';
-import * as path from 'path';
 import type { PlanService, TaskInfo, TaskService, TaskStatusType, WorktreeService } from 'warcraft-core';
-import { acquireLock } from 'warcraft-core';
+import {
+  DispatchCoordinator,
+  type DispatchCoordinatorDeps,
+  getTaskDispatchLockPath,
+  releaseAllDispatchLocks,
+} from '../services/dispatch-coordinator.js';
 import type { BlockedResult } from '../types.js';
-import type { ContinueFromBlocked } from '../utils/worker-prompt.js';
-import { prepareTaskDispatch, type SharedDispatchData } from './task-dispatch.js';
+import type { SharedDispatchData } from './task-dispatch.js';
 
 // ============================================================================
-// Types
+// Types — preserved for backward compatibility
 // ============================================================================
 
 export interface DispatchOneTaskInput {
@@ -72,82 +74,52 @@ export interface DispatchOneTaskResult {
   };
 }
 
+// Re-export lock utilities from coordinator
+export { getTaskDispatchLockPath, releaseAllDispatchLocks };
+
 // ============================================================================
-// Per-task dispatch lock
+// Adapter: DispatchOneTaskServices → DispatchCoordinatorDeps
 // ============================================================================
 
-/** In-process lock tracking to prevent duplicate concurrent dispatches. */
-const activeLocks = new Map<string, () => void>();
-
 /**
- * Get the filesystem path for a per-task dispatch lock.
+ * Adapt `DispatchOneTaskServices` to `DispatchCoordinatorDeps`.
+ *
+ * The coordinator requires `worktreeService.remove` for rollback on prep failure.
+ * If the caller's worktreeService doesn't have `remove`, we provide a no-op fallback
+ * for backward compatibility.
+ *
+ * IMPORTANT: Methods are bound to preserve `this` context, since `WorktreeService`
+ * is a class whose methods reference `this` internally.
  */
-export function getTaskDispatchLockPath(lockDir: string, feature: string, task: string): string {
-  return path.join(lockDir, `${feature}--${task}.dispatch.lock`);
-}
-
-/**
- * Release all held dispatch locks. Used in tests for cleanup.
- */
-export function releaseAllDispatchLocks(): void {
-  for (const release of activeLocks.values()) {
-    try {
-      release();
-    } catch {
-      // Best-effort cleanup
-    }
-  }
-  activeLocks.clear();
-}
-
-/**
- * Acquire a per-task dispatch lock. Returns a release function, or null if
- * the task is already being dispatched.
- */
-async function acquireDispatchLock(
-  lockDir: string,
-  feature: string,
-  task: string,
-): Promise<{ release: () => void } | null> {
-  const lockKey = `${feature}/${task}`;
-
-  // Fast in-process check
-  if (activeLocks.has(lockKey)) {
-    return null;
-  }
-
-  const lockPath = getTaskDispatchLockPath(lockDir, feature, task);
-
-  // Ensure lock directory exists
-  fs.mkdirSync(path.dirname(lockPath), { recursive: true });
-
-  try {
-    const fsRelease = await acquireLock(lockPath, {
-      timeout: 0, // Fail immediately — no waiting for concurrent dispatches
-      retryInterval: 10,
-      staleLockTTL: 60_000, // 1 minute stale TTL
-    });
-
-    const release = (): void => {
-      activeLocks.delete(lockKey);
-      fsRelease();
-    };
-
-    activeLocks.set(lockKey, release);
-    return { release };
-  } catch {
-    // Lock acquisition failed — task is already being dispatched
-    return null;
-  }
+function toCoordinatorDeps(services: DispatchOneTaskServices): DispatchCoordinatorDeps {
+  const ws = services.worktreeService as DispatchCoordinatorDeps['worktreeService'];
+  return {
+    taskService: services.taskService,
+    planService: services.planService,
+    contextService: services.contextService,
+    worktreeService: {
+      create: ws.create.bind(ws),
+      get: ws.get.bind(ws),
+      remove: typeof ws.remove === 'function' ? ws.remove.bind(ws) : async () => {}, // no-op fallback for backward compat
+    },
+    checkBlocked: services.checkBlocked,
+    checkDependencies: services.checkDependencies,
+    verificationModel: services.verificationModel,
+    featureReopenRate: services.featureReopenRate,
+    lockDir: services.lockDir,
+  };
 }
 
 // ============================================================================
-// Unified dispatch
+// Unified dispatch — delegates to DispatchCoordinator
 // ============================================================================
 
 /**
  * Dispatch a single task with invariant guard checks and per-task concurrency lock.
  * This is the unified entry point used by both single-task (worktree) and batch dispatch.
+ *
+ * Delegates to {@link DispatchCoordinator} which fixes the premature state mutation
+ * bug by transitioning to `in_progress` only after prompt/spec preparation succeeds.
  *
  * Invariants enforced:
  * 1. Feature not blocked
@@ -161,129 +133,26 @@ export async function dispatchOneTask(
   services: DispatchOneTaskServices,
   shared?: SharedDispatchData,
 ): Promise<DispatchOneTaskResult> {
-  const { feature, task, continueFrom, decision } = input;
-  const agent = 'mekkatorque';
+  const coordinator = new DispatchCoordinator(toCoordinatorDeps(services));
+  const result = await coordinator.dispatch(
+    {
+      feature: input.feature,
+      task: input.task,
+      continueFrom: input.continueFrom,
+      decision: input.decision,
+    },
+    shared,
+  );
 
-  const fail = (error: string): DispatchOneTaskResult => ({
-    task,
-    success: false,
-    agent,
-    error,
-  });
-
-  // --- Guard 1: Feature blocked ---
-  const blockedResult = services.checkBlocked(feature);
-  if (blockedResult.blocked) {
-    return fail(blockedResult.message || 'Feature is blocked');
-  }
-
-  // --- Guard 2: Task exists ---
-  const taskInfo = services.taskService.get(feature, task);
-  if (!taskInfo) {
-    return fail(`Task "${task}" not found`);
-  }
-
-  // --- Guard 3: Task not already done ---
-  if (taskInfo.status === 'done') {
-    return fail(`Task "${task}" already done`);
-  }
-
-  // --- Guard 4: Continue-from-blocked validation ---
-  if (continueFrom === 'blocked') {
-    if (taskInfo.status !== 'blocked') {
-      return fail(`Task "${task}" is not in blocked state. Cannot continue from blocked.`);
-    }
-  } else {
-    // --- Guard 5: Dependencies ---
-    const depCheck = services.checkDependencies(feature, task);
-    if (!depCheck.allowed) {
-      return fail(depCheck.error || 'Dependencies not met');
-    }
-
-    // Reject in-progress tasks only for non-blocked resumes
-    if (taskInfo.status === 'in_progress') {
-      return fail(`Task "${task}" already in progress`);
-    }
-  }
-
-  // --- Guard 6: Per-task concurrency lock ---
-  let lockHandle: { release: () => void } | null = null;
-  if (services.lockDir) {
-    lockHandle = await acquireDispatchLock(services.lockDir, feature, task);
-    if (!lockHandle) {
-      return fail(`Task "${task}" is already being dispatched (concurrency lock held)`);
-    }
-  }
-
-  try {
-    // --- Create or reuse worktree ---
-    let worktree: Awaited<ReturnType<typeof services.worktreeService.create>>;
-    if (continueFrom === 'blocked') {
-      const existing = await services.worktreeService.get(feature, task);
-      if (!existing) {
-        return fail(`No worktree found for blocked task "${task}"`);
-      }
-      worktree = existing;
-    } else {
-      worktree = await services.worktreeService.create(feature, task);
-    }
-
-    // --- Update task status ---
-    const updatePayload: Record<string, unknown> = { status: 'in_progress' };
-    if (continueFrom !== 'blocked') {
-      updatePayload.baseCommit = worktree.commit;
-    }
-    services.taskService.update(feature, task, updatePayload);
-
-    // --- Prepare dispatch ---
-    const continueFromData: ContinueFromBlocked | undefined =
-      continueFrom === 'blocked'
-        ? {
-            status: 'blocked',
-            previousSummary: taskInfo.summary || 'No previous summary',
-            decision: decision || 'No decision provided',
-          }
-        : undefined;
-
-    const prep = prepareTaskDispatch(
-      {
-        feature,
-        task,
-        taskInfo,
-        worktree,
-        continueFrom: continueFromData,
-      },
-      {
-        planService: services.planService as PlanService,
-        taskService: services.taskService as TaskService,
-        contextService: services.contextService,
-        verificationModel: services.verificationModel,
-        featureReopenRate: services.featureReopenRate,
-      },
-      shared,
-    );
-
-    if (!prep.persistedWorkerPrompt || prep.persistedWorkerPrompt.trim().length === 0) {
-      return fail(`Failed to persist worker prompt for task "${task}"`);
-    }
-
-    return {
-      task,
-      success: true,
-      agent,
-      worktreePath: worktree.path,
-      branch: worktree.branch,
-      taskToolCall: {
-        subagent_type: agent,
-        description: `Warcraft: ${task}`,
-        prompt: prep.persistedWorkerPrompt,
-      },
-    };
-  } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    return fail(reason);
-  } finally {
-    // Always release lock
-    lockHandle?.release();
-  }
+  // Map coordinator result to the existing DispatchOneTaskResult shape
+  // (strips the `prep` field that the coordinator exposes)
+  return {
+    task: result.task,
+    success: result.success,
+    agent: result.agent,
+    worktreePath: result.worktreePath,
+    branch: result.branch,
+    error: result.error,
+    taskToolCall: result.taskToolCall,
+  };
 }
