@@ -356,3 +356,18 @@ Since `warcraft-core`'s barrel `src/index.ts` re-exports from `src/services/inde
 | Update barrel `services/index.ts` | 1 file | Low — mechanical change |
 | No logic changes | — | Zero regression risk |
 | Tests move alongside source files | Co-located test files | Zero risk |
+
+---
+
+## Implementation Status (2026-03-09)
+
+**Status: Deferred** — This reorganization has not yet been executed.
+
+The `workflow-hardening-and-service-reorg` feature's Phase 1 foundation batch focused on correctness hardening (unified dispatch, strict state machine, merge verification fix) rather than structural file moves. The reorganization was explicitly deferred to avoid merge-conflict risk during the hardening work.
+
+**Pre-conditions met for future execution:**
+- The foundation batch added one new file (`dispatch-coordinator.ts`) in `opencode-warcraft/src/services/`, which would move to an appropriate subdirectory if/when this plan executes.
+- All existing service files remain in their original locations. The plan's import-path-update table is still accurate.
+- Full verification passes (1530 tests, build, lint, typecheck) — the codebase is stable for structural changes.
+
+**Recommendation:** Execute this plan as a standalone task in a future batch, after Phase 1 changes are merged to main. The barrel-insulated design means external consumers won't break.

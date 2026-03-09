@@ -397,12 +397,22 @@ Adaptive quality control instead of uniform process.
 ## Implementation Roadmap
 
 ### Phase 1: Foundation Hardening (Week 1)
-| # | Item | Effort | Impact |
-|---|------|--------|--------|
-| 1 | Unify dispatch into single path | M | 🔴 Very High |
-| 2 | Enforce task state machine | M | 🔴 Very High |
-| 3 | Fix `process.cwd()` verification bug | S | 🟡 Med-High |
-| 4 | Move module globals into container | S | 🟡 Medium |
+| # | Item | Effort | Impact | Status |
+|---|------|--------|--------|--------|
+| 1 | Unify dispatch into single path | M | 🔴 Very High | ✅ Done (batch 1) |
+| 2 | Enforce task state machine | M | 🔴 Very High | ✅ Done (batch 1) |
+| 3 | Fix `process.cwd()` verification bug | S | 🟡 Med-High | ✅ Done (batch 1) |
+| 4 | Move module globals into container | S | 🟡 Medium | ⏳ Deferred |
+
+#### Batch 1 Implementation Notes (2026-03-09)
+
+**Completed:**
+- **Unified dispatch** (task 01): Added `packages/opencode-warcraft/src/services/dispatch-coordinator.ts` as the single dispatch path. Both `createWorktreeTool` and `batchExecuteTool` now delegate to `DispatchCoordinator.dispatch()`. Fixed the premature `in_progress` status mutation — state transition now occurs only after prompt preparation succeeds.
+- **Strict task state machine** (task 02): Enabled `strictTaskTransitions: true` in the production container (`container.ts`). All production status mutations now flow through `taskService.transition()` with validated state machine enforcement. Free-form `update()` is no longer used for status changes in production paths.
+- **Merge verification fix** (task 03): Replaced `process.cwd()` with DI-injected project root (`directory` from container) in merge verification. Added focused tests confirming correct path resolution.
+- **Verification gate** (task 04): Full repo-wide verification — 1530 tests pass, build succeeds, lint/typecheck clean, release:check passes.
+
+**Non-blocking observation from code review:** Possible reopen-event observability noise in `packages/opencode-warcraft/src/tools/task-tools.ts` — the reopen path emits events that could be refined in a future observability pass.
 
 ### Phase 2: Reliability & Observability (Week 2)
 | # | Item | Effort | Impact |
@@ -440,6 +450,30 @@ Adopt heavier workflow-kernel / scheduler work when you see:
 - Frequent prompt truncation
 - Operators needing to inspect raw files/git state to debug
 - Parallel execution causing more merge pain than speedup
+
+---
+
+## Scope Reconciliation: Deferred Items
+
+The following items from the original improvement plan are **explicitly deferred** from the foundation batch. They remain valid future work but were out of scope for the Phase 1 hardening:
+
+| Deferred Item | Original Section | Rationale for Deferral |
+|---|---|---|
+| Module-global-to-container migration (`cachedStatusHint`, hook counters) | §8 Config & Lifecycle | Low-risk; not blocking correctness. Phase 1 focused on dispatch/state-machine integrity. |
+| Status projections/views (derived state from event log) | §1 Workflow Kernel | Requires workflow kernel v1 infrastructure (Phase 2 scope). |
+| Unified error-handling beyond touched correctness paths | §1, §6 | Only correctness-critical paths were hardened (dispatch rollback, transition validation). Broader error unification is Phase 2. |
+| Prompt modularization (prompt compiler, state-aware fragments) | §4 Prompt Stack | Phase 3 scope — requires stable workflow state to derive dynamic prompt fragments from. |
+| Config layering expansion (repo-local + user + defaults) | §8 Config & Lifecycle | Phase 3 scope — team-scaling concern, not correctness. |
+| Observability/status work (async event logger, correlation IDs, trust metrics) | §6 Observability | Phase 2 scope. Foundation batch focused on getting correctness right first. |
+| Broad `warcraft-core` service reorganization (file moves into domain subdirectories) | `PROPOSED_CODE_FILE_REORGANIZATION_PLAN.md` | Large structural change with mechanical import updates. Deferred to avoid merge-conflict risk during the hardening batch. |
+
+### Follow-Up Items Discovered During Implementation
+
+These items were identified during batch 1 implementation but intentionally not addressed to avoid scope creep:
+
+1. **Reopen-event observability noise** — `task-tools.ts` reopen path emits events that could benefit from structured event types and filtering. Relevant to Phase 2 observability work.
+2. **`dispatchOneTask` legacy wrapper** — The old batch dispatch path in `task-dispatch.ts` still exists as a thin wrapper around `DispatchCoordinator`. Could be inlined/removed once the coordinator API stabilizes.
+3. **Worker session lifecycle** — `attempt`, `lastHeartbeatAt`, and `idempotencyKey` fields in task status remain aspirational. The strict state machine enforces transitions but doesn't yet validate worker session identity. Relevant to the "Moon Shot" lease/heartbeat/watchdog work.
 
 ---
 
