@@ -9,11 +9,12 @@ import type {
   TaskStatusType,
   WorktreeService,
 } from 'warcraft-core';
+import { DispatchCoordinator, type DispatchCoordinatorDeps } from '../services/dispatch-coordinator.js';
 import type { BlockedResult } from '../types.js';
 import { toolError, toolSuccess } from '../types.js';
 import { calculatePayloadMeta, calculatePromptMeta, checkWarnings } from '../utils/prompt-observability.js';
 import { getVerificationCommandsForCwd } from '../utils/runtime-commands.js';
-import { DEFAULT_BUDGET, prepareTaskDispatch } from './task-dispatch.js';
+import { DEFAULT_BUDGET } from './task-dispatch.js';
 import { resolveFeatureInput, validateTaskInput } from './tool-input.js';
 
 type ExecAsyncFn = (
@@ -71,15 +72,16 @@ export class WorktreeTools {
   createWorktreeTool(resolveFeature: (name?: string) => string | null): ToolDefinition {
     // Capture deps in closure to avoid 'this' binding issues
     const {
-      checkBlocked,
-      checkDependencies,
       taskService,
       planService,
       contextService,
       worktreeService,
+      checkBlocked,
+      checkDependencies,
       verificationModel,
       getFeatureReopenRate,
       eventLogger,
+      lockDir,
     } = this.deps;
     return tool({
       description: 'Create worktree and begin work on task. Spawns Mekkatorque worker automatically.',
@@ -95,65 +97,39 @@ export class WorktreeTools {
         if (!resolution.ok) return toolError(resolution.error);
         const feature = resolution.feature;
 
-        const blockedResult = checkBlocked(feature);
-        if (blockedResult.blocked) {
-          return toolError(blockedResult.message || 'Feature is blocked');
-        }
-
-        const taskInfo = taskService.get(feature, task);
-        if (!taskInfo) return toolError(`Task "${task}" not found`);
-
-        // Allow continuing blocked tasks, but not completed ones
-        if (taskInfo.status === 'done') return toolError('Task already completed');
-        if (continueFrom === 'blocked' && taskInfo.status !== 'blocked') {
-          return toolError('Task is not in blocked state. Use without continueFrom.');
-        }
-
-        if (continueFrom !== 'blocked') {
-          const depCheck = checkDependencies(feature, task);
-          if (!depCheck.allowed) {
-            return toolError(depCheck.error || 'Dependencies not met', [
-              'Complete the required dependencies before starting this task.',
-              'Use warcraft_status to see current task states.',
-            ]);
-          }
-        }
-
-        // Check if we're continuing from blocked - reuse existing worktree
-        let worktree: Awaited<ReturnType<typeof worktreeService.create>>;
-        if (continueFrom === 'blocked') {
-          const existingWorktree = await worktreeService.get(feature, task);
-          if (!existingWorktree) return toolError('No worktree found for blocked task');
-          worktree = existingWorktree;
-        } else {
-          worktree = await worktreeService.create(feature, task);
-        }
-
-        const updatePayload: Record<string, unknown> = { status: 'in_progress' };
-        if (continueFrom !== 'blocked') {
-          updatePayload.baseCommit = worktree.commit;
-        }
-        taskService.update(feature, task, updatePayload);
-
-        // Generate spec.md with context for task
-        const prep = prepareTaskDispatch(
-          {
-            feature,
-            task,
-            taskInfo,
-            worktree,
-            continueFrom:
-              continueFrom === 'blocked'
-                ? {
-                    status: 'blocked',
-                    previousSummary: taskInfo.summary || 'No previous summary',
-                    decision: decision || 'No decision provided',
-                  }
-                : undefined,
+        // Build coordinator deps from the tool dependencies
+        const coordinatorDeps: DispatchCoordinatorDeps = {
+          taskService,
+          planService,
+          contextService,
+          worktreeService: {
+            create: worktreeService.create.bind(worktreeService),
+            get: worktreeService.get.bind(worktreeService),
+            remove: worktreeService.remove.bind(worktreeService),
           },
-          { planService, taskService, contextService, verificationModel, featureReopenRate: getFeatureReopenRate?.() },
-        );
+          checkBlocked,
+          checkDependencies,
+          verificationModel,
+          featureReopenRate: getFeatureReopenRate?.(),
+          lockDir,
+        };
 
+        const coordinator = new DispatchCoordinator(coordinatorDeps);
+        const dispatchResult = await coordinator.dispatch({
+          feature,
+          task,
+          continueFrom,
+          decision,
+        });
+
+        if (!dispatchResult.success) {
+          return toolError(dispatchResult.error || 'Dispatch failed');
+        }
+
+        // --- UX layer: idempotency key, observability, response formatting ---
+
+        const agent = dispatchResult.agent;
+        const prep = dispatchResult.prep!;
         const {
           specContent,
           workerPrompt,
@@ -162,15 +138,8 @@ export class WorktreeTools {
           previousTasks,
           truncationEvents,
           droppedTasksHint,
-          taskBeadId,
           planContent,
         } = prep;
-
-        if (!persistedWorkerPrompt || persistedWorkerPrompt.trim().length === 0) {
-          return toolError(`Failed to load worker prompt from task bead '${taskBeadId}' for task '${task}'`);
-        }
-
-        const agent = 'mekkatorque';
 
         const rawStatus = taskService.getRawStatus(feature, task);
         const attempt = (rawStatus?.workerSession?.attempt || 0) + 1;
@@ -199,7 +168,7 @@ export class WorktreeTools {
         const workerPromptPreview =
           workerPrompt.length > PREVIEW_MAX_LENGTH ? `${workerPrompt.slice(0, PREVIEW_MAX_LENGTH)}...` : workerPrompt;
 
-        const taskToolPrompt = persistedWorkerPrompt;
+        const taskToolPrompt = persistedWorkerPrompt!;
 
         const taskToolInstructions = `## Delegation Required
 
@@ -218,8 +187,8 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
 `;
 
         const responseBase = {
-          worktreePath: worktree.path,
-          branch: worktree.branch,
+          worktreePath: dispatchResult.worktreePath,
+          branch: dispatchResult.branch,
           mode: 'delegate',
           agent,
           delegationRequired: true,
