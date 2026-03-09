@@ -357,7 +357,7 @@ Create a task that will be blocked by the worker needing clarification on the AP
   );
 
   runIfHostReady(
-    'failed-verification recovery: done -> in_progress -> done (with proper evidence)',
+    'failed-verification recovery: done -> cancelled -> pending -> in_progress -> done (strict transitions)',
     async () => {
       const ctx: PluginInput = {
         directory: testRoot,
@@ -386,7 +386,7 @@ Create a task that will be blocked by the worker needing clarification on the AP
 
 - Create: src/verify.ts
 
-Create a task that will fail verification initially and then be retried with proper evidence. Tests the re-open workflow.`,
+Create a task that will fail verification initially and then be retried with proper evidence. Tests the strict transition recovery workflow.`,
       );
 
       assertSuccess(
@@ -422,18 +422,58 @@ Create a task that will fail verification initially and then be retried with pro
         'first done attempt (no evidence)',
       );
 
-      // Orchestrator catches and re-opens
+      // Attempt direct reopen: done → in_progress MUST be rejected
+      const reopenResult = await hooks.tool!.warcraft_task_update.execute(
+        {
+          feature: featureName,
+          task: '01-verification-task',
+          status: 'in_progress',
+          summary: 'Re-opened: missing verification evidence',
+        },
+        toolContext,
+      );
+      const reopenParsed = JSON.parse(reopenResult as string);
+      expect(reopenParsed.success).toBe(false);
+      expect(reopenParsed.error).toContain('Cannot reopen completed task');
+
+      // Proper recovery path: done → cancelled → pending → in_progress
+      assertSuccess(
+        (await hooks.tool!.warcraft_task_update.execute(
+          {
+            feature: featureName,
+            task: '01-verification-task',
+            status: 'cancelled',
+            summary: 'Cancelled for rework: missing verification evidence',
+          },
+          toolContext,
+        )) as string,
+        'cancel task for rework',
+      );
+
+      assertSuccess(
+        (await hooks.tool!.warcraft_task_update.execute(
+          {
+            feature: featureName,
+            task: '01-verification-task',
+            status: 'pending',
+            summary: 'Reset to pending for re-dispatch',
+          },
+          toolContext,
+        )) as string,
+        'reset to pending',
+      );
+
       assertSuccess(
         (await hooks.tool!.warcraft_task_update.execute(
           {
             feature: featureName,
             task: '01-verification-task',
             status: 'in_progress',
-            summary: 'Re-opened: missing verification evidence',
+            summary: 'Re-dispatched with proper verification',
           },
           toolContext,
         )) as string,
-        're-open to in_progress',
+        're-dispatch to in_progress',
       );
 
       // Second attempt: mark done WITH proper evidence

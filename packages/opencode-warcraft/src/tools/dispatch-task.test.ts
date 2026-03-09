@@ -32,6 +32,7 @@ function createMockServices(overrides: Partial<DispatchOneTaskServices> = {}): D
         planTitle: 'Test Task',
       }),
       update: () => {},
+      transition: () => {},
       getRawStatus: () => ({
         status: 'pending' as const,
         origin: 'plan' as const,
@@ -154,20 +155,20 @@ describe('dispatch-task', () => {
       expect(result.taskToolCall!.prompt.length).toBeGreaterThan(0);
     });
 
-    it('updates task status to in_progress', async () => {
-      let updatedStatus: string | undefined;
+    it('transitions task status to in_progress', async () => {
+      let transitionedStatus: string | undefined;
       const services = createMockServices({
         taskService: {
           ...createMockServices().taskService,
-          update: (_f: string, _t: string, patch: Record<string, unknown>) => {
-            updatedStatus = patch.status as string;
+          transition: (_f: string, _t: string, toStatus: string) => {
+            transitionedStatus = toStatus;
           },
         },
       });
 
       await dispatchOneTask(createInput(), services);
 
-      expect(updatedStatus).toBe('in_progress');
+      expect(transitionedStatus).toBe('in_progress');
     });
   });
 
@@ -876,12 +877,12 @@ describe('dispatch-task', () => {
 
   describe('premature state mutation regression', () => {
     it('does NOT set task to in_progress when prep (buildSpecData) fails', async () => {
-      const statusUpdates: string[] = [];
+      const statusTransitions: string[] = [];
       const services = createMockServices({
         taskService: {
           ...createMockServices().taskService,
-          update: (_f: string, _t: string, patch: Record<string, unknown>) => {
-            if (patch.status) statusUpdates.push(patch.status as string);
+          transition: (_f: string, _t: string, toStatus: string) => {
+            statusTransitions.push(toStatus);
           },
           buildSpecData: () => {
             throw new Error('Spec assembly explosion');
@@ -893,17 +894,17 @@ describe('dispatch-task', () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('Spec assembly explosion');
-      // CRITICAL: task should NOT have been set to in_progress
-      expect(statusUpdates).not.toContain('in_progress');
+      // CRITICAL: task should NOT have been transitioned to in_progress
+      expect(statusTransitions).not.toContain('in_progress');
     });
 
     it('does NOT set task to in_progress when writeWorkerPrompt fails', async () => {
-      const statusUpdates: string[] = [];
+      const statusTransitions: string[] = [];
       const services = createMockServices({
         taskService: {
           ...createMockServices().taskService,
-          update: (_f: string, _t: string, patch: Record<string, unknown>) => {
-            if (patch.status) statusUpdates.push(patch.status as string);
+          transition: (_f: string, _t: string, toStatus: string) => {
+            statusTransitions.push(toStatus);
           },
           writeWorkerPrompt: () => {
             throw new Error('Prompt write failure');
@@ -914,8 +915,8 @@ describe('dispatch-task', () => {
       const result = await dispatchOneTask(createInput(), services);
 
       expect(result.success).toBe(false);
-      // CRITICAL: task should NOT have been set to in_progress
-      expect(statusUpdates).not.toContain('in_progress');
+      // CRITICAL: task should NOT have been transitioned to in_progress
+      expect(statusTransitions).not.toContain('in_progress');
     });
 
     it('sets task to in_progress only after prep succeeds', async () => {
@@ -925,8 +926,8 @@ describe('dispatch-task', () => {
       const services = createMockServices({
         taskService: {
           ...createMockServices().taskService,
-          update: (_f: string, _t: string, patch: Record<string, unknown>) => {
-            if (patch.status === 'in_progress') {
+          transition: (_f: string, _t: string, toStatus: string) => {
+            if (toStatus === 'in_progress') {
               inProgressSet = true;
               // At this point, prep should have already completed
               expect(prepCompleted).toBe(true);

@@ -31,6 +31,7 @@ function createMockServices(overrides: Partial<DispatchOneTaskServices> = {}): D
         planTitle: 'Test Task',
       }),
       update: () => {},
+      transition: () => {},
       getRawStatus: () => ({
         status: 'pending' as const,
         origin: 'plan' as const,

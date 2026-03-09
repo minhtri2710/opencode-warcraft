@@ -14,13 +14,13 @@ function cleanup(): void {
   }
 }
 
-/** Tracks all taskService.update calls for assertions. */
-function createUpdateTracker() {
-  const calls: Array<{ feature: string; task: string; patch: Record<string, unknown> }> = [];
+/** Tracks all taskService.transition calls for assertions. */
+function createTransitionTracker() {
+  const calls: Array<{ feature: string; task: string; toStatus: string; extras?: Record<string, unknown> }> = [];
   return {
     calls,
-    update: (feature: string, task: string, patch: Record<string, unknown>) => {
-      calls.push({ feature, task, patch });
+    transition: (feature: string, task: string, toStatus: string, extras?: Record<string, unknown>) => {
+      calls.push({ feature, task, toStatus, extras });
     },
   };
 }
@@ -36,6 +36,7 @@ function createMockDeps(overrides: Partial<DispatchCoordinatorDeps> = {}): Dispa
         planTitle: 'Test Task',
       }),
       update: () => {},
+      transition: () => {},
       getRawStatus: () => ({
         status: 'pending' as const,
         origin: 'plan' as const,
@@ -122,11 +123,11 @@ describe('DispatchCoordinator', () => {
 
   describe('premature state mutation regression', () => {
     it('does NOT set task to in_progress when prepareTaskDispatch fails', async () => {
-      const tracker = createUpdateTracker();
+      const tracker = createTransitionTracker();
       const deps = createMockDeps({
         taskService: {
           ...createMockDeps().taskService,
-          update: tracker.update,
+          transition: tracker.transition,
           // Make buildSpecData throw to simulate prep failure
           buildSpecData: () => {
             throw new Error('Spec assembly explosion');
@@ -140,16 +141,16 @@ describe('DispatchCoordinator', () => {
       expect(result.success).toBe(false);
       expect(result.error).toContain('Spec assembly explosion');
       // CRITICAL: task should NOT have been set to in_progress
-      const inProgressUpdates = tracker.calls.filter((c) => c.patch.status === 'in_progress');
-      expect(inProgressUpdates.length).toBe(0);
+      const inProgressTransitions = tracker.calls.filter((c) => c.toStatus === 'in_progress');
+      expect(inProgressTransitions.length).toBe(0);
     });
 
     it('does NOT set task to in_progress when writeWorkerPrompt fails', async () => {
-      const tracker = createUpdateTracker();
+      const tracker = createTransitionTracker();
       const deps = createMockDeps({
         taskService: {
           ...createMockDeps().taskService,
-          update: tracker.update,
+          transition: tracker.transition,
           writeWorkerPrompt: () => {
             throw new Error('Prompt write failure');
           },
@@ -161,16 +162,16 @@ describe('DispatchCoordinator', () => {
 
       expect(result.success).toBe(false);
       // CRITICAL: task should NOT have been set to in_progress
-      const inProgressUpdates = tracker.calls.filter((c) => c.patch.status === 'in_progress');
-      expect(inProgressUpdates.length).toBe(0);
+      const inProgressTransitions = tracker.calls.filter((c) => c.toStatus === 'in_progress');
+      expect(inProgressTransitions.length).toBe(0);
     });
 
     it('sets task to in_progress ONLY after prep succeeds', async () => {
-      const tracker = createUpdateTracker();
+      const tracker = createTransitionTracker();
       const deps = createMockDeps({
         taskService: {
           ...createMockDeps().taskService,
-          update: tracker.update,
+          transition: tracker.transition,
         },
       });
 
@@ -178,9 +179,9 @@ describe('DispatchCoordinator', () => {
       const result = await coordinator.dispatch(createRequest());
 
       expect(result.success).toBe(true);
-      // Task should now be in_progress
-      const inProgressUpdates = tracker.calls.filter((c) => c.patch.status === 'in_progress');
-      expect(inProgressUpdates.length).toBe(1);
+      // Task should now be in_progress via transition()
+      const inProgressTransitions = tracker.calls.filter((c) => c.toStatus === 'in_progress');
+      expect(inProgressTransitions.length).toBe(1);
     });
   });
 
@@ -350,25 +351,25 @@ describe('DispatchCoordinator', () => {
       expect(result.taskToolCall!.prompt.length).toBeGreaterThan(0);
     });
 
-    it('includes baseCommit in status update for fresh dispatch', async () => {
-      const tracker = createUpdateTracker();
+    it('includes baseCommit in transition extras for fresh dispatch', async () => {
+      const tracker = createTransitionTracker();
       const deps = createMockDeps({
         taskService: {
           ...createMockDeps().taskService,
-          update: tracker.update,
+          transition: tracker.transition,
         },
       });
 
       const coordinator = new DispatchCoordinator(deps);
       await coordinator.dispatch(createRequest());
 
-      const inProgressUpdate = tracker.calls.find((c) => c.patch.status === 'in_progress');
-      expect(inProgressUpdate).toBeDefined();
-      expect(inProgressUpdate!.patch.baseCommit).toBe('abc123');
+      const inProgressTransition = tracker.calls.find((c) => c.toStatus === 'in_progress');
+      expect(inProgressTransition).toBeDefined();
+      expect(inProgressTransition!.extras?.baseCommit).toBe('abc123');
     });
 
     it('does NOT include baseCommit when continuing from blocked', async () => {
-      const tracker = createUpdateTracker();
+      const tracker = createTransitionTracker();
       const deps = createMockDeps({
         taskService: {
           ...createMockDeps().taskService,
@@ -379,16 +380,16 @@ describe('DispatchCoordinator', () => {
             origin: 'plan' as const,
             summary: 'Previous work',
           }),
-          update: tracker.update,
+          transition: tracker.transition,
         },
       });
 
       const coordinator = new DispatchCoordinator(deps);
       await coordinator.dispatch(createRequest({ continueFrom: 'blocked', decision: 'yes' }));
 
-      const inProgressUpdate = tracker.calls.find((c) => c.patch.status === 'in_progress');
-      expect(inProgressUpdate).toBeDefined();
-      expect(inProgressUpdate!.patch.baseCommit).toBeUndefined();
+      const inProgressTransition = tracker.calls.find((c) => c.toStatus === 'in_progress');
+      expect(inProgressTransition).toBeDefined();
+      expect(inProgressTransition!.extras?.baseCommit).toBeUndefined();
     });
   });
 

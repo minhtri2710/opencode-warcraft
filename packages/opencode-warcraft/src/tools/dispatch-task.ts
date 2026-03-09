@@ -25,6 +25,7 @@ export interface DispatchOneTaskServices {
   taskService: {
     get: (feature: string, task: string) => TaskInfo | null;
     update: (feature: string, task: string, patch: Record<string, unknown>) => void;
+    transition: (feature: string, task: string, toStatus: TaskStatusType, extras?: Record<string, unknown>) => void;
     getRawStatus: (
       feature: string,
       task: string,
@@ -93,8 +94,19 @@ export { getTaskDispatchLockPath, releaseAllDispatchLocks };
  */
 function toCoordinatorDeps(services: DispatchOneTaskServices): DispatchCoordinatorDeps {
   const ws = services.worktreeService as DispatchCoordinatorDeps['worktreeService'];
+  const ts = services.taskService;
   return {
-    taskService: services.taskService,
+    taskService: {
+      get: ts.get.bind(ts),
+      update: ts.update.bind(ts),
+      transition: ts.transition.bind(ts),
+      getRawStatus: ts.getRawStatus.bind(ts),
+      writeSpec: ts.writeSpec.bind(ts),
+      writeWorkerPrompt: ts.writeWorkerPrompt.bind(ts),
+      buildSpecData: ts.buildSpecData.bind(ts),
+      list: ts.list.bind(ts),
+      patchBackgroundFields: ts.patchBackgroundFields.bind(ts),
+    },
     planService: services.planService,
     contextService: services.contextService,
     worktreeService: {

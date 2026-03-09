@@ -50,6 +50,7 @@ export {
   FilesystemPlanStore,
   FilesystemTaskStore,
 } from './state/index.js';
+export { InvalidTransitionError, isTransitionAllowed, validateTransition } from './task-state-machine.js';
 export type { RunnableBlockedResult, TaskWithDeps } from './taskDependencyGraph.js';
 export { buildEffectiveDependencies, computeRunnableAndBlocked } from './taskDependencyGraph.js';
 export { TaskService } from './taskService.js';

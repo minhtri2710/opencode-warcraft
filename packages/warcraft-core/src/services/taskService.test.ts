@@ -2791,6 +2791,198 @@ Second task description.
 
       expect(() => strictService.transition(featureName, '01-test-task', 'blocked')).toThrow(InvalidTransitionError);
     });
+
+    it('persists learnings through transition', () => {
+      const featureName = 'test-feature';
+      setupFeature(featureName);
+      setupTask(featureName, '01-test-task', {
+        status: 'in_progress',
+        beadId: 'bd-task-1',
+        startedAt: new Date().toISOString(),
+      });
+
+      const result = offModeService.transition(featureName, '01-test-task', 'done', {
+        summary: 'All done',
+        learnings: ['Pattern A works', 'Avoid approach B'],
+      });
+
+      expect(result.status).toBe('done');
+      expect(result.learnings).toEqual(['Pattern A works', 'Avoid approach B']);
+    });
+
+    it('persists learnings through transition to blocked', () => {
+      const featureName = 'test-feature';
+      setupFeature(featureName);
+      setupTask(featureName, '01-test-task', {
+        status: 'in_progress',
+        beadId: 'bd-task-1',
+        startedAt: new Date().toISOString(),
+      });
+
+      const result = offModeService.transition(featureName, '01-test-task', 'blocked', {
+        summary: 'Blocked on decision',
+        blocker: { reason: 'Need clarification' },
+        learnings: ['Discovered dependency X'],
+      });
+
+      expect(result.status).toBe('blocked');
+      expect(result.learnings).toEqual(['Discovered dependency X']);
+    });
+
+    it('allows in_progress -> cancelled transition in strict mode', () => {
+      const featureName = 'test-feature';
+      setupFeature(featureName);
+      setupTask(featureName, '01-test-task', {
+        status: 'in_progress',
+        beadId: 'bd-task-1',
+        startedAt: new Date().toISOString(),
+      });
+
+      const strictStores = createStores(PROJECT_ROOT, 'off', createRepository('off'));
+      const strictService = new TaskService(PROJECT_ROOT, strictStores.taskStore, 'off', {
+        strictTaskTransitions: true,
+      });
+
+      const result = strictService.transition(featureName, '01-test-task', 'cancelled');
+
+      expect(result.status).toBe('cancelled');
+    });
+
+    it('allows in_progress -> partial transition in strict mode', () => {
+      const featureName = 'test-feature';
+      setupFeature(featureName);
+      setupTask(featureName, '01-test-task', {
+        status: 'in_progress',
+        beadId: 'bd-task-1',
+        startedAt: new Date().toISOString(),
+      });
+
+      const strictStores = createStores(PROJECT_ROOT, 'off', createRepository('off'));
+      const strictService = new TaskService(PROJECT_ROOT, strictStores.taskStore, 'off', {
+        strictTaskTransitions: true,
+      });
+
+      const result = strictService.transition(featureName, '01-test-task', 'partial', {
+        summary: 'Partial progress',
+      });
+
+      expect(result.status).toBe('partial');
+    });
+
+    it('allows in_progress -> failed transition in strict mode', () => {
+      const featureName = 'test-feature';
+      setupFeature(featureName);
+      setupTask(featureName, '01-test-task', {
+        status: 'in_progress',
+        beadId: 'bd-task-1',
+        startedAt: new Date().toISOString(),
+      });
+
+      const strictStores = createStores(PROJECT_ROOT, 'off', createRepository('off'));
+      const strictService = new TaskService(PROJECT_ROOT, strictStores.taskStore, 'off', {
+        strictTaskTransitions: true,
+      });
+
+      const result = strictService.transition(featureName, '01-test-task', 'failed', {
+        summary: 'Everything broke',
+        learnings: ['Found root cause'],
+      });
+
+      expect(result.status).toBe('failed');
+      expect(result.learnings).toEqual(['Found root cause']);
+    });
+
+    it('allows partial -> in_progress transition in strict mode', () => {
+      const featureName = 'test-feature';
+      setupFeature(featureName);
+      setupTask(featureName, '01-test-task', {
+        status: 'partial',
+        beadId: 'bd-task-1',
+        startedAt: new Date().toISOString(),
+      });
+
+      const strictStores = createStores(PROJECT_ROOT, 'off', createRepository('off'));
+      const strictService = new TaskService(PROJECT_ROOT, strictStores.taskStore, 'off', {
+        strictTaskTransitions: true,
+      });
+
+      const result = strictService.transition(featureName, '01-test-task', 'in_progress');
+
+      expect(result.status).toBe('in_progress');
+    });
+
+    it('allows failed -> pending transition in strict mode', () => {
+      const featureName = 'test-feature';
+      setupFeature(featureName);
+      setupTask(featureName, '01-test-task', {
+        status: 'failed',
+        beadId: 'bd-task-1',
+        startedAt: new Date().toISOString(),
+      });
+
+      const strictStores = createStores(PROJECT_ROOT, 'off', createRepository('off'));
+      const strictService = new TaskService(PROJECT_ROOT, strictStores.taskStore, 'off', {
+        strictTaskTransitions: true,
+      });
+
+      const result = strictService.transition(featureName, '01-test-task', 'pending');
+
+      expect(result.status).toBe('pending');
+    });
+
+    it('allows cancelled -> pending transition in strict mode', () => {
+      const featureName = 'test-feature';
+      setupFeature(featureName);
+      setupTask(featureName, '01-test-task', {
+        status: 'cancelled',
+        beadId: 'bd-task-1',
+      });
+
+      const strictStores = createStores(PROJECT_ROOT, 'off', createRepository('off'));
+      const strictService = new TaskService(PROJECT_ROOT, strictStores.taskStore, 'off', {
+        strictTaskTransitions: true,
+      });
+
+      const result = strictService.transition(featureName, '01-test-task', 'pending');
+
+      expect(result.status).toBe('pending');
+    });
+
+    it('rejects done -> pending in strict mode', () => {
+      const featureName = 'test-feature';
+      setupFeature(featureName);
+      setupTask(featureName, '01-test-task', {
+        status: 'done',
+        beadId: 'bd-task-1',
+        completedAt: new Date().toISOString(),
+      });
+
+      const strictStores = createStores(PROJECT_ROOT, 'off', createRepository('off'));
+      const strictService = new TaskService(PROJECT_ROOT, strictStores.taskStore, 'off', {
+        strictTaskTransitions: true,
+      });
+
+      expect(() => strictService.transition(featureName, '01-test-task', 'pending')).toThrow(InvalidTransitionError);
+    });
+
+    it('allows done -> cancelled in strict mode', () => {
+      const featureName = 'test-feature';
+      setupFeature(featureName);
+      setupTask(featureName, '01-test-task', {
+        status: 'done',
+        beadId: 'bd-task-1',
+        completedAt: new Date().toISOString(),
+      });
+
+      const strictStores = createStores(PROJECT_ROOT, 'off', createRepository('off'));
+      const strictService = new TaskService(PROJECT_ROOT, strictStores.taskStore, 'off', {
+        strictTaskTransitions: true,
+      });
+
+      const result = strictService.transition(featureName, '01-test-task', 'cancelled');
+
+      expect(result.status).toBe('cancelled');
+    });
   });
 
   describe('sync() - secondary title matching prevents duplicates', () => {

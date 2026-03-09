@@ -13,6 +13,7 @@ function createMockDeps(overrides: Partial<MockDeps> = {}): MockDeps {
       get: (_f: string, _t: string) => ({ status: 'in_progress', folder: '01-test', name: '01-test' }),
       list: () => [{ status: 'in_progress', folder: '01-test', name: '01-test' }],
       update: () => {},
+      transition: () => {},
       writeReport: () => {},
       getRawStatus: () => ({ baseCommit: 'base-sha' }),
       patchBackgroundFields: () => {},
@@ -235,12 +236,17 @@ describe('worktree_commit terminal contract', () => {
 
 describe('worktree_commit learnings contract', () => {
   it('accepts valid learnings array and returns terminal success', async () => {
-    const updateCalls: Array<{ feature: string; task: string; updates: Record<string, unknown> }> = [];
+    const transitionCalls: Array<{
+      feature: string;
+      task: string;
+      toStatus: string;
+      extras?: Record<string, unknown>;
+    }> = [];
     const deps = createMockDeps({
       taskService: {
         ...createMockDeps().taskService,
-        update: (feature: string, task: string, updates: Record<string, unknown>) => {
-          updateCalls.push({ feature, task, updates });
+        transition: (feature: string, task: string, toStatus: string, extras?: Record<string, unknown>) => {
+          transitionCalls.push({ feature, task, toStatus, extras });
         },
       } as any,
     });
@@ -259,19 +265,24 @@ describe('worktree_commit learnings contract', () => {
     expect(result.success).toBe(true);
     expect(result.data.ok).toBe(true);
     expect(result.data.terminal).toBe(true);
-    // Verify learnings were persisted via taskService.update
-    const doneUpdate = updateCalls.find((u) => u.updates.status === 'done');
-    expect(doneUpdate).toBeDefined();
-    expect(doneUpdate!.updates.learnings).toEqual(['Use bun not npm', 'ESM needs .js extension']);
+    // Verify learnings were persisted via taskService.transition
+    const doneTransition = transitionCalls.find((t) => t.toStatus === 'done');
+    expect(doneTransition).toBeDefined();
+    expect(doneTransition!.extras?.learnings).toEqual(['Use bun not npm', 'ESM needs .js extension']);
   });
 
-  it('omits learnings from update when not provided (backward compat)', async () => {
-    const updateCalls: Array<{ feature: string; task: string; updates: Record<string, unknown> }> = [];
+  it('omits learnings from transition when not provided (backward compat)', async () => {
+    const transitionCalls: Array<{
+      feature: string;
+      task: string;
+      toStatus: string;
+      extras?: Record<string, unknown>;
+    }> = [];
     const deps = createMockDeps({
       taskService: {
         ...createMockDeps().taskService,
-        update: (feature: string, task: string, updates: Record<string, unknown>) => {
-          updateCalls.push({ feature, task, updates });
+        transition: (feature: string, task: string, toStatus: string, extras?: Record<string, unknown>) => {
+          transitionCalls.push({ feature, task, toStatus, extras });
         },
       } as any,
     });
@@ -289,18 +300,23 @@ describe('worktree_commit learnings contract', () => {
     expect(result.success).toBe(true);
     expect(result.data.ok).toBe(true);
     expect(result.data.terminal).toBe(true);
-    const doneUpdate = updateCalls.find((u) => u.updates.status === 'done');
-    expect(doneUpdate).toBeDefined();
-    expect(doneUpdate!.updates.learnings).toBeUndefined();
+    const doneTransition = transitionCalls.find((t) => t.toStatus === 'done');
+    expect(doneTransition).toBeDefined();
+    expect(doneTransition!.extras?.learnings).toBeUndefined();
   });
 
-  it('handles empty learnings array gracefully (omits from update)', async () => {
-    const updateCalls: Array<{ feature: string; task: string; updates: Record<string, unknown> }> = [];
+  it('handles empty learnings array gracefully (omits from transition)', async () => {
+    const transitionCalls: Array<{
+      feature: string;
+      task: string;
+      toStatus: string;
+      extras?: Record<string, unknown>;
+    }> = [];
     const deps = createMockDeps({
       taskService: {
         ...createMockDeps().taskService,
-        update: (feature: string, task: string, updates: Record<string, unknown>) => {
-          updateCalls.push({ feature, task, updates });
+        transition: (feature: string, task: string, toStatus: string, extras?: Record<string, unknown>) => {
+          transitionCalls.push({ feature, task, toStatus, extras });
         },
       } as any,
     });
@@ -320,18 +336,23 @@ describe('worktree_commit learnings contract', () => {
     expect(result.data.ok).toBe(true);
     expect(result.data.terminal).toBe(true);
     // Empty array should be treated as "no learnings"
-    const doneUpdate = updateCalls.find((u) => u.updates.status === 'done');
-    expect(doneUpdate).toBeDefined();
-    expect(doneUpdate!.updates.learnings).toBeUndefined();
+    const doneTransition = transitionCalls.find((t) => t.toStatus === 'done');
+    expect(doneTransition).toBeDefined();
+    expect(doneTransition!.extras?.learnings).toBeUndefined();
   });
 
   it('persists learnings on blocked status', async () => {
-    const updateCalls: Array<{ feature: string; task: string; updates: Record<string, unknown> }> = [];
+    const transitionCalls: Array<{
+      feature: string;
+      task: string;
+      toStatus: string;
+      extras?: Record<string, unknown>;
+    }> = [];
     const deps = createMockDeps({
       taskService: {
         ...createMockDeps().taskService,
-        update: (feature: string, task: string, updates: Record<string, unknown>) => {
-          updateCalls.push({ feature, task, updates });
+        transition: (feature: string, task: string, toStatus: string, extras?: Record<string, unknown>) => {
+          transitionCalls.push({ feature, task, toStatus, extras });
         },
       } as any,
     });
@@ -352,9 +373,9 @@ describe('worktree_commit learnings contract', () => {
     expect(result.data.ok).toBe(true);
     expect(result.data.terminal).toBe(true);
     expect(result.data.status).toBe('blocked');
-    const blockedUpdate = updateCalls.find((u) => u.updates.status === 'blocked');
-    expect(blockedUpdate).toBeDefined();
-    expect(blockedUpdate!.updates.learnings).toEqual(['Config files live in /etc']);
+    const blockedTransition = transitionCalls.find((t) => t.toStatus === 'blocked');
+    expect(blockedTransition).toBeDefined();
+    expect(blockedTransition!.extras?.learnings).toEqual(['Config files live in /etc']);
   });
 });
 
@@ -476,12 +497,17 @@ describe('worktree_commit learnings schema validation', () => {
 
 describe('worktree_commit invalid learnings via tool execute', () => {
   it('does not crash when learnings is a non-array (string) at tool boundary', async () => {
-    const updateCalls: Array<{ feature: string; task: string; updates: Record<string, unknown> }> = [];
+    const transitionCalls: Array<{
+      feature: string;
+      task: string;
+      toStatus: string;
+      extras?: Record<string, unknown>;
+    }> = [];
     const deps = createMockDeps({
       taskService: {
         ...createMockDeps().taskService,
-        update: (feature: string, task: string, updates: Record<string, unknown>) => {
-          updateCalls.push({ feature, task, updates });
+        transition: (feature: string, task: string, toStatus: string, extras?: Record<string, unknown>) => {
+          transitionCalls.push({ feature, task, toStatus, extras });
         },
       } as any,
     });
@@ -503,19 +529,24 @@ describe('worktree_commit invalid learnings via tool execute', () => {
     expect(result.success).toBe(true);
     expect(result.data.ok).toBe(true);
     expect(result.data.terminal).toBe(true);
-    // Learnings should NOT appear in update since they are malformed
-    const doneUpdate = updateCalls.find((u) => u.updates.status === 'done');
-    expect(doneUpdate).toBeDefined();
-    expect(doneUpdate!.updates.learnings).toBeUndefined();
+    // Learnings should NOT appear in transition since they are malformed
+    const doneTransition = transitionCalls.find((t) => t.toStatus === 'done');
+    expect(doneTransition).toBeDefined();
+    expect(doneTransition!.extras?.learnings).toBeUndefined();
   });
 
   it('does not crash when learnings contains non-string elements at tool boundary', async () => {
-    const updateCalls: Array<{ feature: string; task: string; updates: Record<string, unknown> }> = [];
+    const transitionCalls: Array<{
+      feature: string;
+      task: string;
+      toStatus: string;
+      extras?: Record<string, unknown>;
+    }> = [];
     const deps = createMockDeps({
       taskService: {
         ...createMockDeps().taskService,
-        update: (feature: string, task: string, updates: Record<string, unknown>) => {
-          updateCalls.push({ feature, task, updates });
+        transition: (feature: string, task: string, toStatus: string, extras?: Record<string, unknown>) => {
+          transitionCalls.push({ feature, task, toStatus, extras });
         },
       } as any,
     });
@@ -536,18 +567,23 @@ describe('worktree_commit invalid learnings via tool execute', () => {
     expect(result.data.ok).toBe(true);
     expect(result.data.terminal).toBe(true);
     // Only the valid non-empty string should be persisted
-    const doneUpdate = updateCalls.find((u) => u.updates.status === 'done');
-    expect(doneUpdate).toBeDefined();
-    expect(doneUpdate!.updates.learnings).toEqual(['valid learning']);
+    const doneTransition = transitionCalls.find((t) => t.toStatus === 'done');
+    expect(doneTransition).toBeDefined();
+    expect(doneTransition!.extras?.learnings).toEqual(['valid learning']);
   });
 
   it('does not persist learnings when all entries are invalid at tool boundary', async () => {
-    const updateCalls: Array<{ feature: string; task: string; updates: Record<string, unknown> }> = [];
+    const transitionCalls: Array<{
+      feature: string;
+      task: string;
+      toStatus: string;
+      extras?: Record<string, unknown>;
+    }> = [];
     const deps = createMockDeps({
       taskService: {
         ...createMockDeps().taskService,
-        update: (feature: string, task: string, updates: Record<string, unknown>) => {
-          updateCalls.push({ feature, task, updates });
+        transition: (feature: string, task: string, toStatus: string, extras?: Record<string, unknown>) => {
+          transitionCalls.push({ feature, task, toStatus, extras });
         },
       } as any,
     });
@@ -568,8 +604,8 @@ describe('worktree_commit invalid learnings via tool execute', () => {
     expect(result.data.ok).toBe(true);
     expect(result.data.terminal).toBe(true);
     // No valid learnings remain — should be treated as if omitted
-    const doneUpdate = updateCalls.find((u) => u.updates.status === 'done');
-    expect(doneUpdate).toBeDefined();
-    expect(doneUpdate!.updates.learnings).toBeUndefined();
+    const doneTransition = transitionCalls.find((t) => t.toStatus === 'done');
+    expect(doneTransition).toBeDefined();
+    expect(doneTransition!.extras?.learnings).toBeUndefined();
   });
 });
