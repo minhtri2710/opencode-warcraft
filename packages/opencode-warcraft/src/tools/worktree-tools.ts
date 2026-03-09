@@ -351,8 +351,7 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
         }
 
         if (status === 'blocked') {
-          taskService.update(feature, task, {
-            status: 'blocked',
+          taskService.transition(feature, task, 'blocked', {
             summary,
             blocker,
             ...(learnings && learnings.length > 0 ? { learnings } : {}),
@@ -452,8 +451,7 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
         }
 
         const finalStatus = status === 'completed' ? 'done' : status;
-        taskService.update(feature, task, {
-          status: validateTaskStatus(finalStatus),
+        taskService.transition(feature, task, validateTaskStatus(finalStatus), {
           summary,
           ...(learnings && learnings.length > 0 ? { learnings } : {}),
         });
@@ -511,7 +509,11 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
         const feature = resolution.feature;
 
         await worktreeService.remove(feature, task);
-        taskService.update(feature, task, { status: 'pending' });
+        // Two-step transition: current status → cancelled → pending
+        // This follows the state machine where in_progress/blocked → cancelled is allowed,
+        // and cancelled → pending is allowed for re-dispatch.
+        taskService.transition(feature, task, 'cancelled');
+        taskService.transition(feature, task, 'pending');
 
         return toolSuccess({ message: `Task "${task}" aborted. Status reset to pending.` });
       },

@@ -39,6 +39,7 @@ export interface DispatchCoordinatorDeps {
   taskService: {
     get: (feature: string, task: string) => TaskInfo | null;
     update: (feature: string, task: string, patch: Record<string, unknown>) => void;
+    transition: (feature: string, task: string, toStatus: TaskStatusType, extras?: Record<string, unknown>) => void;
     getRawStatus: (
       feature: string,
       task: string,
@@ -287,11 +288,13 @@ export class DispatchCoordinator {
       }
 
       // --- Transition to in_progress ONLY after prep succeeds ---
-      const updatePayload: Record<string, unknown> = { status: 'in_progress' };
+      // Uses validated transition path (not unrestricted update) so the state machine
+      // enforces allowed transitions when strict mode is enabled.
+      const transitionExtras: Record<string, unknown> = {};
       if (continueFrom !== 'blocked') {
-        updatePayload.baseCommit = worktree.commit;
+        transitionExtras.baseCommit = worktree.commit;
       }
-      this.deps.taskService.update(feature, task, updatePayload);
+      this.deps.taskService.transition(feature, task, 'in_progress', transitionExtras);
 
       return {
         task,

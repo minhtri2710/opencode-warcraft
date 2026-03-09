@@ -78,7 +78,9 @@ export function createWarcraftContainer(directory: string, configService: Config
   const repository = new BeadsRepository(directory, {}, beadsMode);
   const stores = createStores(directory, beadsMode, repository);
   const planService = new PlanService(directory, stores.planStore, beadsMode);
-  const taskService = new TaskService(directory, stores.taskStore, beadsMode);
+  const taskService = new TaskService(directory, stores.taskStore, beadsMode, {
+    strictTaskTransitions: true,
+  });
   const featureService = new FeatureService(directory, stores.featureStore, beadsMode, taskService);
   const contextService = new ContextService(directory, configService);
   const agentsMdService = new AgentsMdService(directory, contextService);

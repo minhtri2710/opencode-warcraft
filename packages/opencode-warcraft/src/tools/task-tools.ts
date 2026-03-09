@@ -1,6 +1,6 @@
 import { type ToolDefinition, tool } from '@opencode-ai/plugin';
 import type { EventLogger, FeatureService, PlanService, TaskService, TaskStatusType } from 'warcraft-core';
-import { detectWorkflowPath, validateLightweightPlan } from 'warcraft-core';
+import { detectWorkflowPath, InvalidTransitionError, validateLightweightPlan } from 'warcraft-core';
 import { toolError, toolSuccess } from '../types.js';
 import { resolveFeatureInput, validateTaskInput } from './tool-input.js';
 
@@ -140,10 +140,20 @@ export class TaskTools {
         const feature = resolution.feature;
         validateTaskInput(task);
 
-        // Detect reopen: status changing away from 'done'
         if (status) {
           const currentTask = taskService.get(feature, task);
           const validatedStatus = validateTaskStatus(status);
+
+          // Explicit reopen rejection: done → in_progress is never allowed through this tool.
+          // Use warcraft_worktree_create to re-dispatch a task if needed.
+          if (currentTask && currentTask.status === 'done' && validatedStatus === 'in_progress') {
+            return toolError(
+              `Cannot reopen completed task "${task}": done → in_progress is not allowed. ` +
+                'If the task needs rework, create a new task or use warcraft_worktree_create.',
+            );
+          }
+
+          // Detect reopen: status changing away from 'done' (for event logging)
           if (currentTask && currentTask.status === 'done' && validatedStatus !== 'done') {
             eventLogger.emit({
               type: 'reopen',
@@ -152,10 +162,23 @@ export class TaskTools {
               details: { previousStatus: 'done', newStatus: validatedStatus },
             });
           }
+
+          // Use validated transition path for status changes
+          try {
+            const updated = taskService.transition(feature, task, validatedStatus, {
+              summary,
+            });
+            return toolSuccess({ message: `Task "${task}" updated: status=${updated.status}` });
+          } catch (error) {
+            if (error instanceof InvalidTransitionError) {
+              return toolError(`Cannot update task "${task}": ${error.message}`);
+            }
+            throw error;
+          }
         }
 
+        // Summary-only update (no status change) — use update() since no transition is needed
         const updated = taskService.update(feature, task, {
-          status: status ? validateTaskStatus(status) : undefined,
           summary,
         });
         return toolSuccess({ message: `Task "${task}" updated: status=${updated.status}` });

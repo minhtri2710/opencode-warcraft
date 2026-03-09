@@ -419,7 +419,7 @@ export class TaskService {
     featureName: string,
     taskFolder: string,
     toStatus: TaskStatusType,
-    extras?: Partial<Pick<TaskStatus, 'summary' | 'blocker' | 'baseCommit'>>,
+    extras?: Partial<Pick<TaskStatus, 'summary' | 'blocker' | 'baseCommit' | 'learnings'>>,
   ): TaskStatus {
     const current = this.store.getRawStatus(featureName, taskFolder);
 

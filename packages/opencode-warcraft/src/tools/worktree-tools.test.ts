@@ -658,10 +658,16 @@ describe('mergeTaskTool verification defaults', () => {
 });
 
 /**
- * Create mock deps for commitWorktreeTool that track taskService.update() calls.
+ * Create mock deps for commitWorktreeTool that track taskService.transition() and update() calls.
  */
 function createCommitDeps(overrides: Partial<WorktreeToolsDependencies> = {}) {
   const updateCalls: Array<{ feature: string; task: string; updates: Record<string, unknown> }> = [];
+  const transitionCalls: Array<{
+    feature: string;
+    task: string;
+    toStatus: string;
+    extras?: Record<string, unknown>;
+  }> = [];
 
   const deps: WorktreeToolsDependencies = {
     featureService: {
@@ -675,7 +681,12 @@ function createCommitDeps(overrides: Partial<WorktreeToolsDependencies> = {}) {
         updateCalls.push({ feature, task, updates });
         return { ...updates, origin: 'plan' };
       },
+      transition: (feature: string, task: string, toStatus: string, extras?: Record<string, unknown>) => {
+        transitionCalls.push({ feature, task, toStatus, extras });
+        return { folder: task, name: 'Task', status: toStatus, origin: 'plan' };
+      },
       writeReport: () => {},
+      list: () => [],
       ...((overrides as Record<string, unknown>).taskServiceOverrides ?? {}),
     } as unknown as WorktreeToolsDependencies['taskService'],
     worktreeService: {
@@ -696,7 +707,7 @@ function createCommitDeps(overrides: Partial<WorktreeToolsDependencies> = {}) {
     ...overrides,
   };
 
-  return { deps, getUpdateCalls: () => updateCalls };
+  return { deps, getUpdateCalls: () => updateCalls, getTransitionCalls: () => transitionCalls };
 }
 
 /** Parse tool result JSON string into data object */
@@ -708,8 +719,8 @@ function parseCommitResult(result: unknown): Record<string, unknown> {
 describe('commitWorktreeTool learnings', () => {
   const resolveFeature = () => 'test-feature';
 
-  it('persists learnings in taskService.update when status is completed', async () => {
-    const { deps, getUpdateCalls } = createCommitDeps();
+  it('persists learnings in taskService.transition when status is completed', async () => {
+    const { deps, getTransitionCalls } = createCommitDeps();
     const tools = new WorktreeTools(deps);
     const commitTool = tools.commitWorktreeTool(resolveFeature);
 
@@ -723,15 +734,15 @@ describe('commitWorktreeTool learnings', () => {
       {} as never,
     );
 
-    const updates = getUpdateCalls();
-    // The final update (status → done) should include learnings
-    const finalUpdate = updates.find((u) => u.updates.status === 'done');
-    expect(finalUpdate).toBeDefined();
-    expect(finalUpdate!.updates.learnings).toEqual(['Use foo instead of bar', 'Config lives in /etc']);
+    const transitions = getTransitionCalls();
+    // The final transition (status → done) should include learnings
+    const finalTransition = transitions.find((t) => t.toStatus === 'done');
+    expect(finalTransition).toBeDefined();
+    expect(finalTransition!.extras?.learnings).toEqual(['Use foo instead of bar', 'Config lives in /etc']);
   });
 
-  it('persists learnings in taskService.update when status is blocked', async () => {
-    const { deps, getUpdateCalls } = createCommitDeps();
+  it('persists learnings in taskService.transition when status is blocked', async () => {
+    const { deps, getTransitionCalls } = createCommitDeps();
     const tools = new WorktreeTools(deps);
     const commitTool = tools.commitWorktreeTool(resolveFeature);
 
@@ -746,13 +757,13 @@ describe('commitWorktreeTool learnings', () => {
       {} as never,
     );
 
-    const blockedUpdate = getUpdateCalls().find((u) => u.updates.status === 'blocked');
-    expect(blockedUpdate).toBeDefined();
-    expect(blockedUpdate!.updates.learnings).toEqual(['Discovered pattern Y']);
+    const blockedTransition = getTransitionCalls().find((t) => t.toStatus === 'blocked');
+    expect(blockedTransition).toBeDefined();
+    expect(blockedTransition!.extras?.learnings).toEqual(['Discovered pattern Y']);
   });
 
-  it('omits learnings from taskService.update when not provided', async () => {
-    const { deps, getUpdateCalls } = createCommitDeps();
+  it('omits learnings from taskService.transition when not provided', async () => {
+    const { deps, getTransitionCalls } = createCommitDeps();
     const tools = new WorktreeTools(deps);
     const commitTool = tools.commitWorktreeTool(resolveFeature);
 
@@ -765,10 +776,10 @@ describe('commitWorktreeTool learnings', () => {
       {} as never,
     );
 
-    const updates = getUpdateCalls();
-    const finalUpdate = updates.find((u) => u.updates.status === 'done');
-    expect(finalUpdate).toBeDefined();
-    expect(finalUpdate!.updates.learnings).toBeUndefined();
+    const transitions = getTransitionCalls();
+    const finalTransition = transitions.find((t) => t.toStatus === 'done');
+    expect(finalTransition).toBeDefined();
+    expect(finalTransition!.extras?.learnings).toBeUndefined();
   });
 
   it('preserves existing completed behavior when learnings is omitted', async () => {
@@ -795,8 +806,8 @@ describe('commitWorktreeTool learnings', () => {
 describe('commitWorktreeTool learnings edge cases', () => {
   const resolveFeature = () => 'test-feature';
 
-  it('omits learnings from update when empty array provided', async () => {
-    const { deps, getUpdateCalls } = createCommitDeps();
+  it('omits learnings from transition when empty array provided', async () => {
+    const { deps, getTransitionCalls } = createCommitDeps();
     const tools = new WorktreeTools(deps);
     const commitTool = tools.commitWorktreeTool(resolveFeature);
 
@@ -810,15 +821,15 @@ describe('commitWorktreeTool learnings edge cases', () => {
       {} as never,
     );
 
-    const updates = getUpdateCalls();
-    const finalUpdate = updates.find((u) => u.updates.status === 'done');
-    expect(finalUpdate).toBeDefined();
-    // Empty array → no learnings key in update
-    expect(finalUpdate!.updates.learnings).toBeUndefined();
+    const transitions = getTransitionCalls();
+    const finalTransition = transitions.find((t) => t.toStatus === 'done');
+    expect(finalTransition).toBeDefined();
+    // Empty array → no learnings key in transition extras
+    expect(finalTransition!.extras?.learnings).toBeUndefined();
   });
 
-  it('does not include learnings from partial status in update downstream', async () => {
-    const { deps, getUpdateCalls } = createCommitDeps();
+  it('persists learnings in transition for partial status', async () => {
+    const { deps, getTransitionCalls } = createCommitDeps();
     const tools = new WorktreeTools(deps);
     const commitTool = tools.commitWorktreeTool(resolveFeature);
 
@@ -832,16 +843,16 @@ describe('commitWorktreeTool learnings edge cases', () => {
       {} as never,
     );
 
-    const updates = getUpdateCalls();
-    // partial status goes through the non-blocked path, so final update is 'partial'
-    const partialUpdate = updates.find((u) => u.updates.status === 'partial');
-    expect(partialUpdate).toBeDefined();
+    const transitions = getTransitionCalls();
+    // partial status goes through the non-blocked path, so final transition is 'partial'
+    const partialTransition = transitions.find((t) => t.toStatus === 'partial');
+    expect(partialTransition).toBeDefined();
     // Learnings should be persisted even for partial
-    expect(partialUpdate!.updates.learnings).toEqual(['Should persist in status but not flow downstream']);
+    expect(partialTransition!.extras?.learnings).toEqual(['Should persist in status but not flow downstream']);
   });
 
-  it('does not include learnings from failed status in update downstream', async () => {
-    const { deps, getUpdateCalls } = createCommitDeps();
+  it('persists learnings in transition for failed status', async () => {
+    const { deps, getTransitionCalls } = createCommitDeps();
     const tools = new WorktreeTools(deps);
     const commitTool = tools.commitWorktreeTool(resolveFeature);
 
@@ -855,11 +866,11 @@ describe('commitWorktreeTool learnings edge cases', () => {
       {} as never,
     );
 
-    const updates = getUpdateCalls();
-    const failedUpdate = updates.find((u) => u.updates.status === 'failed');
-    expect(failedUpdate).toBeDefined();
-    // Learnings should still be persisted in status
-    expect(failedUpdate!.updates.learnings).toEqual(['Found root cause: wrong config']);
+    const transitions = getTransitionCalls();
+    const failedTransition = transitions.find((t) => t.toStatus === 'failed');
+    expect(failedTransition).toBeDefined();
+    // Learnings should still be persisted in transition
+    expect(failedTransition!.extras?.learnings).toEqual(['Found root cause: wrong config']);
   });
 });
 
