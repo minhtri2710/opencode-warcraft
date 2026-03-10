@@ -60,6 +60,70 @@ describe('BeadsTaskStore fail-fast behavior', () => {
   });
 });
 
+describe('BeadsTaskStore reconciliation', () => {
+  it('persists canonical folders and refreshes cached listings after reconciliation', () => {
+    const taskStates = new Map<string, Record<string, unknown>>([
+      ['task-build', { status: 'pending', origin: 'plan', planTitle: 'Build Feature' }],
+      ['task-setup', { status: 'pending', origin: 'plan', planTitle: 'Setup Environment' }],
+    ]);
+
+    const repository = {
+      getEpicByFeatureName: () => ({ success: true as const, value: 'epic-1' }),
+      listTaskBeadsForEpic: () => ({
+        success: true as const,
+        value: [
+          { id: 'task-build', title: 'Build Feature', status: 'pending' },
+          { id: 'task-setup', title: 'Setup Environment', status: 'pending' },
+        ],
+      }),
+      getTaskState: (beadId: string) => ({
+        success: true as const,
+        value: taskStates.get(beadId) ?? null,
+      }),
+      setTaskState: (beadId: string, status: Record<string, unknown>) => {
+        taskStates.set(beadId, status);
+        return { success: true as const, value: undefined };
+      },
+    };
+
+    const store = new BeadsTaskStore('/tmp/project', repository as any);
+    const before = store.list('test-feature');
+    expect(before.map((task) => ({ folder: task.folder, folderSource: task.folderSource }))).toEqual([
+      { folder: '01-build-feature', folderSource: 'derived' },
+      { folder: '02-setup-environment', folderSource: 'derived' },
+    ]);
+
+    store.reconcilePlanTask('test-feature', '01-build-feature', '02-build-feature', {
+      status: 'pending',
+      origin: 'plan',
+      planTitle: 'Build Feature',
+      dependsOn: ['01-setup-environment'],
+      beadId: 'task-build',
+    });
+    store.reconcilePlanTask('test-feature', '02-setup-environment', '01-setup-environment', {
+      status: 'pending',
+      origin: 'plan',
+      planTitle: 'Setup Environment',
+      dependsOn: [],
+      beadId: 'task-setup',
+    });
+
+    const after = store.list('test-feature');
+    expect(
+      after.map((task) => ({
+        folder: task.folder,
+        planTitle: task.planTitle,
+        folderSource: task.folderSource,
+      })),
+    ).toEqual([
+      { folder: '01-setup-environment', planTitle: 'Setup Environment', folderSource: 'stored' },
+      { folder: '02-build-feature', planTitle: 'Build Feature', folderSource: 'stored' },
+    ]);
+    expect(store.getRawStatus('test-feature', '02-build-feature')?.dependsOn).toEqual(['01-setup-environment']);
+  });
+});
+
+
 describe('BeadsTaskStore caching layer', () => {
   it('get() uses cache for existing tasks after list() is called', () => {
     let listCallCount = 0;
@@ -341,7 +405,7 @@ describe('BeadsTaskStore caching layer', () => {
     expect(listCallCount).toBe(2);
   });
 
-  it('patchBackground() invalidates cache entry for the patched task', () => {
+  it('patchBackground() keeps cached task lookups stable and merges local background state', () => {
     let listCallCount = 0;
     const repository = {
       getEpicByFeatureName: () => ({ success: true as const, value: 'epic-1' }),
@@ -367,13 +431,24 @@ describe('BeadsTaskStore caching layer', () => {
     store.list('test-feature');
     expect(listCallCount).toBe(1);
 
-    // patchBackground() invalidates the cache entry
-    store.patchBackground('test-feature', '01-task-1', { idempotencyKey: 'test-key' });
+    const patched = store.patchBackground('test-feature', '01-task-1', {
+      idempotencyKey: 'test-key',
+      workerSession: { sessionId: 'sess-1', attempt: 1 } as any,
+    });
 
-    // get() refreshes stale cache entry and reloads once
+    expect(patched.idempotencyKey).toBe('test-key');
+    expect(patched.workerSession?.sessionId).toBe('sess-1');
+    expect(patched.workerSession?.attempt).toBe(1);
+
+    // Cached task lookup should remain valid without reloading bead task list
     const patchedTask = store.get('test-feature', '01-task-1');
     expect(patchedTask?.folder).toBe('01-task-1');
-    expect(listCallCount).toBe(2);
+    expect(listCallCount).toBe(1);
+
+    const rawStatus = store.getRawStatus('test-feature', '01-task-1');
+    expect(rawStatus?.idempotencyKey).toBe('test-key');
+    expect(rawStatus?.workerSession?.sessionId).toBe('sess-1');
+    expect(rawStatus?.workerSession?.attempt).toBe(1);
   });
 
   it('syncDependencies() invalidates cache for the feature', () => {
@@ -417,6 +492,155 @@ describe('BeadsTaskStore caching layer', () => {
     store.get('test-feature', '01-task-1');
     expect(listCallCount).toBe(1);
   });
+
+  describe('syncDependencies()', () => {
+    it('adds missing dependency edges', () => {
+      const addCalls: Array<[string, string]> = [];
+      const repository = {
+        getEpicByFeatureName: () => ({ success: true as const, value: 'epic-1' }),
+        listTaskBeadsForEpic: () => ({
+          success: true as const,
+          value: [
+            { id: 'task-1', title: 'Task 1', status: 'pending' },
+            { id: 'task-2', title: 'Task 2', status: 'pending' },
+          ],
+        }),
+        getTaskState: (beadId: string) => ({
+          success: true as const,
+          value:
+            beadId === 'task-1'
+              ? { folder: '01-task-1', status: 'pending', origin: 'plan', planTitle: 'Task 1', dependsOn: ['02-task-2'] }
+              : { folder: '02-task-2', status: 'pending', origin: 'plan', planTitle: 'Task 2', dependsOn: [] },
+        }),
+        listDependencies: () => ({ success: true as const, value: [] }),
+        addDependency: (beadId: string, dependsOnBeadId: string) => {
+          addCalls.push([beadId, dependsOnBeadId]);
+          return { success: true as const, value: undefined };
+        },
+        removeDependency: () => ({ success: true as const, value: undefined }),
+        getViewerHealth: () => ({ available: false }),
+        getRobotInsights: () => null,
+      };
+
+      const store = new BeadsTaskStore('/tmp/project', repository as any);
+      const diagnostics = store.syncDependencies('test-feature');
+
+      expect(diagnostics).toEqual([]);
+      expect(addCalls).toEqual([['task-1', 'task-2']]);
+    });
+
+    it('does not re-add dependency edges that already exist', () => {
+      let addCallCount = 0;
+      const repository = {
+        getEpicByFeatureName: () => ({ success: true as const, value: 'epic-1' }),
+        listTaskBeadsForEpic: () => ({
+          success: true as const,
+          value: [
+            { id: 'task-1', title: 'Task 1', status: 'pending' },
+            { id: 'task-2', title: 'Task 2', status: 'pending' },
+          ],
+        }),
+        getTaskState: (beadId: string) => ({
+          success: true as const,
+          value:
+            beadId === 'task-1'
+              ? { folder: '01-task-1', status: 'pending', origin: 'plan', planTitle: 'Task 1', dependsOn: ['02-task-2'] }
+              : { folder: '02-task-2', status: 'pending', origin: 'plan', planTitle: 'Task 2', dependsOn: [] },
+        }),
+        listDependencies: (beadId: string) => ({
+          success: true as const,
+          value: beadId === 'task-1' ? [{ id: 'task-2', title: 'Task 2', status: 'pending' }] : [],
+        }),
+        addDependency: () => {
+          addCallCount++;
+          return { success: true as const, value: undefined };
+        },
+        removeDependency: () => ({ success: true as const, value: undefined }),
+        getViewerHealth: () => ({ available: false }),
+        getRobotInsights: () => null,
+      };
+
+      const store = new BeadsTaskStore('/tmp/project', repository as any);
+      const diagnostics = store.syncDependencies('test-feature');
+
+      expect(diagnostics).toEqual([]);
+      expect(addCallCount).toBe(0);
+    });
+
+    it('removes stale dependency edges that are no longer desired', () => {
+      const removeCalls: Array<[string, string]> = [];
+      const repository = {
+        getEpicByFeatureName: () => ({ success: true as const, value: 'epic-1' }),
+        listTaskBeadsForEpic: () => ({
+          success: true as const,
+          value: [
+            { id: 'task-1', title: 'Task 1', status: 'pending' },
+            { id: 'task-2', title: 'Task 2', status: 'pending' },
+          ],
+        }),
+        getTaskState: (beadId: string) => ({
+          success: true as const,
+          value:
+            beadId === 'task-1'
+              ? { folder: '01-task-1', status: 'pending', origin: 'plan', planTitle: 'Task 1', dependsOn: [] }
+              : { folder: '02-task-2', status: 'pending', origin: 'plan', planTitle: 'Task 2', dependsOn: [] },
+        }),
+        listDependencies: (beadId: string) => ({
+          success: true as const,
+          value: beadId === 'task-1' ? [{ id: 'task-2', title: 'Task 2', status: 'pending' }] : [],
+        }),
+        addDependency: () => ({ success: true as const, value: undefined }),
+        removeDependency: (beadId: string, dependsOnBeadId: string) => {
+          removeCalls.push([beadId, dependsOnBeadId]);
+          return { success: true as const, value: undefined };
+        },
+        getViewerHealth: () => ({ available: false }),
+        getRobotInsights: () => null,
+      };
+
+      const store = new BeadsTaskStore('/tmp/project', repository as any);
+      const diagnostics = store.syncDependencies('test-feature');
+
+      expect(diagnostics).toEqual([]);
+      expect(removeCalls).toEqual([['task-1', 'task-2']]);
+    });
+
+    it('surfaces dependency add failures as diagnostics', () => {
+      const repository = {
+        getEpicByFeatureName: () => ({ success: true as const, value: 'epic-1' }),
+        listTaskBeadsForEpic: () => ({
+          success: true as const,
+          value: [
+            { id: 'task-1', title: 'Task 1', status: 'pending' },
+            { id: 'task-2', title: 'Task 2', status: 'pending' },
+          ],
+        }),
+        getTaskState: (beadId: string) => ({
+          success: true as const,
+          value:
+            beadId === 'task-1'
+              ? { folder: '01-task-1', status: 'pending', origin: 'plan', planTitle: 'Task 1', dependsOn: ['02-task-2'] }
+              : { folder: '02-task-2', status: 'pending', origin: 'plan', planTitle: 'Task 2', dependsOn: [] },
+        }),
+        listDependencies: () => ({ success: true as const, value: [] }),
+        addDependency: () => ({
+          success: false as const,
+          error: new RepositoryError('gateway_error', 'Bead gateway error: add failed'),
+        }),
+        removeDependency: () => ({ success: true as const, value: undefined }),
+        getViewerHealth: () => ({ available: false }),
+        getRobotInsights: () => null,
+      };
+
+      const store = new BeadsTaskStore('/tmp/project', repository as any);
+      const diagnostics = store.syncDependencies('test-feature');
+
+      expect(diagnostics).toHaveLength(1);
+      expect(diagnostics[0]?.code).toBe('dep_add_failed');
+      expect(diagnostics[0]?.message).toContain('task-1 -> task-2');
+    });
+  });
+
 
   it('getRunnableTasks() calls list() at most once even when processing many tasks', () => {
     let listCallCount = 0;

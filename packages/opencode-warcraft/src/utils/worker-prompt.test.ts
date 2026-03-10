@@ -18,7 +18,8 @@ function createTestParams(overrides: Partial<WorkerPromptParams> = {}): WorkerPr
     feature: 'test-feature',
     task: '01-test-task',
     taskOrder: 1,
-    worktreePath: '/tmp/worktree',
+    workspacePath: '/tmp/worktree',
+    workspaceMode: 'worktree',
     branch: 'warcraft/test-feature/01-test-task',
     plan: '# Test Plan\n\n## Discovery\n\nQ&A here\n\n## Tasks\n\n### 1. Test Task\n\nDo the thing.',
     contextFiles: [
@@ -155,7 +156,22 @@ UNIQUE_MARKER_12345
     const prompt = buildWorkerPrompt(params);
 
     expect(prompt).toContain('All file operations MUST be within this worktree path');
-    expect(prompt).toContain(params.worktreePath);
+    expect(prompt).toContain(params.workspacePath);
+  });
+
+  it('describes direct mode truthfully when no git worktree exists', () => {
+    const params = createTestParams({
+      workspaceMode: 'direct',
+      workspacePath: '/repo/project',
+      branch: undefined,
+    });
+    const prompt = buildWorkerPrompt(params);
+
+    expect(prompt).toContain('executing a task directly in the project root');
+    expect(prompt).toContain('Workspace Mode | direct');
+    expect(prompt).toContain('Branch | n/a (direct mode)');
+    expect(prompt).toContain('/repo/project');
+    expect(prompt).toContain('Do NOT claim isolation');
   });
 });
 

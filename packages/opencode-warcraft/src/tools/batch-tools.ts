@@ -1,6 +1,6 @@
 import { type ToolDefinition, tool } from '@opencode-ai/plugin';
 import type { FeatureService, PlanService, TaskService, WorktreeService } from 'warcraft-core';
-import type { BlockedResult } from '../types.js';
+import type { BlockedResult, ToolContext } from '../types.js';
 import { toolError, toolSuccess } from '../types.js';
 import { type DispatchOneTaskServices, dispatchOneTask } from './dispatch-task.js';
 import { fetchSharedDispatchData } from './task-dispatch.js';
@@ -75,7 +75,8 @@ export async function mapWithConcurrencyLimit<TInput, TOutput>(
 interface TaskDispatchResult {
   task: string;
   success: boolean;
-  worktreePath?: string;
+  workspaceMode?: 'worktree' | 'direct';
+  workspacePath?: string;
   branch?: string;
   agent: string;
   error?: string;
@@ -124,7 +125,7 @@ export class BatchTools {
           .describe('Task folders to execute in parallel (required for execute mode)'),
         feature: tool.schema.string().optional().describe('Feature name (defaults to active)'),
       },
-      async execute({ mode, tasks: selectedTasks, feature: explicitFeature }) {
+      async execute({ mode, tasks: selectedTasks, feature: explicitFeature }, toolContext) {
         const resolution = resolveFeatureInput(resolveFeature, explicitFeature);
         if (!resolution.ok) return toolError(resolution.error);
         const feature = resolution.feature;
@@ -219,6 +220,7 @@ export class BatchTools {
 
         // Dispatch all tasks in parallel
         const featureReopenRate = getFeatureReopenRate?.();
+        const sessionId = (toolContext as ToolContext | undefined)?.sessionID ?? featureService.getSession(feature);
         const shared = fetchSharedDispatchData(feature, {
           planService,
           taskService,
@@ -239,7 +241,7 @@ export class BatchTools {
             featureReopenRate,
             lockDir,
           };
-          return dispatchOneTask({ feature, task }, unifiedServices, shared);
+          return dispatchOneTask({ feature, task, sessionId }, unifiedServices, shared);
         };
 
         const dispatched =

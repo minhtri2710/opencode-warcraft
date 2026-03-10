@@ -22,7 +22,7 @@ describe('FilesystemTaskStore', () => {
       expect(store).toBeDefined();
     });
 
-    it('should create a task with a crypto.randomUUID local ID when repository is absent', () => {
+    it('should create a task with a deterministic local ID when repository is absent', () => {
       const store = new FilesystemTaskStore(tmpDir);
       const status: TaskStatus = {
         status: 'pending',
@@ -32,9 +32,7 @@ describe('FilesystemTaskStore', () => {
 
       const result = store.createTask('my-feature', '01-setup', 'Setup', status, 3);
 
-      // Should have a valid UUID as beadId
-      expect(result.beadId).toBeDefined();
-      expect(result.beadId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+      expect(result.beadId).toBe('local-my-feature-01-setup');
       expect(result.status).toBe('pending');
     });
 
@@ -50,7 +48,7 @@ describe('FilesystemTaskStore', () => {
 
       expect(retrieved).not.toBeNull();
       expect(retrieved!.folder).toBe('01-setup');
-      expect(retrieved!.beadId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+      expect(retrieved!.beadId).toBe('local-my-feature-01-setup');
     });
 
     it('should handle writeArtifact gracefully when repository is absent', () => {

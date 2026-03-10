@@ -1,10 +1,10 @@
-import * as crypto from 'crypto';
 import * as fs from 'fs';
 import type { TaskInfo, TaskStatus } from '../../types.js';
 import { ensureDir, fileExists, readJson, writeJson, writeText } from '../../utils/fs.js';
 import type { LockOptions } from '../../utils/json-lock.js';
 import { patchJsonLockedSync, writeJsonLockedSync } from '../../utils/json-lock.js';
 import { getTaskPath, getTaskReportPath, getTaskStatusPath, getTasksPath } from '../../utils/paths.js';
+import { deriveDeterministicLocalId } from '../../utils/slug.js';
 import type { BeadsRepository } from '../beads/BeadsRepository.js';
 import type { BackgroundPatchFields, RunnableTasksResult } from '../taskService.js';
 import { TASK_STATUS_SCHEMA_VERSION } from '../taskService.js';
@@ -15,7 +15,7 @@ import type { TaskArtifactKind, TaskSaveOptions, TaskStore } from './types.js';
  *
  * Task state lives in local filesystem (`tasks/<folder>/status.json`).
  * When a BeadsRepository is provided, uses it for bead creation (task identification).
- * When absent (pure off mode), generates local UUIDs instead.
+ * When absent (pure off mode), generates deterministic local IDs instead.
  */
 export class FilesystemTaskStore implements TaskStore {
   constructor(
@@ -43,7 +43,7 @@ export class FilesystemTaskStore implements TaskStore {
     }
 
     if (!beadId) {
-      beadId = crypto.randomUUID();
+      beadId = deriveDeterministicLocalId(featureName, folder);
     }
 
     const statusWithBead: TaskStatus = { ...status, beadId };

@@ -19,6 +19,8 @@ export interface DispatchOneTaskInput {
   continueFrom?: 'blocked';
   /** Answer to blocker question when continuing */
   decision?: string;
+  /** OpenCode session identifier for persisted worker-session state. */
+  sessionId?: string;
 }
 
 export interface DispatchOneTaskServices {
@@ -33,7 +35,7 @@ export interface DispatchOneTaskServices {
       status: TaskStatusType;
       origin: string;
       dependsOn?: string[];
-      workerSession?: { attempt?: number };
+      workerSession?: { sessionId?: string; attempt?: number };
       summary?: string;
     } | null;
     writeSpec: (feature: string, task: string, content: string) => string;
@@ -65,7 +67,8 @@ export interface DispatchOneTaskResult {
   task: string;
   success: boolean;
   agent: string;
-  worktreePath?: string;
+  workspaceMode?: 'worktree' | 'direct';
+  workspacePath?: string;
   branch?: string;
   error?: string;
   taskToolCall?: {
@@ -152,6 +155,7 @@ export async function dispatchOneTask(
       task: input.task,
       continueFrom: input.continueFrom,
       decision: input.decision,
+      sessionId: input.sessionId,
     },
     shared,
   );
@@ -162,7 +166,8 @@ export async function dispatchOneTask(
     task: result.task,
     success: result.success,
     agent: result.agent,
-    worktreePath: result.worktreePath,
+    workspaceMode: result.workspaceMode,
+    workspacePath: result.workspacePath,
     branch: result.branch,
     error: result.error,
     taskToolCall: result.taskToolCall,

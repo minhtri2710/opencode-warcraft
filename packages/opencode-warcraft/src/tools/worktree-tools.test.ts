@@ -62,6 +62,7 @@ function createMergeDeps(overrides: Partial<WorktreeToolsDependencies> = {}): Wo
     planService: {} as WorktreeToolsDependencies['planService'],
     taskService: {
       get: () => ({ folder: '01-task', name: 'Task', status: 'done', origin: 'plan' as const }),
+      getRawStatus: () => ({ workerSession: { workspaceMode: 'worktree' as const } }),
       ...((overrides as Record<string, unknown>).taskServiceOverrides ?? {}),
     } as unknown as WorktreeToolsDependencies['taskService'],
     worktreeService: {
@@ -76,6 +77,7 @@ function createMergeDeps(overrides: Partial<WorktreeToolsDependencies> = {}): Wo
     completionGates: ['build', 'test', 'lint'] as const,
     verificationModel: 'tdd',
     workflowGatesMode: 'warn',
+    eventLogger: { emit: () => {}, getLatestTraceContext: () => undefined } as WorktreeToolsDependencies['eventLogger'],
     ...overrides,
   };
 }
@@ -741,7 +743,7 @@ function createCommitDeps(overrides: Partial<WorktreeToolsDependencies> = {}) {
     worktreeService: {
       commitChanges: async () => ({ committed: true, sha: 'abc123', message: 'ok' }),
       getDiff: async () => ({ hasDiff: false, filesChanged: [], insertions: 0, deletions: 0 }),
-      get: async () => ({ path: '/tmp/wt', branch: 'warcraft/test/01-task' }),
+      get: async () => ({ mode: 'worktree' as const, path: '/tmp/wt', branch: 'warcraft/test/01-task' }),
       ...((overrides as Record<string, unknown>).worktreeServiceOverrides ?? {}),
     } as unknown as WorktreeToolsDependencies['worktreeService'],
     contextService: { list: () => [] } as unknown as WorktreeToolsDependencies['contextService'],
@@ -758,6 +760,123 @@ function createCommitDeps(overrides: Partial<WorktreeToolsDependencies> = {}) {
 
   return { deps, getUpdateCalls: () => updateCalls, getTransitionCalls: () => transitionCalls };
 }
+
+describe('direct workspace mode', () => {
+  const resolveFeature = () => 'test-feature';
+
+  it('returns a truthful no-op merge response for direct mode', async () => {
+    let mergeCalled = false;
+    const deps = createMergeDeps({
+      verificationModel: 'best-effort',
+      taskServiceOverrides: {
+        getRawStatus: () => ({
+          workerSession: { workspaceMode: 'direct' as const, workspacePath: '/repo/root' },
+        }),
+      },
+      worktreeServiceOverrides: {
+        merge: async () => {
+          mergeCalled = true;
+          return { success: true, sha: 'abc123', filesChanged: ['a.ts'] };
+        },
+      },
+    } as unknown as Partial<WorktreeToolsDependencies>);
+    const tools = new WorktreeTools(deps);
+    const mergeTool = tools.mergeTaskTool(resolveFeature);
+
+    const result = await mergeTool.execute(
+      { task: '01-task', strategy: 'merge', feature: 'test-feature', cleanup: true, verify: true },
+      {} as never,
+    );
+
+    expect(mergeCalled).toBe(false);
+    const data = parseToolResult(result);
+    expect(data.workspaceMode).toBe('direct');
+    expect(data.workspacePath).toBe('/repo/root');
+    expect(data.cleanup).toEqual({ requested: true, removed: false, reason: 'direct-mode-no-worktree' });
+    expect(data.verification).toEqual({ skipped: true, reason: 'direct-mode-no-merge' });
+    expect(data.message).toContain('No git merge step exists');
+  });
+
+  it('completes direct-mode tasks without creating a git commit', async () => {
+    let commitCalls = 0;
+    let diffCalls = 0;
+    let report = '';
+    const { deps, getTransitionCalls } = createCommitDeps({
+      taskServiceOverrides: {
+        getRawStatus: () => ({
+          workerSession: { workspaceMode: 'direct' as const, workspacePath: '/repo/root' },
+        }),
+        writeReport: (_feature: string, _task: string, content: string) => {
+          report = content;
+        },
+      },
+      worktreeServiceOverrides: {
+        commitChanges: async () => {
+          commitCalls += 1;
+          return { committed: true, sha: 'abc123', message: 'ok' };
+        },
+        getDiff: async () => {
+          diffCalls += 1;
+          return { hasDiff: false, filesChanged: [], insertions: 0, deletions: 0 };
+        },
+      },
+    });
+    const tools = new WorktreeTools(deps);
+    const commitTool = tools.commitWorktreeTool(resolveFeature);
+
+    const result = await commitTool.execute(
+      {
+        task: '01-task',
+        summary: 'Implemented the change directly in the project root.',
+        status: 'completed',
+      },
+      {} as never,
+    );
+
+    expect(commitCalls).toBe(0);
+    expect(diffCalls).toBe(0);
+    expect(report).toContain('## Workspace');
+    expect(report).toContain('- **Mode:** direct');
+    expect(report).toContain('_Direct-mode execution; git diff is not available._');
+    const transitions = getTransitionCalls();
+    const finalTransition = transitions.find((t) => t.toStatus === 'done');
+    expect(finalTransition).toBeDefined();
+
+    const data = parseCommitResult(result);
+    expect(data.workspaceMode).toBe('direct');
+    expect(data.workspacePath).toBe('/repo/root');
+    expect(data.verificationDeferred).toBe(true);
+    expect(data.message).toContain('No git commit or merge step was created');
+  });
+
+  it('resets direct-mode tasks without pretending files were reverted', async () => {
+    let removeCalls = 0;
+    const { deps, getTransitionCalls } = createCommitDeps({
+      taskServiceOverrides: {
+        getRawStatus: () => ({
+          workerSession: { workspaceMode: 'direct' as const, workspacePath: '/repo/root' },
+        }),
+      },
+      worktreeServiceOverrides: {
+        remove: async () => {
+          removeCalls += 1;
+        },
+      },
+    });
+    const tools = new WorktreeTools(deps);
+    const discardTool = tools.discardWorktreeTool(resolveFeature);
+
+    const result = await discardTool.execute({ task: '01-task', feature: 'test-feature' }, {} as never);
+
+    expect(removeCalls).toBe(0);
+    expect(getTransitionCalls().map((call) => call.toStatus)).toEqual(['cancelled', 'pending']);
+    const data = parseToolResult(result);
+    expect(data.workspaceMode).toBe('direct');
+    expect(data.workspacePath).toBe('/repo/root');
+    expect(data.message).toContain('were not reverted');
+  });
+});
+
 
 /** Parse tool result JSON string into data object */
 function parseCommitResult(result: unknown): Record<string, unknown> {

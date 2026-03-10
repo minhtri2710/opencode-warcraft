@@ -10,6 +10,7 @@ import {
   getTasksPath,
   listFeatureDirectories,
 } from '../../utils/paths.js';
+import { deriveDeterministicLocalId } from '../../utils/slug.js';
 import type { CreateFeatureInput, FeatureStore } from './types.js';
 
 /**
@@ -36,7 +37,7 @@ export class FilesystemFeatureStore implements FeatureStore {
         throw new Error(`Feature '${input.name}' already exists`);
       }
 
-      const epicBeadId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+      const epicBeadId = deriveDeterministicLocalId(input.name);
       const feature: FeatureJson = {
         name: input.name,
         epicBeadId,

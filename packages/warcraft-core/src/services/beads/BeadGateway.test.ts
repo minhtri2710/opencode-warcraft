@@ -95,17 +95,82 @@ describe('BeadGateway', () => {
 
     const execSpy = spyOn(childProcess, 'execFileSync')
       .mockReturnValueOnce('beads_rust 1.2.3')
+      .mockReturnValueOnce(JSON.stringify({ issue_prefix: 'custom-prefix' }))
       .mockReturnValueOnce('{"id":"epic-1"}');
 
     const gateway = new BeadGateway(projectRoot);
     expect(gateway.createEpic('my-feature', 3)).toBe('epic-1');
 
-    expect(execSpy).toHaveBeenCalledTimes(2);
+    expect(execSpy).toHaveBeenCalledTimes(3);
     expect(execSpy).toHaveBeenNthCalledWith(1, 'br', ['--version'], expect.any(Object));
+    expect(execSpy).toHaveBeenNthCalledWith(2, 'br', ['config', 'list', '--json'], expect.any(Object));
     expect(execSpy).toHaveBeenNthCalledWith(
-      2,
+      3,
       'br',
       ['create', 'my-feature', '-t', 'epic', '-p', '2', '--json'],
+      expect.any(Object),
+    );
+    expect(execSpy.mock.calls.some((call) => JSON.stringify(call[1]) === JSON.stringify(['init']))).toBe(false);
+    expect(
+      execSpy.mock.calls.some(
+        (call) => JSON.stringify(call[1]) === JSON.stringify(['config', 'set', 'issue_prefix', 'custom-prefix']),
+      ),
+    ).toBe(false);
+
+    execSpy.mockRestore();
+    fs.rmSync(projectRoot, { recursive: true, force: true });
+  });
+
+  it('sets a deterministic issue prefix after init when config is missing', () => {
+    const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'bead-gateway-prefix-'));
+    const expectedPrefix = path
+      .basename(projectRoot)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+
+    const execSpy = spyOn(childProcess, 'execFileSync').mockImplementation(
+      ((_cmd: string, args?: readonly string[]): string => {
+        if (!args) {
+          return '';
+        }
+
+        if (args[0] === '--version') {
+          return 'beads_rust 1.2.3';
+        }
+
+        if (args[0] === 'init') {
+          fs.mkdirSync(path.join(projectRoot, '.beads'), { recursive: true });
+          fs.writeFileSync(path.join(projectRoot, '.beads', 'beads.db'), '');
+          return 'Initialized';
+        }
+
+        if (args[0] === 'config' && args[1] === 'list') {
+          return JSON.stringify({});
+        }
+
+        if (args[0] === 'config' && args[1] === 'set') {
+          return '';
+        }
+
+        if (args[0] === 'create') {
+          return '{"id":"epic-1"}';
+        }
+
+        return '';
+      }) as typeof childProcess.execFileSync,
+    );
+
+    const gateway = new BeadGateway(projectRoot);
+    expect(gateway.createEpic('my-feature', 3)).toBe('epic-1');
+
+    expect(execSpy).toHaveBeenCalledTimes(5);
+    expect(execSpy).toHaveBeenNthCalledWith(2, 'br', ['init'], expect.any(Object));
+    expect(execSpy).toHaveBeenNthCalledWith(3, 'br', ['config', 'list', '--json'], expect.any(Object));
+    expect(execSpy).toHaveBeenNthCalledWith(
+      4,
+      'br',
+      ['config', 'set', 'issue_prefix', expectedPrefix],
       expect.any(Object),
     );
 
@@ -669,6 +734,41 @@ describe('BeadGateway', () => {
     execSpy.mockRestore();
   });
 
+  it('reads legacy spec artifact from description block without duplicating prefix content', () => {
+    const description =
+      'Legacy heading\n\n<!-- WARCRAFT:ARTIFACTS:BEGIN -->\n{"spec":"# Task: 01-setup\\n\\nCanonical content"}\n<!-- WARCRAFT:ARTIFACTS:END -->';
+    const execSpy = spyOn(childProcess, 'execFileSync')
+      .mockReturnValueOnce('beads_rust 1.2.3')
+      .mockReturnValueOnce('Initialized')
+      .mockReturnValueOnce(JSON.stringify({ description }));
+
+    const gateway = new BeadGateway('/repo');
+    const spec = gateway.readArtifact('bd-2', 'spec');
+
+    expect(spec).toBe('# Task: 01-setup\n\nCanonical content');
+    const allCalls = execSpy.mock.calls.map((call) => call[1] as string[]);
+    const hasCommentList = allCalls.some((args) => args[0] === 'comments' && args[1] === 'list');
+    expect(hasCommentList).toBe(false);
+
+    execSpy.mockRestore();
+  });
+
+  it('returns null for spec when description only contains unrelated legacy artifacts', () => {
+    const description =
+      '# Task: 01-setup\n\nThis prefix should not be treated as a second spec.\n\n<!-- WARCRAFT:ARTIFACTS:BEGIN -->\n{"task_state":"{\\"status\\":\\"pending\\"}"}\n<!-- WARCRAFT:ARTIFACTS:END -->';
+    const execSpy = spyOn(childProcess, 'execFileSync')
+      .mockReturnValueOnce('beads_rust 1.2.3')
+      .mockReturnValueOnce('Initialized')
+      .mockReturnValueOnce(JSON.stringify({ description }));
+
+    const gateway = new BeadGateway('/repo');
+    const spec = gateway.readArtifact('bd-2', 'spec');
+
+    expect(spec).toBeNull();
+    execSpy.mockRestore();
+  });
+
+
   it('repeated upserts append comment snapshots and preserve latest-per-kind reads', () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'beadgw-test-'));
     const commentBodies: string[] = [];
@@ -808,6 +908,25 @@ describe('BeadGateway', () => {
     execSpy.mockRestore();
   });
 
+  it('treats duplicate dependency add as a no-op', () => {
+    const duplicateError = new Error('Command failed');
+    (duplicateError as Error & { stderr?: string }).stderr = 'duplicate dependency already exists';
+
+    const execSpy = spyOn(childProcess, 'execFileSync')
+      .mockReturnValueOnce('beads_rust 1.2.3')
+      .mockReturnValueOnce('Initialized')
+      .mockImplementationOnce(() => {
+        throw duplicateError;
+      });
+
+    const gateway = new BeadGateway('/repo');
+    expect(() => gateway.addDependency('task-2', 'task-1')).not.toThrow();
+    expect(execSpy).toHaveBeenNthCalledWith(3, 'br', ['dep', 'add', 'task-2', 'task-1'], expect.any(Object));
+
+    execSpy.mockRestore();
+  });
+
+
   it('removes dependency between beads via br dep remove', () => {
     const execSpy = spyOn(childProcess, 'execFileSync').mockReturnValueOnce('beads_rust 1.2.3').mockReturnValue('');
     const gateway = new BeadGateway('/repo');
@@ -834,7 +953,7 @@ describe('BeadGateway', () => {
 
     expect(execSpy).toHaveBeenCalledWith(
       'br',
-      ['dep', 'list', 'epic-1', '--direction', 'up', '--type', 'parent-child', '--json', '-a'],
+      ['dep', 'list', 'epic-1', '--direction', 'up', '--type', 'parent-child', '--json'],
       {
         cwd: '/repo',
         encoding: 'utf-8',
@@ -1079,7 +1198,7 @@ describe('BeadGateway', () => {
       expect(tasks[0]?.status).toBe('done');
       expect(execSpy).toHaveBeenCalledWith(
         'br',
-        ['dep', 'list', 'epic-1', '--direction', 'up', '--type', 'parent-child', '--json', '-a'],
+        ['dep', 'list', 'epic-1', '--direction', 'up', '--type', 'parent-child', '--json'],
         {
           cwd: '/repo',
           encoding: 'utf-8',
@@ -1459,7 +1578,7 @@ describe('BeadGateway', () => {
 
       expect(execSpy).toHaveBeenCalledWith(
         'br',
-        ['dep', 'list', 'epic-1', '--direction', 'up', '--type', 'parent-child', '--json', '-a'],
+        ['dep', 'list', 'epic-1', '--direction', 'up', '--type', 'parent-child', '--json'],
         {
           cwd: '/repo',
           encoding: 'utf-8',

@@ -1,4 +1,7 @@
+import * as fs from 'fs';
+import * as path from 'path';
 import type { TaskInfo, TaskOrigin, TaskStatus, WorkerSession } from '../../types.js';
+import { ensureDir, readJson, writeJson } from '../../utils/fs.js';
 import type { LockOptions } from '../../utils/json-lock.js';
 import { getTaskReportPath } from '../../utils/paths.js';
 import { deriveTaskFolder, slugifyTaskName } from '../../utils/slug.js';
@@ -6,6 +9,7 @@ import { type BeadsRepository, throwIfInitFailure } from '../beads/BeadsReposito
 import { mapBeadStatusToTaskStatus } from '../beads/beadStatus.js';
 import type { TaskWithDeps } from '../taskDependencyGraph.js';
 import { computeRunnableAndBlocked } from '../taskDependencyGraph.js';
+import type { Diagnostic } from '../outcomes.js';
 import type { BackgroundPatchFields, RunnableTask, RunnableTasksResult } from '../taskService.js';
 import { TASK_STATUS_SCHEMA_VERSION } from '../taskService.js';
 import { TransitionJournal } from './transition-journal.js';
@@ -32,6 +36,12 @@ export interface TransitionEvent {
   /** Journal sequence number for tracking comment write acknowledgment */
   journalSeq?: number;
 }
+
+interface LocalBackgroundState {
+  idempotencyKey?: string;
+  workerSession?: WorkerSession;
+}
+
 
 /**
  * TaskStore implementation for beadsMode='on'.
@@ -120,11 +130,35 @@ export class BeadsTaskStore implements TaskStore {
         origin: statusWithBead.origin,
         planTitle: statusWithBead.planTitle,
         summary: statusWithBead.summary,
+        folderSource: 'stored' as const,
       });
     }
 
     return statusWithBead;
   }
+
+  reconcilePlanTask(featureName: string, currentFolder: string, nextFolder: string, status: TaskStatus): void {
+    const beadId = status.beadId ?? this.resolveBeadId(featureName, currentFolder);
+    if (!beadId) {
+      throw new Error(`Cannot reconcile task '${currentFolder}' without beadId in beads mode`);
+    }
+
+    const reconciledStatus: TaskStatus = {
+      ...status,
+      beadId,
+      origin: 'plan',
+      folder: nextFolder,
+    };
+
+    const setResult = this.repository.setTaskState(beadId, reconciledStatus as TaskStatus);
+    if (setResult.success === false) {
+      throwIfInitFailure(setResult.error, `Failed to reconcile task state for '${beadId}'`);
+      throw new Error(`Failed to reconcile task state for '${beadId}': ${setResult.error.message}`);
+    }
+    this.moveLocalBackgroundState(featureName, currentFolder, nextFolder);
+    this.refreshIndex(featureName);
+  }
+
 
   get(featureName: string, folder: string): TaskInfo | null {
     // Check cache first for O(1) lookup
@@ -163,22 +197,22 @@ export class BeadsTaskStore implements TaskStore {
     if (beadId) {
       const taskState = this.readTaskState(beadId);
       if (taskState) {
-        return {
+        return this.applyLocalBackgroundState(featureName, folder, {
           ...taskState,
           beadId,
           folder: (taskState as TaskStatus & { folder?: string }).folder ?? folder,
-        };
+        });
       }
 
       // Minimal fallback from bead info
       const beadsTask = this.findTaskByFolder(featureName, folder);
       if (beadsTask) {
-        return {
+        return this.applyLocalBackgroundState(featureName, folder, {
           status: beadsTask.status,
           origin: beadsTask.origin,
           planTitle: beadsTask.planTitle ?? beadsTask.name,
           beadId: beadsTask.beadId,
-        };
+        });
       }
     }
 
@@ -209,18 +243,16 @@ export class BeadsTaskStore implements TaskStore {
         const beadStatus = mapBeadStatusToTaskStatus(bead.status);
         const taskState = this.readTaskState(bead.id);
         if (taskState) {
+          const storedFolder = (taskState as TaskStatus & { folder?: string }).folder;
           return {
-            folder:
-              (taskState as TaskStatus & { folder?: string }).folder ??
-              deriveTaskFolder(index + 1, slugifyTaskName(bead.title)),
-            name:
-              ((taskState as TaskStatus & { folder?: string }).folder ?? '').replace(/^\d+-/, '') ||
-              slugifyTaskName(bead.title),
+            folder: storedFolder ?? deriveTaskFolder(index + 1, slugifyTaskName(bead.title)),
+            name: (storedFolder ?? '').replace(/^\d+-/, '') || slugifyTaskName(bead.title),
             beadId: bead.id,
             status: taskState.status,
             origin: taskState.origin,
             planTitle: taskState.planTitle ?? bead.title,
             summary: taskState.summary,
+            folderSource: storedFolder ? ('stored' as const) : ('derived' as const),
           };
         }
 
@@ -235,6 +267,7 @@ export class BeadsTaskStore implements TaskStore {
           status: beadStatus,
           origin: 'plan' as TaskOrigin,
           planTitle: bead.title,
+          folderSource: 'derived' as const,
         };
       });
 
@@ -330,19 +363,10 @@ export class BeadsTaskStore implements TaskStore {
       } as WorkerSession;
     }
 
-    if (status.beadId) {
-      const setResult = this.repository.setTaskState(status.beadId, { ...updated, folder } as TaskStatus);
-      if (setResult.success === false) {
-        throwIfInitFailure(setResult.error, `[warcraft] Failed to persist background patch for '${status.beadId}'`);
-        console.warn(
-          `[warcraft] Failed to persist background patch for '${status.beadId}': ${setResult.error.message}`,
-        );
-      }
-
-    }
-
-    // Invalidate cache entry for the patched task
-    this.invalidateCacheEntry(featureName, folder);
+    this.writeLocalBackgroundState(featureName, folder, {
+      ...(patch.idempotencyKey !== undefined ? { idempotencyKey: updated.idempotencyKey } : {}),
+      ...(patch.workerSession !== undefined ? { workerSession: updated.workerSession } : {}),
+    });
 
     return updated;
   }
@@ -360,6 +384,7 @@ export class BeadsTaskStore implements TaskStore {
         );
       }
     }
+    this.deleteLocalBackgroundState(featureName, folder);
 
     // Invalidate cache entry for the deleted task
     this.invalidateCacheEntry(featureName, folder);
@@ -534,10 +559,13 @@ export class BeadsTaskStore implements TaskStore {
    * Sync bead-level dependency edges to match task dependsOn relationships.
    * Idempotent: reads existing edges, computes desired edges, adds missing, removes stale.
    */
-  syncDependencies(featureName: string): void {
+  syncDependencies(featureName: string): Diagnostic[] {
+    const diagnostics: Diagnostic[] = [];
     const tasks = this.list(featureName);
+    const beadIdToTask = new Map(
+      tasks.filter((task): task is TaskInfo & { beadId: string } => task.beadId !== undefined).map((task) => [task.beadId, task]),
+    );
 
-    // Build folder→beadId map
     const folderToBeadId = new Map<string, string>();
     for (const task of tasks) {
       if (task.beadId) {
@@ -545,7 +573,6 @@ export class BeadsTaskStore implements TaskStore {
       }
     }
 
-    // Compute desired dependency edges from task dependsOn fields
     const desiredEdges = new Set<string>();
     for (const task of tasks) {
       if (!task.beadId) continue;
@@ -554,66 +581,92 @@ export class BeadsTaskStore implements TaskStore {
 
       for (const depFolder of rawStatus.dependsOn) {
         const depBeadId = folderToBeadId.get(depFolder);
-        if (depBeadId) {
-          // Edge key: "taskBeadId->depBeadId" (task depends on dep)
-          desiredEdges.add(`${task.beadId}->${depBeadId}`);
-        } else {
-          console.warn(
-            `[warcraft] Dependency '${depFolder}' for task '${task.folder}' cannot be resolved to a bead ID`,
+        if (!depBeadId) {
+          diagnostics.push(
+            this.createDependencyDiagnostic(
+              'dep_unresolved_task',
+              `Dependency '${depFolder}' for task '${task.folder}' cannot be resolved to a bead ID`,
+              { featureName, taskFolder: task.folder, dependsOnFolder: depFolder, beadId: task.beadId },
+            ),
           );
-        }
-      }
-    }
-
-    // Guard: verify the feature has a valid epic before syncing dependencies
-    const epicResult = this.repository.getEpicByFeatureName(featureName, true);
-    if (epicResult.success === false) {
-      console.warn(`[warcraft] Cannot sync dependencies: ${epicResult.error.message}`);
-      return;
-    }
-    const existingEdges = new Set<string>();
-    try {
-      // Read existing dependency edges per-task via bead graph queries
-      for (const task of tasks) {
-        if (!task.beadId) continue;
-        const depResult = this.repository.listDependencies(task.beadId);
-        if (depResult.success === false) {
-          // Task may not have dependencies yet — that's fine
           continue;
         }
-        for (const dep of depResult.value) {
-          existingEdges.add(`${task.beadId}->${dep.id}`);
-        }
+
+        desiredEdges.add(`${task.beadId}->${depBeadId}`);
       }
-    } catch {
-      // Cannot read existing edges — proceed with add-only mode
     }
 
-    // Add missing edges
+    const existingDepsByTask = new Map<string, Set<string>>();
+    for (const task of tasks) {
+      if (!task.beadId) continue;
+      const depResult = this.repository.listDependencies(task.beadId);
+      if (depResult.success === false) {
+        diagnostics.push(
+          this.createDependencyDiagnostic(
+            'dep_list_failed',
+            `Failed to list dependencies for '${task.folder}': ${depResult.error.message}`,
+            { featureName, taskFolder: task.folder, beadId: task.beadId },
+          ),
+        );
+        continue;
+      }
+
+      existingDepsByTask.set(
+        task.beadId,
+        new Set(depResult.value.map((dependency) => dependency.id)),
+      );
+    }
+
     for (const edge of desiredEdges) {
-      if (!existingEdges.has(edge)) {
-        const [taskBeadId, depBeadId] = edge.split('->');
-        const addResult = this.repository.addDependency(taskBeadId, depBeadId);
-        if (addResult.success === false) {
-          console.warn(`[warcraft] Failed to add dependency ${taskBeadId} -> ${depBeadId}: ${addResult.error.message}`);
-        }
+      const [taskBeadId, depBeadId] = edge.split('->');
+      const existingDeps = existingDepsByTask.get(taskBeadId);
+      if (existingDeps?.has(depBeadId)) {
+        continue;
+      }
+
+      const addResult = this.repository.addDependency(taskBeadId, depBeadId);
+      if (addResult.success === false) {
+        diagnostics.push(
+          this.createDependencyDiagnostic(
+            'dep_add_failed',
+            `Failed to add dependency ${taskBeadId} -> ${depBeadId}: ${addResult.error.message}`,
+            {
+              featureName,
+              taskFolder: beadIdToTask.get(taskBeadId)?.folder,
+              dependsOnFolder: beadIdToTask.get(depBeadId)?.folder,
+              beadId: taskBeadId,
+              dependsOnBeadId: depBeadId,
+            },
+          ),
+        );
       }
     }
 
-    // Remove stale edges
-    for (const edge of existingEdges) {
-      if (!desiredEdges.has(edge)) {
-        const [taskBeadId, depBeadId] = edge.split('->');
+    for (const [taskBeadId, existingDeps] of existingDepsByTask.entries()) {
+      for (const depBeadId of existingDeps) {
+        if (desiredEdges.has(`${taskBeadId}->${depBeadId}`)) {
+          continue;
+        }
+
         const removeResult = this.repository.removeDependency(taskBeadId, depBeadId);
         if (removeResult.success === false) {
-          console.warn(
-            `[warcraft] Failed to remove dependency ${taskBeadId} -> ${depBeadId}: ${removeResult.error.message}`,
+          diagnostics.push(
+            this.createDependencyDiagnostic(
+              'dep_remove_failed',
+              `Failed to remove dependency ${taskBeadId} -> ${depBeadId}: ${removeResult.error.message}`,
+              {
+                featureName,
+                taskFolder: beadIdToTask.get(taskBeadId)?.folder,
+                dependsOnFolder: beadIdToTask.get(depBeadId)?.folder,
+                beadId: taskBeadId,
+                dependsOnBeadId: depBeadId,
+              },
+            ),
           );
         }
       }
     }
 
-    // Advisory cycle detection via bv --robot-insights (non-blocking)
     try {
       const health = this.repository.getViewerHealth();
       if (health.available) {
@@ -629,11 +682,107 @@ export class BeadsTaskStore implements TaskStore {
     } catch {
       // bv not available or failed — advisory only, don't block
     }
+
+    return diagnostics;
+  }
+
+  private createDependencyDiagnostic(
+    code: string,
+    message: string,
+    context: Record<string, unknown>,
+  ): Diagnostic {
+    return {
+      code,
+      message,
+      severity: 'degraded',
+      context,
+    };
   }
 
   // ---------------------------------------------------------------------------
   // Private helpers
   // ---------------------------------------------------------------------------
+
+  private getLocalBackgroundStatePath(featureName: string, folder: string): string {
+    return path.join(this.projectRoot, '.beads', 'artifacts', featureName, 'tasks', folder, 'background.json');
+  }
+
+  private readLocalBackgroundState(featureName: string, folder: string): LocalBackgroundState | null {
+    return readJson<LocalBackgroundState>(this.getLocalBackgroundStatePath(featureName, folder));
+  }
+
+  private writeLocalBackgroundState(featureName: string, folder: string, patch: LocalBackgroundState): void {
+    const statePath = this.getLocalBackgroundStatePath(featureName, folder);
+    const current = this.readLocalBackgroundState(featureName, folder) ?? {};
+    const next: LocalBackgroundState = { ...current };
+
+    if (patch.idempotencyKey !== undefined) {
+      next.idempotencyKey = patch.idempotencyKey;
+    }
+
+    if (patch.workerSession !== undefined) {
+      next.workerSession = {
+        ...(current.workerSession ?? ({} as WorkerSession)),
+        ...patch.workerSession,
+      } as WorkerSession;
+    }
+
+    ensureDir(path.dirname(statePath));
+    writeJson(statePath, next);
+  }
+
+  private applyLocalBackgroundState(featureName: string, folder: string, status: TaskStatus): TaskStatus {
+    const overlay = this.readLocalBackgroundState(featureName, folder);
+    if (!overlay) {
+      return status;
+    }
+
+    return {
+      ...status,
+      ...(overlay.idempotencyKey !== undefined ? { idempotencyKey: overlay.idempotencyKey } : {}),
+      ...(overlay.workerSession !== undefined
+        ? {
+            workerSession: {
+              ...(status.workerSession ?? ({} as WorkerSession)),
+              ...overlay.workerSession,
+            } as WorkerSession,
+          }
+        : {}),
+    };
+  }
+
+  private moveLocalBackgroundState(featureName: string, currentFolder: string, nextFolder: string): void {
+    if (currentFolder === nextFolder) {
+      return;
+    }
+
+    const currentPath = this.getLocalBackgroundStatePath(featureName, currentFolder);
+    if (!fs.existsSync(currentPath)) {
+      return;
+    }
+
+    const nextPath = this.getLocalBackgroundStatePath(featureName, nextFolder);
+    ensureDir(path.dirname(nextPath));
+    fs.renameSync(currentPath, nextPath);
+  }
+
+  private deleteLocalBackgroundState(featureName: string, folder: string): void {
+    const statePath = this.getLocalBackgroundStatePath(featureName, folder);
+    if (!fs.existsSync(statePath)) {
+      return;
+    }
+
+    fs.rmSync(statePath, { force: true });
+    const taskDir = path.dirname(statePath);
+    try {
+      if (fs.existsSync(taskDir) && fs.readdirSync(taskDir).length === 0) {
+        fs.rmdirSync(taskDir);
+      }
+    } catch {
+      // Best-effort cleanup for local background overlay directories.
+    }
+  }
+
 
   private resolveBeadId(featureName: string, folder: string): string | undefined {
     const featureBeadIdIndex = this.beadIdIndex.get(featureName);
@@ -679,14 +828,11 @@ export class BeadsTaskStore implements TaskStore {
   }
 
   private invalidateCacheEntry(featureName: string, folder: string): void {
-    const featureTaskIndex = this.taskIndex.get(featureName);
-    if (featureTaskIndex) {
-      featureTaskIndex.delete(folder);
-    }
-    const featureBeadIdIndex = this.beadIdIndex.get(featureName);
-    if (featureBeadIdIndex) {
-      featureBeadIdIndex.delete(folder);
-    }
+    // Delete the entire feature from both indexes to force list() to re-read from br.
+    // Deleting only the folder entry leaves a non-null Map that list() treats as a valid cache hit,
+    // causing findTaskByFolder to miss the invalidated entry.
+    this.taskIndex.delete(featureName);
+    this.beadIdIndex.delete(featureName);
   }
 
   // ---------------------------------------------------------------------------

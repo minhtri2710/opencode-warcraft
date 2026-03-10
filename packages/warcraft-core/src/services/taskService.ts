@@ -5,6 +5,7 @@ import type {
   TaskStatus,
   TaskStatusType,
   TasksSyncResult,
+  TaskSyncReconciliation,
   WorkerSession,
 } from '../types.js';
 import { readText } from '../utils/fs.js';
@@ -66,15 +67,22 @@ export interface RunnableTasksResult {
   source: 'beads' | 'filesystem';
 }
 
+/** Internal reconciliation action for an existing task that must be rewritten to canonical plan metadata. */
+interface ReconciliationAction {
+  currentTask: TaskInfo;
+  planTask: ParsedTask;
+  dependsOn: string[];
+  currentStatus: TaskStatus | null;
+}
+
 /** Internal result from computing the sync delta between plan and existing tasks. */
 interface SyncDelta {
   planTasks: ParsedTask[];
-  existingTasks: TaskInfo[];
-  existingByFolder: Map<string, TaskInfo>;
   planContent: string;
   kept: string[];
   removed: string[];
   created: string[];
+  reconciled: ReconciliationAction[];
   manual: string[];
 }
 
@@ -121,12 +129,7 @@ export class TaskService {
    */
   previewSync(featureName: string): TasksSyncResult {
     const delta = this._computeSyncDelta(featureName);
-    return {
-      created: delta.created,
-      removed: delta.removed,
-      kept: delta.kept,
-      manual: delta.manual,
-    };
+    return this.buildSyncResult(delta);
   }
 
   sync(featureName: string): TasksSyncResult {
@@ -142,12 +145,14 @@ export class TaskService {
     const diagnostics: Diagnostic[] = [];
 
     try {
-      // Apply removals
       for (const folder of delta.removed) {
         this.store.delete(featureName, folder);
       }
 
-      // Apply creations with rollback tracking
+      for (const action of delta.reconciled) {
+        this.applyTaskReconciliation(featureName, action);
+      }
+
       const createdSet = new Set(delta.created);
       for (const planTask of delta.planTasks) {
         if (!createdSet.has(planTask.folder)) {
@@ -179,10 +184,16 @@ export class TaskService {
 
       this.store.flush();
 
-      // Sync bead-level dependency edges (non-fatal: degraded outcome on failure)
       if (this.store.syncDependencies) {
         try {
-          this.store.syncDependencies(featureName);
+          const dependencyDiagnostics = this.store.syncDependencies(featureName) ?? [];
+          diagnostics.push(...dependencyDiagnostics);
+          for (const diag of dependencyDiagnostics) {
+            this.logger.warn(`Dependency sync issue for '${featureName}' (degraded): ${diag.message}`, {
+              featureName,
+              code: diag.code,
+            });
+          }
         } catch (depError) {
           const diag = fromError('dep_sync_failed', depError, 'degraded', { featureName });
           diagnostics.push(diag);
@@ -193,7 +204,6 @@ export class TaskService {
         }
       }
     } catch (error) {
-      // Attempt rollback of partially created tasks
       for (const folder of createdFolders) {
         try {
           this.store.delete(featureName, folder);
@@ -219,13 +229,7 @@ export class TaskService {
       }
     }
 
-    return {
-      created: delta.created,
-      removed: delta.removed,
-      kept: delta.kept,
-      manual: delta.manual,
-      diagnostics,
-    };
+    return this.buildSyncResult(delta, diagnostics);
   }
 
   /**
@@ -242,23 +246,61 @@ export class TaskService {
 
     const planTasks = this.parseTasksFromPlan(planContent);
 
-    // Validate dependency graph before proceeding
     this.validateDependencyGraph(planTasks);
-
-    // Detect slug collisions among plan tasks
     this.detectSlugCollisions(planTasks);
 
     const existingTasks = this.store.list(featureName);
-    const existingByFolder = new Map(existingTasks.map((t) => [t.folder, t]));
+    const supportsReconciliation = typeof this.store.reconcilePlanTask === 'function';
+    const matchedExistingFolders = new Set<string>();
 
     const kept: string[] = [];
     const removed: string[] = [];
     const created: string[] = [];
+    const reconciled: ReconciliationAction[] = [];
     const manual: string[] = [];
 
     for (const existing of existingTasks) {
       if (existing.origin === 'manual') {
         manual.push(existing.folder);
+      }
+    }
+
+    for (const planTask of planTasks) {
+      const dependsOn = this.resolveDependencies(planTask, planTasks);
+      const occupiedFolder = existingTasks.find((existing) => existing.folder === planTask.folder);
+      if (occupiedFolder && (occupiedFolder.origin === 'manual' || occupiedFolder.status === 'cancelled')) {
+        continue;
+      }
+
+      const exactMatch = existingTasks.find(
+        (existing) => this.isEligiblePlanMatch(existing, matchedExistingFolders) && existing.folder === planTask.folder,
+      );
+      const titleMatch =
+        exactMatch ??
+        this.findTitleMatchCandidate(planTask, existingTasks, matchedExistingFolders);
+
+      if (!titleMatch) {
+        created.push(planTask.folder);
+        continue;
+      }
+
+      matchedExistingFolders.add(titleMatch.folder);
+      const currentStatus = this.store.getRawStatus(featureName, titleMatch.folder);
+
+      if (supportsReconciliation && this.needsTaskReconciliation(titleMatch, currentStatus, planTask, dependsOn)) {
+        reconciled.push({
+          currentTask: titleMatch,
+          planTask,
+          dependsOn,
+          currentStatus,
+        });
+      } else {
+        kept.push(titleMatch.folder);
+      }
+    }
+
+    for (const existing of existingTasks) {
+      if (existing.origin === 'manual' || matchedExistingFolders.has(existing.folder)) {
         continue;
       }
 
@@ -267,52 +309,131 @@ export class TaskService {
         continue;
       }
 
-      if (existing.status === 'cancelled') {
-        removed.push(existing.folder);
-        continue;
-      }
-
-      const stillInPlan = planTasks.some((p) => p.folder === existing.folder);
-      if (!stillInPlan) {
-        removed.push(existing.folder);
-      } else {
-        kept.push(existing.folder);
-      }
-    }
-
-    for (const planTask of planTasks) {
-      if (existingByFolder.has(planTask.folder)) {
-        continue;
-      }
-
-      // Secondary match: when task_state.folder is missing, list() derives folders
-      // from title sort order, which may not match the canonical plan folder.
-      // Look for a removed (pending) existing task with matching planTitle to prevent
-      // duplicate creation.
-      const titleMatchIdx = removed.findIndex((removedFolder) => {
-        const existing = existingByFolder.get(removedFolder);
-        return existing?.planTitle === planTask.name;
-      });
-
-      if (titleMatchIdx !== -1) {
-        // Reconcile: un-remove the existing task and keep it instead of creating a duplicate
-        const reconciledFolder = removed.splice(titleMatchIdx, 1)[0];
-        kept.push(reconciledFolder);
-      } else {
-        created.push(planTask.folder);
-      }
+      removed.push(existing.folder);
     }
 
     return {
       planTasks,
-      existingTasks,
-      existingByFolder,
       planContent,
       kept,
       removed,
       created,
+      reconciled,
       manual,
     };
+  }
+
+  private buildSyncResult(delta: SyncDelta, diagnostics?: Diagnostic[]): TasksSyncResult {
+    const result: TasksSyncResult = {
+      created: delta.created,
+      removed: delta.removed,
+      kept: delta.kept,
+      reconciled: delta.reconciled.map((action) => this.toReconciliationSummary(action)),
+      manual: delta.manual,
+    };
+
+    if (diagnostics) {
+      result.diagnostics = diagnostics;
+    }
+
+    return result;
+  }
+
+  private toReconciliationSummary(action: ReconciliationAction): TaskSyncReconciliation {
+    return {
+      from: action.currentTask.folder,
+      to: action.planTask.folder,
+      planTitle: action.planTask.name,
+      beadId: action.currentTask.beadId,
+    };
+  }
+
+  private applyTaskReconciliation(featureName: string, action: ReconciliationAction): void {
+    if (!this.store.reconcilePlanTask) {
+      throw new Error(`Task store cannot reconcile '${action.currentTask.folder}' to '${action.planTask.folder}'`);
+    }
+
+    const baseStatus: TaskStatus =
+      action.currentStatus ??
+      ({
+        status: action.currentTask.status,
+        origin: action.currentTask.origin,
+        planTitle: action.currentTask.planTitle ?? action.currentTask.name,
+        summary: action.currentTask.summary,
+        beadId: action.currentTask.beadId,
+      } as TaskStatus);
+
+    const canonicalStatus: TaskStatus = {
+      ...baseStatus,
+      origin: 'plan',
+      planTitle: action.planTask.name,
+      dependsOn: action.dependsOn,
+      beadId: baseStatus.beadId ?? action.currentTask.beadId,
+      folder: action.planTask.folder,
+    };
+
+    this.store.reconcilePlanTask(featureName, action.currentTask.folder, action.planTask.folder, canonicalStatus);
+  }
+
+  private isEligiblePlanMatch(existing: TaskInfo, matchedExistingFolders: Set<string>): boolean {
+    return existing.origin !== 'manual' && existing.status !== 'cancelled' && !matchedExistingFolders.has(existing.folder);
+  }
+
+  private findTitleMatchCandidate(
+    planTask: ParsedTask,
+    existingTasks: TaskInfo[],
+    matchedExistingFolders: Set<string>,
+  ): TaskInfo | null {
+    const matches = existingTasks.filter(
+      (existing) => this.isEligiblePlanMatch(existing, matchedExistingFolders) && existing.planTitle === planTask.name,
+    );
+
+    return matches.length === 1 ? matches[0] : null;
+  }
+
+  private needsTaskReconciliation(
+    existing: TaskInfo,
+    currentStatus: TaskStatus | null,
+    planTask: ParsedTask,
+    dependsOn: string[],
+  ): boolean {
+    if (existing.folder !== planTask.folder) {
+      return true;
+    }
+
+    if (existing.folderSource === 'derived') {
+      return true;
+    }
+
+    if (!currentStatus) {
+      return true;
+    }
+
+    if (currentStatus.folder !== planTask.folder) {
+      return true;
+    }
+
+    if (currentStatus.planTitle !== planTask.name) {
+      return true;
+    }
+
+    if (currentStatus.origin !== 'plan') {
+      return true;
+    }
+
+    return !this.haveSameDependencies(currentStatus.dependsOn, dependsOn);
+  }
+
+  private haveSameDependencies(current: string[] | undefined, desired: string[]): boolean {
+    if (!current) {
+      return false;
+    }
+
+    if (current.length !== desired.length) {
+      return false;
+    }
+
+    return current.every((folder, index) => folder === desired[index]);
   }
 
   /**

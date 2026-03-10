@@ -17,6 +17,8 @@ export interface DispatchRequest {
   continueFrom?: 'blocked';
   /** Answer to blocker question when continuing */
   decision?: string;
+  /** OpenCode session identifier for persisted worker-session state. */
+  sessionId?: string;
 }
 
 export interface DispatchResult {
@@ -24,7 +26,8 @@ export interface DispatchResult {
   success: boolean;
   agent: string;
   createdWorktree?: boolean;
-  worktreePath?: string;
+  workspaceMode?: 'worktree' | 'direct';
+  workspacePath?: string;
   branch?: string;
   error?: string;
   taskToolCall?: {
@@ -48,7 +51,15 @@ export interface DispatchCoordinatorDeps {
       status: TaskStatusType;
       origin: string;
       dependsOn?: string[];
-      workerSession?: { attempt?: number };
+      workerSession?: {
+        sessionId?: string;
+        agent?: string;
+        mode?: 'inline' | 'delegate';
+        attempt?: number;
+        workspaceMode?: 'worktree' | 'direct';
+        workspacePath?: string;
+        workspaceBranch?: string;
+      };
       summary?: string;
       learnings?: unknown;
     } | null;
@@ -225,24 +236,40 @@ export class DispatchCoordinator {
       }
     }
 
-    // Track whether we created a new worktree (for rollback on failure)
     const isNewWorktree = continueFrom !== 'blocked';
 
     try {
-      // --- Create or reuse worktree ---
-      let worktree: Awaited<ReturnType<typeof this.deps.worktreeService.create>>;
+      const rawStatus = this.deps.taskService.getRawStatus(feature, task);
+      const sessionId = request.sessionId ?? rawStatus?.workerSession?.sessionId;
+      if (!sessionId) {
+        return fail(`Task "${task}" is missing session context`);
+      }
+      const nextAttempt = (rawStatus?.workerSession?.attempt ?? 0) + 1;
+
+      let workspace: Awaited<ReturnType<typeof this.deps.worktreeService.create>>;
       if (continueFrom === 'blocked') {
-        const existing = await this.deps.worktreeService.get(feature, task);
-        if (!existing) {
-          return fail(`No worktree found for blocked task "${task}"`);
+        if (rawStatus?.workerSession?.workspaceMode === 'direct') {
+          if (!rawStatus.workerSession.workspacePath) {
+            return fail(`Blocked task "${task}" is missing its direct workspace path`);
+          }
+
+          workspace = {
+            mode: 'direct',
+            path: rawStatus.workerSession.workspacePath,
+            feature,
+            step: task,
+          };
+        } else {
+          const existing = await this.deps.worktreeService.get(feature, task);
+          if (!existing) {
+            return fail(`No worktree found for blocked task "${task}"`);
+          }
+          workspace = existing;
         }
-        worktree = existing;
       } else {
-        worktree = await this.deps.worktreeService.create(feature, task);
+        workspace = await this.deps.worktreeService.create(feature, task);
       }
 
-      // --- Prepare dispatch (prompt/spec assembly) ---
-      // CRITICAL: This happens BEFORE status transition to avoid stranding tasks
       let prep: TaskDispatchPrep;
       try {
         const continueFromData: ContinueFromBlocked | undefined =
@@ -259,7 +286,7 @@ export class DispatchCoordinator {
             feature,
             task,
             taskInfo,
-            worktree,
+            workspace,
             continueFrom: continueFromData,
           },
           {
@@ -276,8 +303,7 @@ export class DispatchCoordinator {
           throw new Error(`Failed to persist worker prompt for task "${task}"`);
         }
       } catch (prepError) {
-        // Prep failed — rollback freshly created worktree
-        if (isNewWorktree) {
+        if (isNewWorktree && workspace.mode === 'worktree') {
           try {
             await this.deps.worktreeService.remove(feature, task);
           } catch {
@@ -288,12 +314,21 @@ export class DispatchCoordinator {
         return fail(reason);
       }
 
-      // --- Transition to in_progress ONLY after prep succeeds ---
-      // Uses validated transition path (not unrestricted update) so the state machine
-      // enforces allowed transitions when strict mode is enabled.
+      this.deps.taskService.patchBackgroundFields(feature, task, {
+        workerSession: {
+          sessionId,
+          agent,
+          mode: 'delegate',
+          attempt: nextAttempt,
+          workspaceMode: workspace.mode,
+          workspacePath: workspace.path,
+          ...(workspace.branch ? { workspaceBranch: workspace.branch } : {}),
+        },
+      });
+
       const transitionExtras: Record<string, unknown> = {};
-      if (continueFrom !== 'blocked') {
-        transitionExtras.baseCommit = worktree.commit;
+      if (continueFrom !== 'blocked' && workspace.mode === 'worktree' && workspace.commit) {
+        transitionExtras.baseCommit = workspace.commit;
       }
       this.deps.taskService.transition(feature, task, 'in_progress', transitionExtras);
 
@@ -301,9 +336,10 @@ export class DispatchCoordinator {
         task,
         success: true,
         agent,
-        createdWorktree: isNewWorktree,
-        worktreePath: worktree.path,
-        branch: worktree.branch,
+        createdWorktree: isNewWorktree && workspace.mode === 'worktree',
+        workspaceMode: workspace.mode,
+        workspacePath: workspace.path,
+        branch: workspace.branch,
         taskToolCall: {
           subagent_type: agent,
           description: `Warcraft: ${task}`,

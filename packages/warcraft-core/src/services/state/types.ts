@@ -8,6 +8,7 @@
 
 import type { FeatureJson, FeatureStatusType, TaskInfo, TaskStatus } from '../../types.js';
 import type { LockOptions } from '../../utils/json-lock.js';
+import type { Diagnostic } from '../outcomes.js';
 import type { BackgroundPatchFields, RunnableTasksResult } from '../taskService.js';
 
 // ============================================================================
@@ -128,11 +129,17 @@ export interface TaskStore {
   flush(): void;
 
   /**
+   * Persist canonical plan metadata for an existing task without creating a new bead.
+   * Used by bead-backed stores to reconcile legacy task_state data to the approved plan.
+   */
+  reconcilePlanTask?(featureName: string, currentFolder: string, nextFolder: string, status: TaskStatus): void;
+
+  /**
    * Sync bead-level dependency edges to match task-level dependsOn relationships.
    * Idempotent: only adds missing edges and removes stale ones.
    * No-op for filesystem store.
    */
-  syncDependencies?(featureName: string): void;
+  syncDependencies?(featureName: string): Diagnostic[];
 
   /** Optional batching hooks for transition audit sidecars. */
   beginTransitionBatch?(): void;

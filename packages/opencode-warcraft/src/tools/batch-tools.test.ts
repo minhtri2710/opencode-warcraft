@@ -74,6 +74,7 @@ function createMockServices(overrides: Partial<DispatchOneTaskServices> = {}): D
     },
     worktreeService: {
       create: async () => ({
+        mode: 'worktree' as const,
         path: '/tmp/worktree',
         branch: 'warcraft/test-feature/01-test-task',
         commit: 'abc123',
@@ -81,6 +82,7 @@ function createMockServices(overrides: Partial<DispatchOneTaskServices> = {}): D
         step: '01-test-task',
       }),
       get: async () => ({
+        mode: 'worktree' as const,
         path: '/tmp/worktree',
         branch: 'warcraft/test-feature/01-test-task',
         commit: 'abc123',
@@ -97,7 +99,7 @@ function createMockServices(overrides: Partial<DispatchOneTaskServices> = {}): D
 }
 
 function createInput(task = '01-test-task'): DispatchOneTaskInput {
-  return { feature: 'test-feature', task };
+  return { feature: 'test-feature', task, sessionId: 'sess-1' };
 }
 
 // ============================================================================

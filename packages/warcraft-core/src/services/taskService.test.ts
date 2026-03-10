@@ -3045,4 +3045,132 @@ Second task description.
       expect(result.kept.length).toBe(2);
     });
   });
+  describe('sync() - bead reconciliation', () => {
+    const setupApprovedOnModePlan = (featureName: string, planContent: string): void => {
+      const featurePath = path.join(TEST_DIR, '.beads/artifacts', featureName);
+      fs.mkdirSync(featurePath, { recursive: true });
+      fs.writeFileSync(
+        path.join(featurePath, 'feature.json'),
+        JSON.stringify({
+          name: featureName,
+          epicBeadId: 'bd-epic-test',
+          status: 'executing',
+          createdAt: new Date().toISOString(),
+        }),
+      );
+      fs.writeFileSync(path.join(featurePath, 'plan.md'), planContent);
+    };
+
+    const createReconcilingStore = () => {
+      const existingTask = {
+        folder: '02-setup-environment',
+        name: 'setup-environment',
+        beadId: 'task-1',
+        status: 'pending',
+        origin: 'plan',
+        planTitle: 'Setup Environment',
+        folderSource: 'derived' as const,
+      };
+      const currentStatus: TaskStatus = {
+        status: 'pending',
+        origin: 'plan',
+        planTitle: 'Setup Environment',
+        beadId: 'task-1',
+      };
+      const actions = {
+        created: [] as string[],
+        reconciled: [] as Array<{ currentFolder: string; nextFolder: string; status: TaskStatus }>,
+      };
+
+      const store = {
+        list: () => [existingTask],
+        getRawStatus: (_featureName: string, folder: string) => (folder === existingTask.folder ? currentStatus : null),
+        createTask: (_featureName: string, folder: string) => {
+          actions.created.push(folder);
+          return { ...currentStatus, beadId: 'new-task' };
+        },
+        get: () => existingTask,
+        getNextOrder: () => 2,
+        save: () => {},
+        patchBackground: () => currentStatus,
+        delete: () => {},
+        writeArtifact: () => 'task-1',
+        readArtifact: () => null,
+        writeReport: () => '/tmp/report.md',
+        getRunnableTasks: () => null,
+        flush: () => {},
+        reconcilePlanTask: (_featureName: string, currentFolder: string, nextFolder: string, status: TaskStatus) => {
+          actions.reconciled.push({ currentFolder, nextFolder, status });
+        },
+      };
+
+      return { store, actions };
+    };
+
+    it('previewSync reports reconciliations instead of duplicate creation for bead-backed tasks', () => {
+      const featureName = 'reconcile-preview';
+      setupApprovedOnModePlan(
+        featureName,
+        ['# Plan', '', '### 1. Setup Environment', '', '**Depends on**: none', '', 'Prepare the environment.', ''].join(
+          '\n',
+        ),
+      );
+
+      const { store } = createReconcilingStore();
+      const service = new TaskService(TEST_DIR, store as any, 'on');
+      const result = service.previewSync(featureName);
+
+      expect(result.created).toEqual([]);
+      expect(result.removed).toEqual([]);
+      expect(result.kept).toEqual([]);
+      expect(result.reconciled).toEqual([
+        {
+          from: '02-setup-environment',
+          to: '01-setup-environment',
+          planTitle: 'Setup Environment',
+          beadId: 'task-1',
+        },
+      ]);
+    });
+
+    it('sync reuses the existing bead and persists canonical plan metadata', () => {
+      const featureName = 'reconcile-sync';
+      setupApprovedOnModePlan(
+        featureName,
+        ['# Plan', '', '### 1. Setup Environment', '', '**Depends on**: none', '', 'Prepare the environment.', ''].join(
+          '\n',
+        ),
+      );
+
+      const { store, actions } = createReconcilingStore();
+      const service = new TaskService(TEST_DIR, store as any, 'on');
+      const result = service.sync(featureName);
+
+      expect(actions.created).toEqual([]);
+      expect(actions.reconciled).toHaveLength(1);
+      expect(actions.reconciled[0]).toEqual({
+        currentFolder: '02-setup-environment',
+        nextFolder: '01-setup-environment',
+        status: {
+          status: 'pending',
+          origin: 'plan',
+          planTitle: 'Setup Environment',
+          dependsOn: [],
+          beadId: 'task-1',
+          folder: '01-setup-environment',
+        },
+      });
+      expect(result.created).toEqual([]);
+      expect(result.reconciled).toEqual([
+        {
+          from: '02-setup-environment',
+          to: '01-setup-environment',
+          planTitle: 'Setup Environment',
+          beadId: 'task-1',
+        },
+      ]);
+    });
+  });
+
+
 });

@@ -368,6 +368,51 @@ describe('ContextTools', () => {
     });
   });
 
+  describe('warcraft_status task workspace summaries', () => {
+    it('reports direct workspace details without probing worktrees', async () => {
+      let getCalled = false;
+      let hasChangesCalled = false;
+      const taskService = {
+        list: () => [{ folder: '01-task', name: 'Task', status: 'in_progress' as const, origin: 'plan' as const }],
+        getRawStatus: () => ({
+          dependsOn: ['00-prereq'],
+          workerSession: { workspaceMode: 'direct' as const, workspacePath: '/repo/root' },
+        }),
+        computeRunnableStatus: () => ({ runnable: [], blocked: {} }),
+      } as unknown as TaskService;
+      const worktreeService = {
+        listAll: () => Promise.resolve([]),
+        get: async () => {
+          getCalled = true;
+          return null;
+        },
+        hasUncommittedChanges: async () => {
+          hasChangesCalled = true;
+          return false;
+        },
+      } as unknown as WorktreeService;
+
+      const result = await getStatusHealth({ taskService, worktreeService });
+      const tasks = result.data.tasks as {
+        list: Array<{
+          folder: string;
+          workspace: { mode: string; path: string | null; hasChanges: boolean | null } | null;
+          dependsOn: string[] | null;
+        }>;
+      };
+
+      expect(tasks.list).toHaveLength(1);
+      expect(tasks.list[0]).toMatchObject({
+        folder: '01-task',
+        dependsOn: ['00-prereq'],
+        workspace: { mode: 'direct', path: '/repo/root', hasChanges: null },
+      });
+      expect(getCalled).toBe(false);
+      expect(hasChangesCalled).toBe(false);
+    });
+  });
+
+
   describe('stale worktree age context', () => {
     it('includes ageInDays for stale worktrees with known lastCommitAge', async () => {
       const threeDaysMs = 3 * 86_400_000;

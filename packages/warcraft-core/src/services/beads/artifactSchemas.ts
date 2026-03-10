@@ -67,6 +67,12 @@ export interface TaskStateArtifact extends VersionedArtifact {
     agent?: string;
     /** Execution mode: inline or delegate */
     mode?: 'inline' | 'delegate';
+    /** Workspace mode used for execution. */
+    workspaceMode?: 'worktree' | 'direct';
+    /** Absolute workspace path for the running task. */
+    workspacePath?: string;
+    /** Branch name when executing in git worktree mode. */
+    workspaceBranch?: string;
     /** ISO timestamp of last heartbeat */
     lastHeartbeatAt?: string;
     /** Current attempt number (1-based) */
@@ -214,8 +220,11 @@ export function taskStateToTaskStatus(artifact: TaskStateArtifact): TaskStatus {
 // ============================================================================
 
 /**
- * Task spec artifact payload.
- * Stored directly as the bead description (not in artifacts block).
+ * Legacy task spec artifact payload.
+ *
+ * Canonical task spec markdown is now produced by `specFormatter.ts` and stored directly
+ * as the bead description. These legacy helpers remain only for backward-compatible reads
+ * and tests that still exercise the older structured shape.
  */
 export interface TaskSpecArtifact {
   /** Task folder name (e.g., '01-setup') */
@@ -231,8 +240,7 @@ export interface TaskSpecArtifact {
 }
 
 /**
- * Encode task spec artifact to markdown string.
- * This is stored directly as the bead description.
+ * Legacy encoder retained for backward-compatible tests only.
  */
 export function encodeTaskSpec(artifact: TaskSpecArtifact): string {
   const { taskFolder, featureName, planSection, context, priorTasks } = artifact;

@@ -16,6 +16,7 @@ export interface FeatureJson {
 
 export type TaskStatusType = 'pending' | 'in_progress' | 'done' | 'cancelled' | 'blocked' | 'failed' | 'partial';
 export type TaskOrigin = 'plan' | 'manual';
+export type WorkspaceMode = 'worktree' | 'direct';
 /** Worker session information for background task execution */
 export interface WorkerSession {
   /** Background task ID from OMO-Slim */
@@ -28,6 +29,12 @@ export interface WorkerSession {
   agent?: string;
   /** Execution mode: inline (same session) or delegate (background) */
   mode?: 'inline' | 'delegate';
+  /** Workspace mode used for execution. */
+  workspaceMode?: WorkspaceMode;
+  /** Absolute workspace path for the running task. */
+  workspacePath?: string;
+  /** Branch name when executing in git worktree mode. */
+  workspaceBranch?: string;
   /** ISO timestamp of last heartbeat */
   lastHeartbeatAt?: string;
   /** Current attempt number (1-based) */
@@ -76,10 +83,20 @@ export interface PlanReadResult {
   status: FeatureStatusType;
 }
 
+export interface TaskSyncReconciliation {
+  from: string;
+  to: string;
+  planTitle: string;
+  beadId?: string;
+}
+
+export type TaskFolderSource = 'stored' | 'derived';
+
 export interface TasksSyncResult {
   created: string[];
   removed: string[];
   kept: string[];
+  reconciled: TaskSyncReconciliation[];
   manual: string[];
   /** Diagnostics from degraded paths encountered during sync (e.g., dependency sync failures) */
   diagnostics?: Array<{ code: string; message: string; severity: string; context?: Record<string, unknown> }>;
@@ -93,6 +110,7 @@ export interface TaskInfo {
   origin: TaskOrigin;
   planTitle?: string;
   summary?: string;
+  folderSource?: TaskFolderSource;
 }
 
 export interface FeatureInfo {

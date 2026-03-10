@@ -17,7 +17,7 @@ export interface TaskDispatchInput {
   feature: string;
   task: string;
   taskInfo: { folder: string; name: string; planTitle?: string; summary?: string };
-  worktree: { path: string; branch: string };
+  workspace: { mode: 'worktree' | 'direct'; path: string; branch?: string };
   continueFrom?: ContinueFromBlocked;
 }
 
@@ -118,9 +118,9 @@ export function fetchSharedDispatchData(feature: string, services: TaskDispatchS
 
 /**
  * Prepare spec, worker prompt, and budget metadata for a task dispatch.
- * Shared by both single-task (worktree) and batch dispatch paths.
+ * Shared by both single-task and batch dispatch paths.
  *
- * @param input - Task-specific input (feature, task, worktree info)
+ * @param input - Task-specific input (feature, task, workspace info)
  * @param services - Service dependencies for reading/writing
  * @param shared - Optional pre-fetched data (batch optimization); fetched on demand if omitted
  */
@@ -129,7 +129,7 @@ export function prepareTaskDispatch(
   services: TaskDispatchServices,
   shared?: SharedDispatchData,
 ): TaskDispatchPrep {
-  const { feature, task, taskInfo, worktree, continueFrom } = input;
+  const { feature, task, taskInfo, workspace, continueFrom } = input;
   const { taskService } = services;
 
   // Use pre-fetched data or fetch fresh
@@ -226,8 +226,9 @@ export function prepareTaskDispatch(
     feature,
     task,
     taskOrder,
-    worktreePath: worktree.path,
-    branch: worktree.branch,
+    workspacePath: workspace.path,
+    workspaceMode: workspace.mode,
+    branch: workspace.branch,
     plan: data.planContent || 'No plan available',
     contextFiles,
     spec: specContent,

@@ -215,7 +215,7 @@ Do it
         list?: Array<{
           folder: string;
           dependsOn?: string[] | null;
-          worktree?: { branch: string; hasChanges: boolean | null } | null;
+          workspace?: { mode: 'worktree' | 'direct'; branch?: string; hasChanges: boolean | null } | null;
         }>;
         runnable?: string[];
         blockedBy?: Record<string, string[]>;
@@ -230,7 +230,7 @@ Do it
     const firstTask = warcraftStatus.tasks?.list?.find((task) => task.folder === '01-first-task');
     expect(firstTask).toBeDefined();
     expect(firstTask?.dependsOn).toEqual([]);
-    expect(firstTask?.worktree).toBeNull();
+    expect(firstTask?.workspace).toBeNull();
     expect(warcraftStatus.tasks?.runnable).toContain('01-first-task');
     expect(warcraftStatus.tasks?.blockedBy).toEqual({});
     expect(['bv', 'unavailable', 'disabled']).toContain(warcraftStatus.tasks?.analytics?.provider);

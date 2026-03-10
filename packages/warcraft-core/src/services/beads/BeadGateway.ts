@@ -1,8 +1,9 @@
 import { execFileSync } from 'child_process';
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
-import { join } from 'path';
+import { basename, join } from 'path';
 import type { TaskInfo, TaskStatusType } from '../../types.js';
+import { slugifyIdentifierSegment } from '../../utils/slug.js';
 import type {
   AuditEntry,
   AuditRecordParams,
@@ -58,33 +59,146 @@ export class BeadGateway {
   }
 
   private ensureInitialized(): void {
+    if (!this.isRepositoryInitializedOnDisk()) {
+      try {
+        const output = this.executeBr(['init']);
+        if (this.isAlreadyInitializedPayload(output)) {
+          // Repository exists; continue into prefix normalization below.
+        } else if (this.isErrorPayload(output)) {
+          throw new BeadGatewayError(
+            'command_error',
+            'Failed to initialize beads repository [BR_INIT_FAILED]: br command failed',
+            'BR_INIT_FAILED',
+          );
+        }
+      } catch (error) {
+        if (!this.isAlreadyInitializedError(error)) {
+          throw new BeadGatewayError(
+            'command_error',
+            `Failed to initialize beads repository [BR_INIT_FAILED]: ${this.getSafeFailureReason(error)}`,
+            'BR_INIT_FAILED',
+          );
+        }
+      }
+    }
+
     if (this.isRepositoryInitializedOnDisk()) {
+      this.ensureStableIssuePrefix();
+    }
+  }
+
+  private ensureStableIssuePrefix(): void {
+    const config = this.readConfigList();
+    const desiredPrefix = this.deriveStableIssuePrefix();
+
+    if (!this.shouldNormalizeIssuePrefix(config, desiredPrefix)) {
       return;
     }
-    try {
-      const output = this.executeBr(['init']);
-      if (this.isAlreadyInitializedPayload(output)) {
-        return;
-      }
-      if (this.isErrorPayload(output)) {
-        throw new BeadGatewayError(
-          'command_error',
-          'Failed to initialize beads repository [BR_INIT_FAILED]: br command failed',
-          'BR_INIT_FAILED',
-        );
-      }
-    } catch (error) {
-      if (this.isAlreadyInitializedError(error)) {
-        return;
-      }
 
+    try {
+      this.executeBr(['config', 'set', 'issue_prefix', desiredPrefix]);
+    } catch (error) {
       throw new BeadGatewayError(
         'command_error',
-        `Failed to initialize beads repository [BR_INIT_FAILED]: ${this.getSafeFailureReason(error)}`,
-        'BR_INIT_FAILED',
+        `Failed to normalize beads issue prefix [BR_PREFIX_SET_FAILED]: ${this.getSafeFailureReason(error)}`,
+        'BR_PREFIX_SET_FAILED',
       );
     }
   }
+
+  private readConfigList(): Record<string, unknown> {
+    let output = '';
+
+    try {
+      output = this.executeBr(['config', 'list', '--json']);
+    } catch (error) {
+      throw new BeadGatewayError(
+        'command_error',
+        `Failed to read beads configuration [BR_CONFIG_READ_FAILED]: ${this.getSafeFailureReason(error)}`,
+        'BR_CONFIG_READ_FAILED',
+      );
+    }
+
+    try {
+      const parsed = JSON.parse(output) as unknown;
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error('Config payload must be an object');
+      }
+      return parsed as Record<string, unknown>;
+    } catch {
+      throw new BeadGatewayError(
+        'command_error',
+        'Failed to read beads configuration [BR_CONFIG_READ_FAILED]: br returned invalid config output',
+        'BR_CONFIG_READ_FAILED',
+      );
+    }
+  }
+
+  private deriveStableIssuePrefix(): string {
+    return slugifyIdentifierSegment(basename(this.projectRoot));
+  }
+
+  private shouldNormalizeIssuePrefix(config: Record<string, unknown>, desiredPrefix: string): boolean {
+    const storedPrefix = this.getConfigString(config, ['issue_prefix', 'id.prefix', 'issue-prefix', 'project.prefix']);
+    const computedPrefix = this.getConfigString(config, ['_computed.prefix']);
+    const currentPrefix = storedPrefix ?? computedPrefix;
+
+    if (!currentPrefix) {
+      return true;
+    }
+
+    if (currentPrefix === desiredPrefix) {
+      return false;
+    }
+
+    if (!storedPrefix) {
+      return true;
+    }
+
+    if (this.isDefaultIssuePrefix(storedPrefix)) {
+      return true;
+    }
+
+    return this.isLikelyRandomIssuePrefix(storedPrefix);
+  }
+
+  private getConfigString(config: Record<string, unknown>, keys: string[]): string | null {
+    for (const key of keys) {
+      const value = config[key];
+      if (typeof value === 'string' && value.trim().length > 0) {
+        return value.trim();
+      }
+    }
+
+    return null;
+  }
+
+  private isDefaultIssuePrefix(prefix: string): boolean {
+    return prefix === 'bd' || prefix === 'beads' || prefix === 'br';
+  }
+
+  private isLikelyRandomIssuePrefix(prefix: string): boolean {
+    return /^[a-z0-9]{6,}$/.test(prefix) && /\d/.test(prefix) && !prefix.includes('-');
+  }
+
+  private isDependencyAlreadyPresentError(error: unknown): boolean {
+    const details = this.extractErrorDetails(error);
+    return (
+      details.includes('duplicate dependency') ||
+      details.includes('already present') ||
+      ((details.includes('dependency') || details.includes('edge')) && details.includes('already exists')) ||
+      details.includes('unique constraint')
+    );
+  }
+
+  private isDependencyAlreadyAbsentError(error: unknown): boolean {
+    const details = this.extractErrorDetails(error);
+    return (
+      (details.includes('dependency') || details.includes('edge')) &&
+      (details.includes('not found') || details.includes('does not exist') || details.includes('no such'))
+    );
+  }
+
 
   private isRepositoryInitializedOnDisk(): boolean {
     return existsSync(join(this.projectRoot, '.beads', 'beads.db'));
@@ -319,7 +433,11 @@ export class BeadGateway {
 
   addDependency(beadId: string, dependsOnBeadId: string): void {
     this.ensurePreflight();
-    this.runBr(['dep', 'add', beadId, dependsOnBeadId], `add dependency: '${beadId}' depends on '${dependsOnBeadId}'`);
+    this.runBr(
+      ['dep', 'add', beadId, dependsOnBeadId],
+      `add dependency: '${beadId}' depends on '${dependsOnBeadId}'`,
+      { isBenignError: (error) => this.isDependencyAlreadyPresentError(error) },
+    );
   }
 
   removeDependency(beadId: string, dependsOnBeadId: string): void {
@@ -327,6 +445,7 @@ export class BeadGateway {
     this.runBr(
       ['dep', 'remove', beadId, dependsOnBeadId],
       `remove dependency: '${beadId}' depends on '${dependsOnBeadId}'`,
+      { isBenignError: (error) => this.isDependencyAlreadyAbsentError(error) },
     );
   }
 
@@ -336,15 +455,11 @@ export class BeadGateway {
    */
   listDependencies(beadId: string): Array<{ id: string; title: string; status: string }> {
     this.ensurePreflight();
-    try {
-      const output = this.runBr(
-        ['dep', 'list', beadId, '--direction', 'down', '--type', 'blocks', '--json'],
-        `list dependencies for bead '${beadId}'`,
-      );
-      return decodeDependentIssues(output, `dependencies for bead '${beadId}'`, 'blocks');
-    } catch {
-      return [];
-    }
+    const output = this.runBr(
+      ['dep', 'list', beadId, '--direction', 'down', '--type', 'blocks', '--json'],
+      `list dependencies for bead '${beadId}'`,
+    );
+    return decodeDependentIssues(output, `dependencies for bead '${beadId}'`, 'blocks');
   }
 
   addComment(beadId: string, comment: string): void {
@@ -451,7 +566,7 @@ export class BeadGateway {
   }): Array<{ id: string; title: string; status: string; type?: string }> {
     this.ensurePreflight();
     const args = options?.parent
-      ? ['dep', 'list', options.parent, '--direction', 'up', '--type', 'parent-child', '--json', '-a']
+      ? ['dep', 'list', options.parent, '--direction', 'up', '--type', 'parent-child', '--json']
       : ['list', '--json'];
 
     if (!options?.parent && options?.type) {
@@ -488,7 +603,7 @@ export class BeadGateway {
   listTasksForEpic(epicId: string): TaskInfo[] {
     this.ensurePreflight();
     const output = this.runBr(
-      ['dep', 'list', epicId, '--direction', 'up', '--type', 'parent-child', '--json', '-a'],
+      ['dep', 'list', epicId, '--direction', 'up', '--type', 'parent-child', '--json'],
       `list tasks for epic '${epicId}'`,
     );
     return decodeTasksFromDepList(output, epicId);
@@ -518,16 +633,18 @@ export class BeadGateway {
     this.ensurePreflight();
 
     if (kind === 'spec') {
-      // Spec is description-only: read directly, no comment lookup
       const description = this.readDescription(beadId);
       if (!description) {
         return null;
       }
-      const { prefix, artifacts } = this.parseArtifacts(description);
-      if (!artifacts.spec) {
-        return prefix.length > 0 ? prefix : description;
+
+      const hasArtifactsBlock = description.includes(ARTIFACTS_BEGIN) && description.includes(ARTIFACTS_END);
+      if (!hasArtifactsBlock) {
+        return description;
       }
-      return artifacts.spec;
+
+      const { artifacts } = this.parseArtifacts(description);
+      return artifacts.spec ?? null;
     }
 
     // Non-spec artifacts: prefer comment snapshot, fallback to description
@@ -548,8 +665,13 @@ export class BeadGateway {
   // runBr: consolidated retry logic for NOT_INITIALIZED
   // ---------------------------------------------------------------------------
 
-  private runBr(args: string[], operation: string): string {
+  private runBr(
+    args: string[],
+    operation: string,
+    options?: { isBenignError?: (error: unknown) => boolean },
+  ): string {
     const shouldAttemptReinit = args[0] !== 'init';
+    const isBenignError = (error: unknown): boolean => options?.isBenignError?.(error) ?? false;
 
     const executeAndCheck = (): string => {
       const output = this.executeBr(args);
@@ -562,23 +684,30 @@ export class BeadGateway {
     try {
       return executeAndCheck();
     } catch (error) {
+      if (isBenignError(error)) {
+        return '';
+      }
+
       if (error instanceof BeadGatewayError) {
         throw error;
       }
 
-      // Determine if this is a NOT_INITIALIZED condition (either signal or CLI error)
       const isNotInit =
         error instanceof NotInitializedSignal || (shouldAttemptReinit && this.isNotInitializedError(error));
 
       if (isNotInit) {
-        // Re-initialize and retry once
         this.ensureInitialized();
         try {
           return executeAndCheck();
         } catch (retryError) {
+          if (isBenignError(retryError)) {
+            return '';
+          }
+
           if (retryError instanceof BeadGatewayError) {
             throw retryError;
           }
+
           if (retryError instanceof NotInitializedSignal || this.isNotInitializedError(retryError)) {
             throw new BeadGatewayError(
               'command_error',
@@ -586,9 +715,10 @@ export class BeadGateway {
               'BR_NOT_INITIALIZED',
             );
           }
+
           throw new BeadGatewayError(
             'command_error',
-            `Failed to ${operation} [BR_COMMAND_FAILED]: ${this.getSafeFailureReason(retryError)}`,
+            `Failed to ${operation} [BR_COMMAND_FAILED]: ${this.getSafeFailureReason(retryError)}` ,
             'BR_COMMAND_FAILED',
           );
         }

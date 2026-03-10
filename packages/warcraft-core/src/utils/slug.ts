@@ -1,3 +1,5 @@
+import { createHash } from 'crypto';
+
 /**
  * Convert a human-readable task name to a filesystem-safe slug.
  * Lowercases, replaces whitespace runs with hyphens, strips non-alphanumeric/hyphen chars.
@@ -7,6 +9,24 @@ export function slugifyTaskName(name: string): string {
     .toLowerCase()
     .replace(/\s+/g, '-')
     .replace(/[^a-z0-9-]/g, '');
+}
+
+export function slugifyIdentifierSegment(value: string): string {
+  const slug = value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+  if (slug.length > 0) {
+    return slug;
+  }
+
+  const hash = createHash('sha256').update(value, 'utf8').digest('hex').slice(0, 8);
+  return `id-${hash}`;
+}
+
+export function deriveDeterministicLocalId(...parts: string[]): string {
+  return `local-${parts.map((part) => slugifyIdentifierSegment(part)).join('-')}`;
 }
 
 /**

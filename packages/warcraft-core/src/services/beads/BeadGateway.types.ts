@@ -66,7 +66,9 @@ export type BeadGatewayInternalCode =
   | 'BR_INIT_FAILED'
   | 'BR_NOT_INITIALIZED'
   | 'BR_COMMAND_FAILED'
-  | 'BR_PARSE_FAILED';
+  | 'BR_PARSE_FAILED'
+  | 'BR_PREFIX_SET_FAILED'
+  | 'BR_CONFIG_READ_FAILED';
 export class BeadGatewayError extends Error {
   constructor(
     public readonly code: BeadGatewayErrorCode,

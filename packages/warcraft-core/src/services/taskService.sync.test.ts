@@ -144,6 +144,37 @@ describe('TaskService.sync() - rollback and fault tolerance', () => {
     expect(result.diagnostics![0].code).toBe('dep_sync_failed');
     expect(result.diagnostics![0].message).toContain('Dependency sync explosion');
   });
+  it('returns dependency diagnostics emitted by the task store', () => {
+    const featureName = 'dep-diagnostics-test';
+    setupFeature(featureName);
+
+    const planPath = path.join(TEST_DIR, 'docs', featureName, 'plan.md');
+    fs.writeFileSync(planPath, '# Plan\n\n### 1. Setup\n\nSetup.\n');
+
+    const stores = createStores(TEST_DIR, 'off', createRepository('off'));
+    (stores.taskStore as any).syncDependencies = () => [
+      {
+        code: 'dep_add_failed',
+        message: 'Failed to add dependency task-1 -> task-2: add failed',
+        severity: 'degraded',
+        context: { beadId: 'task-1', dependsOnBeadId: 'task-2' },
+      },
+    ];
+
+    const svc = new TaskService(TEST_DIR, stores.taskStore, 'off');
+    const result = svc.sync(featureName);
+
+    expect(result.diagnostics).toEqual([
+      {
+        code: 'dep_add_failed',
+        message: 'Failed to add dependency task-1 -> task-2: add failed',
+        severity: 'degraded',
+        context: { beadId: 'task-1', dependsOnBeadId: 'task-2' },
+      },
+    ]);
+  });
+
+
 });
 
 describe('Concurrent patchBackground interleaving', () => {

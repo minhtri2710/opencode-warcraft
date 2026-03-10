@@ -334,7 +334,7 @@ describe('FeatureService beadsMode off', () => {
     // Should not call createEpic when beadsMode is off
     expect(createEpicCalls).toHaveLength(0);
     expect(feature.name).toBe('my-feature');
-    expect(feature.epicBeadId.startsWith('local-')).toBe(true);
+    expect(feature.epicBeadId).toBe('local-my-feature');
 
     // Feature should be created at flat path
     const featurePath = path.join(testRoot, 'docs', 'my-feature');

@@ -102,10 +102,13 @@ export class ContextTools {
         const tasksSummary = await Promise.all(
           tasks.map(async (t: { folder: string; name: string; status: string; origin?: string }) => {
             const rawStatus = taskService.getRawStatus(featureName, t.folder);
-            const worktree = await worktreeService.get(featureName, t.folder);
-            const hasChanges = worktree
-              ? await worktreeService.hasUncommittedChanges(worktree.feature, worktree.step)
-              : null;
+            const workspaceMode = rawStatus?.workerSession?.workspaceMode ?? 'worktree';
+            const directWorkspacePath = rawStatus?.workerSession?.workspacePath;
+            const worktree = workspaceMode === 'worktree' ? await worktreeService.get(featureName, t.folder) : null;
+            const hasChanges =
+              workspaceMode === 'worktree' && worktree
+                ? await worktreeService.hasUncommittedChanges(worktree.feature, worktree.step)
+                : null;
 
             return {
               folder: t.folder,
@@ -113,12 +116,12 @@ export class ContextTools {
               status: t.status,
               origin: t.origin || 'plan',
               dependsOn: rawStatus?.dependsOn ?? null,
-              worktree: worktree
-                ? {
-                    branch: worktree.branch,
-                    hasChanges,
-                  }
-                : null,
+              workspace:
+                workspaceMode === 'direct'
+                  ? { mode: 'direct', path: directWorkspacePath || null, hasChanges: null }
+                  : worktree
+                    ? { mode: 'worktree', path: worktree.path, branch: worktree.branch, hasChanges }
+                    : null,
             };
           }),
         );

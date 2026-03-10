@@ -27,8 +27,9 @@ export interface WorkerPromptParams {
   feature: string;
   task: string;
   taskOrder: number;
-  worktreePath: string;
-  branch: string;
+  workspacePath: string;
+  workspaceMode: 'worktree' | 'direct';
+  branch?: string;
   plan: string;
   contextFiles: WorkerContextFile[];
   spec: string;
@@ -59,7 +60,8 @@ export function buildWorkerPrompt(params: WorkerPromptParams): string {
     feature,
     task,
     taskOrder,
-    worktreePath,
+    workspacePath,
+    workspaceMode,
     branch,
     // plan, contextFiles, previousTasks - NOT used separately (embedded in spec)
     spec,
@@ -69,7 +71,10 @@ export function buildWorkerPrompt(params: WorkerPromptParams): string {
     failureContext,
   } = params;
 
-  // Build continuation section if resuming from blocked
+  const continuationLocation =
+    workspaceMode === 'worktree'
+      ? 'The worktree already contains the previous worker\'s progress.'
+      : 'The project root already contains the previous worker\'s progress.';
   const continuationSection = continueFrom
     ? `
 ## Continuation from Blocked State
@@ -81,11 +86,10 @@ Previous worker was blocked and exited. Here's the context:
 **User Decision**: ${continueFrom.decision}
 
 Continue from where the previous worker left off, incorporating the user's decision.
-The worktree already contains the previous worker's progress.
+${continuationLocation}
 `
     : '';
 
-  // Build failure context block when prior attempts exist (FR-008)
   const failureContextBlock = failureContext
     ? `
 ## Previous Attempt Context
@@ -96,7 +100,6 @@ Avoid repeating the same approach if it led to the failure above.
 `
     : '';
 
-  // Build complexity guidance block (FR-005, FR-007)
   let complexityGuidance = '';
   if (complexity === 'trivial') {
     complexityGuidance = `
@@ -115,9 +118,22 @@ This is a complex task. Break implementation into smaller verified steps.
 `;
   }
 
+  const executionPreamble =
+    workspaceMode === 'worktree'
+      ? 'You are a worker agent executing a task in an isolated git worktree.'
+      : 'You are a worker agent executing a task directly in the project root (direct mode, no git worktree isolation).';
+  const branchRow =
+    workspaceMode === 'worktree'
+      ? `| Branch | ${branch} |`
+      : '| Branch | n/a (direct mode) |';
+  const workspaceRestriction =
+    workspaceMode === 'worktree'
+      ? `**CRITICAL**: All file operations MUST be within this worktree path:\n\`${workspacePath}\`\n\nDo NOT modify files outside this directory.`
+      : `**CRITICAL**: All file operations happen directly in the project root:\n\`${workspacePath}\`\n\nDo NOT claim isolation, and do NOT claim a separate git branch or worktree exists for this task.`;
+
   return `# Warcraft Worker Assignment
 
-You are a worker agent executing a task in an isolated git worktree.
+${executionPreamble}
 
 ## Assignment Details
 
@@ -126,13 +142,11 @@ You are a worker agent executing a task in an isolated git worktree.
 | Feature | ${feature} |
 | Task | ${task} |
 | Task # | ${taskOrder} |
-| Branch | ${branch} |
-| Worktree | ${worktreePath} |
+| Workspace Mode | ${workspaceMode} |
+${branchRow}
+| Workspace | ${workspacePath} |
 
-**CRITICAL**: All file operations MUST be within this worktree path:
-\`${worktreePath}\`
-
-Do NOT modify files outside this directory.
+${workspaceRestriction}
 ${continuationSection}${failureContextBlock}${complexityGuidance}
 ---
 

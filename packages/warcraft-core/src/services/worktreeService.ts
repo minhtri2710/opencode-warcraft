@@ -7,9 +7,10 @@ import { getTaskStatusPath, getWarcraftPath, sanitizeName } from '../utils/paths
 import type { GitClient, GitClientFactory } from './ports/git-client.js';
 import { SimpleGitClient } from './ports/simple-git-client.js';
 export interface WorktreeInfo {
+  mode: 'worktree' | 'direct';
   path: string;
-  branch: string;
-  commit: string;
+  branch?: string;
+  commit?: string;
   feature: string;
   step: string;
 }
@@ -79,6 +80,29 @@ export class WorktreeService {
     return this.config.gitFactory(cwd);
   }
 
+  private createDirectWorkspace(feature: string, step: string): WorktreeInfo {
+    return {
+      mode: 'direct',
+      path: this.config.baseDir,
+      feature,
+      step,
+    };
+  }
+
+  private shouldUseDirectWorkspace(error: unknown): boolean {
+    const reason = error instanceof Error ? error.message : String(error);
+    const normalized = reason.toLowerCase();
+    return (
+      normalized.includes('not a git repository') ||
+      normalized.includes('not a git repo') ||
+      normalized.includes('unknown subcommand') ||
+      normalized.includes('worktree support is unavailable') ||
+      normalized.includes('worktree is not supported') ||
+      normalized.includes('worktree not supported')
+    );
+  }
+
+
   private getWorktreesDir(): string {
     return path.join(this.config.warcraftDir, '.worktrees');
   }
@@ -105,25 +129,39 @@ export class WorktreeService {
 
     await fs.mkdir(path.dirname(worktreePath), { recursive: true });
 
-    // Lock to prevent race between concurrent create() calls
     const lockPath = path.join(this.getWorktreesDir(), `${feature}-${step}.create`);
     const release = await acquireLock(lockPath, { timeout: 10000 });
     try {
-      const base = baseBranch || (await git.revparse(['HEAD']));
-
       const existing = await this.get(feature, step);
       if (existing) {
         return existing;
       }
 
+      let base: string;
+      try {
+        base = baseBranch || (await git.revparse(['HEAD']));
+      } catch (error) {
+        if (this.shouldUseDirectWorkspace(error)) {
+          return this.createDirectWorkspace(feature, step);
+        }
+        throw error;
+      }
+
       try {
         await git.worktreeAdd({ path: worktreePath, branch: branchName, commit: base });
       } catch (addError) {
+        if (this.shouldUseDirectWorkspace(addError)) {
+          return this.createDirectWorkspace(feature, step);
+        }
+
         const reason = addError instanceof Error ? addError.message : String(addError);
         console.warn(`[warcraft] Primary worktree add failed, retrying with branch-only: ${reason}`);
         try {
           await git.worktreeAddWithBranch({ path: worktreePath, branch: branchName });
         } catch (retryError) {
+          if (this.shouldUseDirectWorkspace(retryError)) {
+            return this.createDirectWorkspace(feature, step);
+          }
           throw new Error(`Failed to create worktree: ${retryError}`);
         }
       }
@@ -132,6 +170,7 @@ export class WorktreeService {
       const commit = await worktreeGit.revparse(['HEAD']);
 
       return {
+        mode: 'worktree',
         path: worktreePath,
         branch: branchName,
         commit,
@@ -152,6 +191,7 @@ export class WorktreeService {
       const worktreeGit = this.getGit(worktreePath);
       const commit = await worktreeGit.revparse(['HEAD']);
       return {
+        mode: 'worktree',
         path: worktreePath,
         branch: branchName,
         commit,
@@ -159,7 +199,6 @@ export class WorktreeService {
         step,
       };
     } catch {
-      // Worktree directory does not exist or is inaccessible
       return null;
     }
   }
@@ -442,6 +481,7 @@ export class WorktreeService {
           }
 
           results.push({
+            mode: 'worktree',
             path: stepPath,
             branch: branchName,
             commit,

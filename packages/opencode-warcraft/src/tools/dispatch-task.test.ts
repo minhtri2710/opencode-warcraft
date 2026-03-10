@@ -68,6 +68,7 @@ function createMockServices(overrides: Partial<DispatchOneTaskServices> = {}): D
     },
     worktreeService: {
       create: async () => ({
+        mode: 'worktree' as const,
         path: '/tmp/worktree',
         branch: 'warcraft/test-feature/01-test-task',
         commit: 'abc123',
@@ -75,6 +76,7 @@ function createMockServices(overrides: Partial<DispatchOneTaskServices> = {}): D
         step: '01-test-task',
       }),
       get: async () => ({
+        mode: 'worktree' as const,
         path: '/tmp/worktree',
         branch: 'warcraft/test-feature/01-test-task',
         commit: 'abc123',
@@ -94,6 +96,7 @@ function createInput(overrides: Partial<DispatchOneTaskInput> = {}): DispatchOne
   return {
     feature: 'test-feature',
     task: '01-test-task',
+    sessionId: 'sess-1',
     ...overrides,
   };
 }
@@ -146,7 +149,8 @@ describe('dispatch-task', () => {
 
       expect(result.success).toBe(true);
       expect(result.task).toBe('01-test-task');
-      expect(result.worktreePath).toBeDefined();
+      expect(result.workspaceMode).toBe('worktree');
+      expect(result.workspacePath).toBeDefined();
       expect(result.branch).toBeDefined();
       expect(result.taskToolCall).toBeDefined();
       expect(result.taskToolCall?.subagent_type).toBe('mekkatorque');
@@ -246,6 +250,7 @@ describe('dispatch-task', () => {
             // Simulate slow worktree creation
             await new Promise((r) => setTimeout(r, 100));
             return {
+              mode: 'worktree' as const,
               path: '/tmp/worktree',
               branch: 'warcraft/test-feature/01-test-task',
               commit: 'abc123',
@@ -329,7 +334,8 @@ describe('dispatch-task', () => {
       expect(result).toHaveProperty('task');
       expect(result).toHaveProperty('agent');
       // Success-specific fields
-      expect(result).toHaveProperty('worktreePath');
+      expect(result).toHaveProperty('workspaceMode');
+      expect(result).toHaveProperty('workspacePath');
       expect(result).toHaveProperty('branch');
       expect(result).toHaveProperty('taskToolCall');
     });
@@ -373,6 +379,7 @@ describe('dispatch-task', () => {
           create: async () => {
             createCalled = true;
             return {
+              mode: 'worktree' as const,
               path: '/tmp/worktree',
               branch: 'warcraft/test-feature/01-test-task',
               commit: 'abc123',
@@ -426,6 +433,7 @@ describe('dispatch-task', () => {
           create: async () => {
             await new Promise((r) => setTimeout(r, 50));
             return {
+              mode: 'worktree' as const,
               path: '/tmp/worktree',
               branch: 'warcraft/test-feature/01-test-task',
               commit: 'abc123',

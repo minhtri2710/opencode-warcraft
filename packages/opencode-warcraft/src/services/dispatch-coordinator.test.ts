@@ -72,6 +72,7 @@ function createMockDeps(overrides: Partial<DispatchCoordinatorDeps> = {}): Dispa
     },
     worktreeService: {
       create: async () => ({
+        mode: 'worktree' as const,
         path: '/tmp/worktree',
         branch: 'warcraft/test-feature/01-test-task',
         commit: 'abc123',
@@ -79,6 +80,7 @@ function createMockDeps(overrides: Partial<DispatchCoordinatorDeps> = {}): Dispa
         step: '01-test-task',
       }),
       get: async () => ({
+        mode: 'worktree' as const,
         path: '/tmp/worktree',
         branch: 'warcraft/test-feature/01-test-task',
         commit: 'abc123',
@@ -99,6 +101,7 @@ function createRequest(overrides: Partial<DispatchRequest> = {}): DispatchReques
   return {
     feature: 'test-feature',
     task: '01-test-task',
+    sessionId: 'sess-1',
     ...overrides,
   };
 }
@@ -262,6 +265,7 @@ describe('DispatchCoordinator', () => {
           create: async () => {
             await new Promise((r) => setTimeout(r, 100));
             return {
+              mode: 'worktree' as const,
               path: '/tmp/worktree',
               branch: 'warcraft/test-feature/01-test-task',
               commit: 'abc123',
@@ -310,6 +314,7 @@ describe('DispatchCoordinator', () => {
               throw new Error('git worktree create failed');
             }
             return {
+              mode: 'worktree' as const,
               path: '/tmp/worktree',
               branch: 'warcraft/test-feature/01-test-task',
               commit: 'abc123',
@@ -342,7 +347,8 @@ describe('DispatchCoordinator', () => {
 
       expect(result.success).toBe(true);
       expect(result.task).toBe('01-test-task');
-      expect(result.worktreePath).toBeDefined();
+      expect(result.workspaceMode).toBe('worktree');
+      expect(result.workspacePath).toBeDefined();
       expect(result.branch).toBeDefined();
       expect(result.taskToolCall).toBeDefined();
       expect(result.taskToolCall?.subagent_type).toBe('mekkatorque');
@@ -367,6 +373,59 @@ describe('DispatchCoordinator', () => {
       expect(inProgressTransition).toBeDefined();
       expect(inProgressTransition!.extras?.baseCommit).toBe('abc123');
     });
+
+    it('returns direct workspace info and omits baseCommit when creation falls back to direct mode', async () => {
+      const tracker = createTransitionTracker();
+      const patchCalls: Array<{ feature: string; task: string; patch: Record<string, unknown> }> = [];
+      const deps = createMockDeps({
+        taskService: {
+          ...createMockDeps().taskService,
+          transition: tracker.transition,
+          patchBackgroundFields: (feature: string, task: string, patch: Record<string, unknown>) => {
+            patchCalls.push({ feature, task, patch });
+          },
+        },
+        worktreeService: {
+          ...createMockDeps().worktreeService,
+          create: async () => ({
+            mode: 'direct' as const,
+            path: '/repo/root',
+            feature: 'test-feature',
+            step: '01-test-task',
+          }),
+        },
+      });
+
+      const coordinator = new DispatchCoordinator(deps);
+      const result = await coordinator.dispatch(createRequest());
+
+      expect(result.success).toBe(true);
+      expect(result.workspaceMode).toBe('direct');
+      expect(result.workspacePath).toBe('/repo/root');
+      expect(result.branch).toBeUndefined();
+      expect(result.createdWorktree).toBe(false);
+
+      const inProgressTransition = tracker.calls.find((c) => c.toStatus === 'in_progress');
+      expect(inProgressTransition).toBeDefined();
+      expect(inProgressTransition!.extras?.baseCommit).toBeUndefined();
+      expect(patchCalls).toEqual([
+        {
+          feature: 'test-feature',
+          task: '01-test-task',
+          patch: {
+            workerSession: {
+              sessionId: 'sess-1',
+              agent: 'mekkatorque',
+              mode: 'delegate',
+              attempt: 1,
+              workspaceMode: 'direct',
+              workspacePath: '/repo/root',
+            },
+          },
+        },
+      ]);
+    });
+
 
     it('does NOT include baseCommit when continuing from blocked', async () => {
       const tracker = createTransitionTracker();
@@ -493,6 +552,7 @@ describe('DispatchCoordinator', () => {
           create: async () => {
             createCalled = true;
             return {
+              mode: 'worktree' as const,
               path: '/tmp/worktree',
               branch: 'warcraft/test-feature/01-test-task',
               commit: 'abc123',
@@ -509,6 +569,65 @@ describe('DispatchCoordinator', () => {
       expect(result.success).toBe(true);
       expect(createCalled).toBe(false);
     });
+
+    it('reuses the stored direct workspace when continuing a blocked direct-mode task', async () => {
+      let createCalled = false;
+      let getCalled = false;
+      const deps = createMockDeps({
+        taskService: {
+          ...createMockDeps().taskService,
+          get: () => ({
+            folder: '01-test-task',
+            name: 'Test Task',
+            status: 'blocked' as const,
+            origin: 'plan' as const,
+            summary: 'Previous summary',
+          }),
+          getRawStatus: () => ({
+            status: 'blocked' as const,
+            origin: 'plan' as const,
+            dependsOn: [],
+            workerSession: { workspaceMode: 'direct' as const, workspacePath: '/repo/root' },
+          }),
+        },
+        worktreeService: {
+          ...createMockDeps().worktreeService,
+          create: async () => {
+            createCalled = true;
+            return {
+              mode: 'worktree' as const,
+              path: '/tmp/worktree',
+              branch: 'warcraft/test-feature/01-test-task',
+              commit: 'abc123',
+              feature: 'test-feature',
+              step: '01-test-task',
+            };
+          },
+          get: async () => {
+            getCalled = true;
+            return {
+              mode: 'worktree' as const,
+              path: '/tmp/worktree',
+              branch: 'warcraft/test-feature/01-test-task',
+              commit: 'abc123',
+              feature: 'test-feature',
+              step: '01-test-task',
+            };
+          },
+        },
+      });
+
+      const coordinator = new DispatchCoordinator(deps);
+      const result = await coordinator.dispatch(createRequest({ continueFrom: 'blocked', decision: 'Use option A' }));
+
+      expect(result.success).toBe(true);
+      expect(result.workspaceMode).toBe('direct');
+      expect(result.workspacePath).toBe('/repo/root');
+      expect(result.branch).toBeUndefined();
+      expect(createCalled).toBe(false);
+      expect(getCalled).toBe(false);
+    });
+
 
     it('rejects continueFrom=blocked when task is not blocked', async () => {
       const coordinator = new DispatchCoordinator(createMockDeps());

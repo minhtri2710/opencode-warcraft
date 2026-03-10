@@ -66,8 +66,9 @@ export class TaskTools {
             wouldCreate: preview.created,
             wouldRemove: preview.removed,
             wouldKeep: preview.kept,
+            wouldReconcile: preview.reconciled,
             manualTasks: preview.manual,
-            message: `Preview: Would create ${preview.created.length}, remove ${preview.removed.length}, keep ${preview.kept.length} task(s). Use mode "sync" to apply.`,
+            message: `Preview: Would create ${preview.created.length}, remove ${preview.removed.length}, reconcile ${preview.reconciled.length}, keep ${preview.kept.length} task(s). Use mode "sync" to apply.`,
           });
         }
 
@@ -90,7 +91,15 @@ export class TaskTools {
           featureService.updateStatus(feature, 'executing');
         }
         return toolSuccess({
-          message: `Tasks synced: ${result.created.length} created, ${result.removed.length} removed, ${result.kept.length} kept${warning}`,
+          mode: 'sync',
+          feature,
+          created: result.created,
+          removed: result.removed,
+          kept: result.kept,
+          reconciled: result.reconciled,
+          manualTasks: result.manual,
+          diagnostics: result.diagnostics ?? [],
+          message: `Tasks synced: ${result.created.length} created, ${result.removed.length} removed, ${result.reconciled.length} reconciled, ${result.kept.length} kept${warning}`,
         });
       },
     });

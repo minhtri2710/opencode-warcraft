@@ -15,11 +15,34 @@ function cleanup() {
 
 class MockTaskService implements Partial<TaskService> {
   private createCalls: Array<{ feature: string; name: string; order?: number; priority?: number }> = [];
+  previewResult = {
+    created: [] as string[],
+    removed: [] as string[],
+    kept: [] as string[],
+    reconciled: [] as Array<Record<string, unknown>>,
+    manual: [] as string[],
+  };
+  syncResult = {
+    created: [] as string[],
+    removed: [] as string[],
+    kept: [] as string[],
+    reconciled: [] as Array<Record<string, unknown>>,
+    manual: [] as string[],
+    diagnostics: [] as Array<Record<string, unknown>>,
+  };
 
   create(featureName: string, name: string, order?: number, priority?: number): string {
     this.createCalls.push({ feature: featureName, name, order, priority });
     const orderStr = order !== undefined ? String(order).padStart(2, '0') : '01';
     return `${orderStr}-${name.toLowerCase().replace(/\s+/g, '-')}`;
+  }
+
+  previewSync(): unknown {
+    return this.previewResult;
+  }
+
+  sync(): unknown {
+    return this.syncResult;
   }
 
   getLastPriority(): number | undefined {
@@ -47,7 +70,7 @@ class MockPlanService implements Partial<PlanService> {
   read() {
     return {
       content: '# Plan\n\n### 1. Test Task\n\nDescription.',
-      approved: true,
+      status: 'approved',
     };
   }
 }
@@ -198,6 +221,57 @@ describe('TaskTools', () => {
       expect(result).toContain('05-test-task');
     });
   });
+  describe('syncTasksTool', () => {
+    it('preview surfaces reconciliations', async () => {
+      mockTaskService.previewResult = {
+        created: [],
+        removed: [],
+        kept: ['03-keep-existing'],
+        reconciled: [
+          { from: '02-old-task', to: '01-test-task', planTitle: 'Test Task', beadId: 'task-1' },
+        ],
+        manual: ['99-manual-task'],
+      };
+
+      const tool = taskTools.syncTasksTool(resolveFeature);
+      const result = await tool.execute({ feature: undefined, mode: 'preview' });
+      const parsed = JSON.parse(result as string);
+
+      expect(parsed.success).toBe(true);
+      expect(parsed.data.wouldReconcile).toEqual([
+        { from: '02-old-task', to: '01-test-task', planTitle: 'Test Task', beadId: 'task-1' },
+      ]);
+      expect(parsed.data.message).toContain('reconcile 1');
+    });
+
+    it('sync surfaces reconciled tasks and diagnostics', async () => {
+      mockTaskService.syncResult = {
+        created: ['01-test-task'],
+        removed: [],
+        kept: [],
+        reconciled: [
+          { from: '02-old-task', to: '01-test-task', planTitle: 'Test Task', beadId: 'task-1' },
+        ],
+        manual: [],
+        diagnostics: [{ code: 'dep_sync_failed', message: 'Dependency sync failed', severity: 'degraded' }],
+      };
+
+      const tool = taskTools.syncTasksTool(resolveFeature);
+      const result = await tool.execute({ feature: undefined, mode: 'sync' });
+      const parsed = JSON.parse(result as string);
+
+      expect(parsed.success).toBe(true);
+      expect(parsed.data.reconciled).toEqual([
+        { from: '02-old-task', to: '01-test-task', planTitle: 'Test Task', beadId: 'task-1' },
+      ]);
+      expect(parsed.data.diagnostics).toEqual([
+        { code: 'dep_sync_failed', message: 'Dependency sync failed', severity: 'degraded' },
+      ]);
+      expect(parsed.data.message).toContain('1 reconciled');
+    });
+  });
+
+
 });
 
 // ============================================================================

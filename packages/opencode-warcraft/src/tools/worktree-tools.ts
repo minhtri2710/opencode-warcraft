@@ -11,7 +11,7 @@ import type {
 } from 'warcraft-core';
 import { createChildSpan, createTraceContext } from 'warcraft-core';
 import { DispatchCoordinator, type DispatchCoordinatorDeps } from '../services/dispatch-coordinator.js';
-import type { BlockedResult } from '../types.js';
+import type { BlockedResult, ToolContext } from '../types.js';
 import { toolError, toolSuccess } from '../types.js';
 import {
   buildPromptObservabilityDetails,
@@ -85,6 +85,7 @@ export class WorktreeTools {
   createWorktreeTool(resolveFeature: (name?: string) => string | null): ToolDefinition {
     // Capture deps in closure to avoid 'this' binding issues
     const {
+      featureService,
       taskService,
       planService,
       contextService,
@@ -104,11 +105,12 @@ export class WorktreeTools {
         continueFrom: tool.schema.enum(['blocked']).optional().describe('Resume a blocked task'),
         decision: tool.schema.string().optional().describe('Answer to blocker question when continuing'),
       },
-      async execute({ task, feature: explicitFeature, continueFrom, decision }, _toolContext) {
+      async execute({ task, feature: explicitFeature, continueFrom, decision }, toolContext) {
         validateTaskInput(task);
         const resolution = resolveFeatureInput(resolveFeature, explicitFeature);
         if (!resolution.ok) return toolError(resolution.error);
         const feature = resolution.feature;
+        const sessionId = (toolContext as ToolContext | undefined)?.sessionID ?? featureService.getSession(feature);
 
         // Build coordinator deps from the tool dependencies
         const coordinatorDeps: DispatchCoordinatorDeps = {
@@ -133,6 +135,7 @@ export class WorktreeTools {
           task,
           continueFrom,
           decision,
+          sessionId,
         });
 
         if (!dispatchResult.success) {
@@ -200,7 +203,8 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
 `;
 
         const responseBase = {
-          worktreePath: dispatchResult.worktreePath,
+          workspaceMode: dispatchResult.workspaceMode,
+          workspacePath: dispatchResult.workspacePath,
           branch: dispatchResult.branch,
           mode: 'delegate',
           agent,
@@ -260,7 +264,8 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
             ...createChildSpan(dispatchTrace),
             details: {
               branch: dispatchResult.branch,
-              worktreePath: dispatchResult.worktreePath,
+              workspaceMode: dispatchResult.workspaceMode,
+              workspacePath: dispatchResult.workspacePath,
               continueFrom: continueFrom || null,
             },
           });
@@ -399,6 +404,10 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
           }
         }
 
+        const rawStatus = taskService.getRawStatus(feature, task);
+        const workspaceMode = rawStatus?.workerSession?.workspaceMode ?? 'worktree';
+        const workspacePath = rawStatus?.workerSession?.workspacePath;
+
         if (status === 'blocked') {
           taskService.transition(feature, task, 'blocked', {
             summary,
@@ -414,7 +423,7 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
             details: { reason: blocker?.reason, summary },
           });
 
-          const worktree = await worktreeService.get(feature, task);
+          const workspace = workspaceMode === 'worktree' ? await worktreeService.get(feature, task) : null;
           return toolSuccess({
             ok: true,
             terminal: true,
@@ -422,32 +431,54 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
             task,
             summary,
             blocker,
-            worktreePath: worktree?.path,
+            workspaceMode,
+            workspacePath: workspaceMode === 'direct' ? workspacePath : workspace?.path,
+            branch: workspaceMode === 'worktree' ? workspace?.branch : undefined,
             message:
-              'Task blocked. Warcraft Master will ask user and resume with warcraft_worktree_create(continueFrom: "blocked", decision: answer)',
+              workspaceMode === 'direct'
+                ? 'Task blocked in direct mode. Warcraft Master will ask user and resume against the project root workspace.'
+                : 'Task blocked. Warcraft Master will ask user and resume with warcraft_worktree_create(continueFrom: "blocked", decision: answer)',
           });
         }
 
-        const commitResult = await worktreeService.commitChanges(
-          feature,
-          task,
-          `warcraft(${task}): ${summary.slice(0, 50)}`,
-        );
+        let commitResult: { committed: boolean; sha: string; message?: string } = {
+          committed: false,
+          sha: '',
+          message: 'Direct mode - no git commit created',
+        };
+        let diff = {
+          hasDiff: false,
+          filesChanged: [] as string[],
+          insertions: 0,
+          deletions: 0,
+        };
 
-        const rawStatus = taskService.getRawStatus(feature, task);
-        const baseCommit =
-          typeof rawStatus?.baseCommit === 'string' && rawStatus.baseCommit.trim().length > 0
-            ? rawStatus.baseCommit
-            : null;
-        if (!baseCommit) {
-          return toolError(
-            `Task "${task}" is missing baseCommit. Recreate the worktree with warcraft_worktree_create before completing.`,
-          );
+        if (workspaceMode === 'worktree') {
+          commitResult = await worktreeService.commitChanges(feature, task, `warcraft(${task}): ${summary.slice(0, 50)}`);
+
+          const baseCommit =
+            typeof rawStatus?.baseCommit === 'string' && rawStatus.baseCommit.trim().length > 0
+              ? rawStatus.baseCommit
+              : null;
+          if (!baseCommit) {
+            return toolError(
+              `Task "${task}" is missing baseCommit. Recreate the worktree with warcraft_worktree_create before completing.`,
+            );
+          }
+
+          const diffResult = await worktreeService.getDiff(feature, task, baseCommit);
+          if (diffResult.error) {
+            return toolError(`Failed to generate diff for task "${task}": ${diffResult.error}`);
+          }
+
+          diff = {
+            hasDiff: diffResult.hasDiff,
+            filesChanged: diffResult.filesChanged,
+            insertions: diffResult.insertions,
+            deletions: diffResult.deletions,
+          };
         }
-        const diff = await worktreeService.getDiff(feature, task, baseCommit);
-        if (diff.error) {
-          return toolError(`Failed to generate diff for task "${task}": ${diff.error}`);
-        }
+
         const featureMeta = featureService.get(feature);
         const workflowPath = (featureMeta as { workflowPath?: string } | null)?.workflowPath || 'standard';
 
@@ -469,7 +500,20 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
           '',
         ];
 
-        if (diff?.hasDiff) {
+        if (workspaceMode === 'direct') {
+          reportLines.push(
+            '---',
+            '',
+            '## Workspace',
+            '',
+            `- **Mode:** direct`,
+            `- **Path:** ${workspacePath || 'unknown'}`,
+            '- **Git state:** no isolated branch or worktree was created',
+            '',
+          );
+        }
+
+        if (diff.hasDiff) {
           reportLines.push(
             '---',
             '',
@@ -483,18 +527,25 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
 
           if (diff.filesChanged.length > 0) {
             reportLines.push('### Files Modified', '');
-            for (const file of diff.filesChanged as string[]) {
+            for (const file of diff.filesChanged) {
               reportLines.push(`- \`${file}\``);
             }
             reportLines.push('');
           }
         } else {
-          reportLines.push('---', '', '## Changes', '', '_No file changes detected_', '');
+          reportLines.push(
+            '---',
+            '',
+            '## Changes',
+            '',
+            workspaceMode === 'worktree' ? '_No file changes detected_' : '_Direct-mode execution; git diff is not available._',
+            '',
+          );
         }
 
         taskService.writeReport(feature, task, reportLines.join('\n'));
 
-        if (status === 'completed' && !commitResult.committed) {
+        if (status === 'completed' && workspaceMode === 'worktree' && !commitResult.committed) {
           return toolError(
             `Cannot mark task "${task}" completed because no commit was created (${commitResult.message}). Task status unchanged.`,
           );
@@ -506,22 +557,27 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
           ...(learnings && learnings.length > 0 ? { learnings } : {}),
         });
 
-        // Emit commit event for trust metrics tracking
         eventLogger.emit({
           type: 'commit',
           feature,
           task,
           ...createTaskTrace(eventLogger, feature, task),
-          details: { status, finalStatus, sha: commitResult.sha },
+          details: { status, finalStatus, sha: commitResult.sha, workspaceMode },
         });
 
-        const worktree = await worktreeService.get(feature, task);
+        const workspace = workspaceMode === 'worktree' ? await worktreeService.get(feature, task) : null;
         const terminalResult: Record<string, unknown> = {
           ok: true,
           terminal: true,
           status: finalStatus === 'done' ? 'completed' : status,
           task,
-          message: `Task "${task}" ${status}. Changes committed to branch ${worktree?.branch || 'unknown'}.\nUse warcraft_merge to integrate changes. Worktree preserved at ${worktree?.path || 'unknown'}.`,
+          workspaceMode,
+          workspacePath: workspaceMode === 'direct' ? workspacePath : workspace?.path,
+          branch: workspaceMode === 'worktree' ? workspace?.branch : undefined,
+          message:
+            workspaceMode === 'worktree'
+              ? `Task "${task}" ${status}. Changes committed to branch ${workspace?.branch || 'unknown'}.\nUse warcraft_merge to integrate changes. Worktree preserved at ${workspace?.path || 'unknown'}.`
+              : `Task "${task}" ${status} in direct mode. No git commit or merge step was created; changes remain in the project root at ${workspacePath || 'unknown'}.`,
         };
 
         if (status === 'completed' && verificationModel === 'best-effort') {
@@ -559,14 +615,25 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
         if (!resolution.ok) return toolError(resolution.error);
         const feature = resolution.feature;
 
-        await worktreeService.remove(feature, task);
-        // Two-step transition: current status → cancelled → pending
-        // This follows the state machine where in_progress/blocked → cancelled is allowed,
-        // and cancelled → pending is allowed for re-dispatch.
+        const rawStatus = taskService.getRawStatus(feature, task);
+        const workspaceMode = rawStatus?.workerSession?.workspaceMode ?? 'worktree';
+        const workspacePath = rawStatus?.workerSession?.workspacePath;
+
+        if (workspaceMode === 'worktree') {
+          await worktreeService.remove(feature, task);
+        }
+
         taskService.transition(feature, task, 'cancelled');
         taskService.transition(feature, task, 'pending');
 
-        return toolSuccess({ message: `Task "${task}" aborted. Status reset to pending.` });
+        return toolSuccess({
+          workspaceMode,
+          workspacePath: workspaceMode === 'direct' ? workspacePath : undefined,
+          message:
+            workspaceMode === 'worktree'
+              ? `Task "${task}" aborted. Status reset to pending.`
+              : `Task "${task}" aborted in direct mode. Status reset to pending. Files in ${workspacePath || 'the project root'} were not reverted because no isolated worktree exists.`,
+        });
       },
     });
   }
@@ -650,6 +717,22 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
         if (!taskInfo) return toolError(`Task "${task}" not found`);
         if (taskInfo.status !== 'done')
           return toolError('Task must be completed before merging. Use warcraft_worktree_commit first.');
+
+        const rawStatus = taskService.getRawStatus(feature, task);
+        const workspaceMode = rawStatus?.workerSession?.workspaceMode ?? 'worktree';
+        const workspacePath = rawStatus?.workerSession?.workspacePath;
+        if (workspaceMode === 'direct') {
+          const effectiveVerify = verify ?? verificationModel === 'tdd';
+          return toolSuccess({
+            workspaceMode,
+            workspacePath,
+            cleanup: cleanupRequested
+              ? { requested: true, removed: false, reason: 'direct-mode-no-worktree' }
+              : { requested: false, removed: false, reason: 'direct-mode' },
+            verification: effectiveVerify ? { skipped: true, reason: 'direct-mode-no-merge' } : undefined,
+            message: `Task "${task}" was executed in direct mode. No git merge step exists because changes were made directly in the project root${workspacePath ? ` at ${workspacePath}` : ''}.`,
+          });
+        }
 
         const result = await worktreeService.merge(feature, task, strategy);
 

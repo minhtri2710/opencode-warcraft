@@ -252,6 +252,7 @@ describe('WorktreeService.create', () => {
 
     const result = await service.create('my-feature', '01-setup');
 
+    expect(result.mode).toBe('worktree');
     expect(result.feature).toBe('my-feature');
     expect(result.step).toBe('01-setup');
     expect(result.branch).toBe('warcraft/my-feature/01-setup');
@@ -280,6 +281,7 @@ describe('WorktreeService.create', () => {
 
     const result = await service.create('my-feature', '01-setup');
 
+    expect(result.mode).toBe('worktree');
     expect(result.path).toBe(wtPath);
     expect(result.commit).toBe('existing-sha-456');
     expect(result.branch).toBe('warcraft/my-feature/01-setup');
@@ -310,6 +312,7 @@ describe('WorktreeService.create', () => {
 
     const result = await service.create('my-feature', '02-impl');
 
+    expect(result.mode).toBe('worktree');
     expect(result.feature).toBe('my-feature');
     expect(result.step).toBe('02-impl');
     // Should have tried twice: first with -b, then without
@@ -335,6 +338,29 @@ describe('WorktreeService.create', () => {
 
     await expect(service.create('my-feature', '03-fail')).rejects.toThrow('Failed to create worktree');
   });
+
+  it('returns direct workspace when git repository is unavailable', async () => {
+    const service = createService('off');
+    const mockGit = createMockGit({
+      revparse: async () => {
+        throw new Error('fatal: not a git repository');
+      },
+    });
+    (service as any).getGit = () => mockGit;
+
+    const worktreesDir = (service as any).getWorktreesDir();
+    fs.mkdirSync(worktreesDir, { recursive: true });
+
+    const result = await service.create('my-feature', '05-direct');
+
+    expect(result).toEqual({
+      mode: 'direct',
+      path: testRoot,
+      feature: 'my-feature',
+      step: '05-direct',
+    });
+  });
+
 
   it('uses provided baseBranch when given', async () => {
     const service = createService('off');
@@ -378,6 +404,7 @@ describe('WorktreeService.get', () => {
     const result = await service.get('feat', '01-step');
 
     expect(result).not.toBeNull();
+    expect(result!.mode).toBe('worktree');
     expect(result!.feature).toBe('feat');
     expect(result!.step).toBe('01-step');
     expect(result!.branch).toBe('warcraft/feat/01-step');
