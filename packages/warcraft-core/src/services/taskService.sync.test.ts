@@ -173,8 +173,6 @@ describe('TaskService.sync() - rollback and fault tolerance', () => {
       },
     ]);
   });
-
-
 });
 
 describe('Concurrent patchBackground interleaving', () => {

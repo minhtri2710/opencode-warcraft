@@ -111,7 +111,10 @@ export class PlanTools {
           return toolError(formatPlanReviewChecklistIssues(checklistResult.issues));
         }
 
-        planService.approve(feature, undefined, planResult.content);
+        const approveOutcome = planService.approve(feature, undefined, planResult.content);
+        if (approveOutcome.severity === 'fatal') {
+          return toolError(approveOutcome.diagnostics.map((d) => d.message).join('; '));
+        }
         updateFeatureMetadata(feature, {
           workflowPath: detectWorkflowPath(planResult.content),
           reviewChecklistVersion: checklistResult.ok ? 'v1' : undefined,

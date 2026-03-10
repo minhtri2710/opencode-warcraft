@@ -6,9 +6,10 @@ import type { FeatureStatusType, TaskStatusType } from '../../types.js';
  * This centralizes the bead-to-task status mapping used across services.
  *
  * @param beadStatus - The raw bead status string from beads CLI
+ * @param labels - Optional labels attached to the bead (used to disambiguate deferred states)
  * @returns The corresponding TaskStatusType
  */
-export function mapBeadStatusToTaskStatus(beadStatus: string): TaskStatusType {
+export function mapBeadStatusToTaskStatus(beadStatus: string, labels?: string[]): TaskStatusType {
   if (!beadStatus) return 'pending';
   switch (beadStatus.toLowerCase()) {
     case 'closed':
@@ -19,8 +20,13 @@ export function mapBeadStatusToTaskStatus(beadStatus: string): TaskStatusType {
     case 'hooked':
       return 'in_progress';
     case 'blocked':
-    case 'deferred':
       return 'blocked';
+    case 'deferred': {
+      if (labels?.includes('failed')) return 'failed';
+      if (labels?.includes('partial')) return 'partial';
+      if (labels?.includes('cancelled')) return 'cancelled';
+      return 'blocked';
+    }
     default:
       return 'pending';
   }

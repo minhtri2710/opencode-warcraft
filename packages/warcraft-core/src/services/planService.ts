@@ -1,6 +1,8 @@
 import type { BeadsMode, PlanReadResult } from '../types.js';
 import { fileExists, readText, writeText } from '../utils/fs.js';
 import { getPlanPath } from '../utils/paths.js';
+import type { OperationOutcome } from './outcomes.js';
+import { diagnostic, fatal, okVoid } from './outcomes.js';
 import type { PlanStore } from './state/types.js';
 
 export class PlanService {
@@ -48,22 +50,23 @@ export class PlanService {
    * Approve the current plan.
    * Optionally accepts already-read plan content to avoid re-reading plan.md.
    */
-  approve(featureName: string, sessionId?: string, preloadedContent?: string): void {
+  approve(featureName: string, sessionId?: string, preloadedContent?: string): OperationOutcome<void> {
     let planContent = preloadedContent ?? null;
 
     if (planContent === null) {
       const planPath = getPlanPath(this.projectRoot, featureName, this.beadsMode);
       if (!fileExists(planPath)) {
-        throw new Error(`No plan.md found for feature '${featureName}'`);
+        return fatal([diagnostic('plan_not_found', `No plan.md found for feature '${featureName}'`, 'fatal')]);
       }
       planContent = readText(planPath);
       if (planContent === null) {
-        throw new Error(`No plan.md found for feature '${featureName}'`);
+        return fatal([diagnostic('plan_not_found', `No plan.md found for feature '${featureName}'`, 'fatal')]);
       }
     }
 
     const timestamp = new Date().toISOString();
     this.store.approve(featureName, planContent, timestamp, sessionId);
+    return okVoid();
   }
 
   isApproved(featureName: string): boolean {

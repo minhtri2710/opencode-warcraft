@@ -221,9 +221,12 @@ export class DispatchCoordinator {
         return fail(depCheck.error || 'Dependencies not met');
       }
 
-      // Reject in-progress tasks only for non-blocked resumes
+      // Reject in-progress or already-dispatching tasks only for non-blocked resumes
       if (taskInfo.status === 'in_progress') {
         return fail(`Task "${task}" already in progress`);
+      }
+      if (taskInfo.status === 'dispatch_prepared') {
+        return fail(`Task "${task}" already being dispatched`);
       }
     }
 
@@ -326,11 +329,11 @@ export class DispatchCoordinator {
         },
       });
 
-      const transitionExtras: Record<string, unknown> = {};
+      const transitionExtras: Record<string, unknown> = { preparedAt: new Date().toISOString() };
       if (continueFrom !== 'blocked' && workspace.mode === 'worktree' && workspace.commit) {
         transitionExtras.baseCommit = workspace.commit;
       }
-      this.deps.taskService.transition(feature, task, 'in_progress', transitionExtras);
+      this.deps.taskService.transition(feature, task, 'dispatch_prepared', transitionExtras);
 
       return {
         task,

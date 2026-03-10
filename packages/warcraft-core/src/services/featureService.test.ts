@@ -3,8 +3,11 @@ import * as childProcess from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import type { FeatureJson } from '../types.js';
 import type { BeadsRepository } from './beads/BeadsRepository.js';
 import { FeatureService } from './featureService';
+import type { OperationOutcome } from './outcomes.js';
+import { isUsable } from './outcomes.js';
 import { createStores } from './state/index.js';
 import { TaskService } from './taskService.js';
 
@@ -85,7 +88,10 @@ describe('FeatureService flat layout', () => {
     // Use offMode to test filesystem-only behavior
     const stores = createStores(testRoot, 'off', mockRepository);
     const service = new FeatureService(testRoot, stores.featureStore, 'off');
-    const feature = service.create('my-feature');
+    const outcome = service.create('my-feature');
+
+    expect(outcome.severity).toBe('ok');
+    if (!isUsable(outcome)) throw new Error('unreachable');
 
     // Feature should be created at docs/<feature> (flat)
     const featurePath = path.join(testRoot, 'docs', 'my-feature');
@@ -96,7 +102,7 @@ describe('FeatureService flat layout', () => {
     const oldPath = path.join(testRoot, 'docs', 'features', 'my-feature');
     expect(fs.existsSync(oldPath)).toBe(false);
 
-    expect(feature.name).toBe('my-feature');
+    expect(outcome.value.name).toBe('my-feature');
   });
 
   it('lists features from canonical flat path excluding .worktrees', () => {
@@ -190,6 +196,28 @@ describe('FeatureService.create', () => {
     expect(fs.existsSync(featurePath)).toBe(false);
   });
 
+  it('returns fatal outcome when feature already exists', () => {
+    const stores = createStores(testRoot, 'off', createMockRepository());
+    const service = new FeatureService(testRoot, stores.featureStore, 'off');
+
+    const first = service.create('my-feature');
+    expect(first.severity).toBe('ok');
+
+    const second = service.create('my-feature');
+    expect(second.severity).toBe('fatal');
+    expect(second.diagnostics[0].code).toBe('feature_already_exists');
+    expect(second.diagnostics[0].message).toContain("Feature 'my-feature' already exists");
+  });
+
+  it('returns fatal outcome for invalid priority', () => {
+    const stores = createStores(testRoot, 'off', createMockRepository());
+    const service = new FeatureService(testRoot, stores.featureStore, 'off');
+
+    const outcome = service.create('my-feature', undefined, 6);
+    expect(outcome.severity).toBe('fatal');
+    expect(outcome.diagnostics[0].code).toBe('invalid_priority');
+  });
+
   it('rolls back partial filesystem state when initialization fails after epic creation', () => {
     const mockRepository = createMockRepository({
       createEpic: () => ({ success: true, value: 'bd-epic-1' }),
@@ -234,14 +262,17 @@ describe('FeatureService.create', () => {
       Promise.resolve().then(() => service.create('race-feature')),
     ]);
 
+    // Both should fulfill (no throws), but one outcome is fatal
     const fulfilled = results.filter(
-      (result): result is PromiseFulfilledResult<unknown> => result.status === 'fulfilled',
+      (result): result is PromiseFulfilledResult<OperationOutcome<FeatureJson>> => result.status === 'fulfilled',
     );
-    const rejected = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
+    expect(fulfilled).toHaveLength(2);
 
-    expect(fulfilled).toHaveLength(1);
-    expect(rejected).toHaveLength(1);
-    expect(String(rejected[0].reason)).toContain("Feature 'race-feature' already exists");
+    const successes = fulfilled.filter((r) => r.value.severity === 'ok');
+    const failures = fulfilled.filter((r) => r.value.severity === 'fatal');
+    expect(successes).toHaveLength(1);
+    expect(failures).toHaveLength(1);
+    expect(failures[0].value.diagnostics[0].message).toContain("Feature 'race-feature' already exists");
   });
 
   it('allows only one winner for concurrent create attempts in beadsMode on', async () => {
@@ -262,14 +293,17 @@ describe('FeatureService.create', () => {
       Promise.resolve().then(() => service.create('race-feature')),
     ]);
 
+    // Both should fulfill (no throws), but one outcome is fatal
     const fulfilled = results.filter(
-      (result): result is PromiseFulfilledResult<unknown> => result.status === 'fulfilled',
+      (result): result is PromiseFulfilledResult<OperationOutcome<FeatureJson>> => result.status === 'fulfilled',
     );
-    const rejected = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
+    expect(fulfilled).toHaveLength(2);
 
-    expect(fulfilled).toHaveLength(1);
-    expect(rejected).toHaveLength(1);
-    expect(String(rejected[0].reason)).toContain("Feature 'race-feature' already exists");
+    const successes = fulfilled.filter((r) => r.value.severity === 'ok');
+    const failures = fulfilled.filter((r) => r.value.severity === 'fatal');
+    expect(successes).toHaveLength(1);
+    expect(failures).toHaveLength(1);
+    expect(failures[0].value.diagnostics[0].message).toContain("Feature 'race-feature' already exists");
     expect(createEpicCalls).toHaveLength(1);
   });
 });
@@ -289,11 +323,14 @@ describe('FeatureService.complete', () => {
     const stores = createStores(testRoot, 'on', mockRepository);
 
     const service = new FeatureService(testRoot, stores.featureStore, 'on');
-    const feature = service.create('my-feature');
-    const completed = service.complete('my-feature');
+    const createOutcome = service.create('my-feature');
+    if (!isUsable(createOutcome)) throw new Error('create failed');
+    const completedOutcome = service.complete('my-feature');
 
-    expect(completed.status).toBe('completed');
-    expect(closeCalls).toContain(feature.epicBeadId);
+    expect(completedOutcome.severity).toBe('ok');
+    if (!isUsable(completedOutcome)) throw new Error('complete failed');
+    expect(completedOutcome.value.status).toBe('completed');
+    expect(closeCalls).toContain(createOutcome.value.epicBeadId);
   });
 
   it('does not close epic bead when beadsMode is off', () => {
@@ -329,12 +366,13 @@ describe('FeatureService beadsMode off', () => {
     const stores = createStores(testRoot, 'off', mockRepository);
 
     const service = new FeatureService(testRoot, stores.featureStore, 'off');
-    const feature = service.create('my-feature');
+    const outcome = service.create('my-feature');
 
     // Should not call createEpic when beadsMode is off
     expect(createEpicCalls).toHaveLength(0);
-    expect(feature.name).toBe('my-feature');
-    expect(feature.epicBeadId).toBe('local-my-feature');
+    if (!isUsable(outcome)) throw new Error('create failed');
+    expect(outcome.value.name).toBe('my-feature');
+    expect(outcome.value.epicBeadId).toBe('local-my-feature');
 
     // Feature should be created at flat path
     const featurePath = path.join(testRoot, 'docs', 'my-feature');
@@ -408,12 +446,13 @@ describe('FeatureService beadsMode on', () => {
     const stores = createStores(testRoot, 'on', mockRepository);
 
     const service = new FeatureService(testRoot, stores.featureStore, 'on');
-    const feature = service.create('my-feature');
+    const outcome = service.create('my-feature');
 
     expect(createEpicCalls).toHaveLength(1);
     expect(createEpicCalls[0].name).toBe('my-feature');
     expect(createEpicCalls[0].priority).toBe(3);
-    expect(feature.epicBeadId).toBe('bd-epic-1');
+    if (!isUsable(outcome)) throw new Error('create failed');
+    expect(outcome.value.epicBeadId).toBe('bd-epic-1');
     expect(fs.existsSync(path.join(testRoot, '.beads', 'artifacts', 'my-feature', 'tasks'))).toBe(false);
   });
 
@@ -620,7 +659,9 @@ describe('FeatureService.patchMetadata', () => {
     const stores = createStores(testRoot, 'off', createMockRepository());
 
     const service = new FeatureService(testRoot, stores.featureStore, 'off');
-    const created = service.create('immutable-fields');
+    const createOutcome = service.create('immutable-fields');
+    if (!isUsable(createOutcome)) throw new Error('create failed');
+    const created = createOutcome.value;
 
     const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
     try {

@@ -89,6 +89,13 @@ async function getStatusHealth(overrides: Partial<Record<string, unknown>> = {})
     tasks: unknown;
     context: unknown;
     worktreeHygiene: unknown;
+    staleDispatches: Array<{
+      folder: string;
+      name: string;
+      preparedAt: string;
+      staleForSeconds: number;
+      hint: string;
+    }> | null;
     nextAction: string;
   };
 }> {
@@ -411,7 +418,6 @@ describe('ContextTools', () => {
       expect(hasChangesCalled).toBe(false);
     });
   });
-
 
   describe('stale worktree age context', () => {
     it('includes ageInDays for stale worktrees with known lastCommitAge', async () => {
@@ -850,6 +856,134 @@ describe('ContextTools', () => {
       expect(hygiene.message).toContain('oldest: 4 days');
       expect(hygiene.message).toContain('Run warcraft_worktree_prune to review and clean up');
       expect(hygiene.message).toContain('warcraft_merge with cleanup: true');
+    });
+  });
+
+  describe('stale dispatch_prepared detection', () => {
+    it('detects tasks stuck in dispatch_prepared for more than 60 seconds', async () => {
+      const staleTimestamp = new Date(Date.now() - 90_000).toISOString(); // 90s ago
+      const taskService = {
+        list: () => [{ folder: '01-setup', name: 'Setup', status: 'dispatch_prepared', origin: 'plan' }],
+        getRawStatus: () => ({
+          status: 'dispatch_prepared',
+          origin: 'plan',
+          preparedAt: staleTimestamp,
+          workerSession: { sessionId: 'sess-1', workspaceMode: 'worktree' },
+        }),
+        computeRunnableStatus: () => ({ runnable: [], blocked: {} }),
+      } as unknown as TaskService;
+
+      const result = await getStatusHealth({ taskService });
+
+      expect(result.data).toHaveProperty('staleDispatches');
+      const staleDispatches = result.data.staleDispatches as Array<{
+        folder: string;
+        name: string;
+        preparedAt: string;
+        staleForSeconds: number;
+        hint: string;
+      }>;
+      expect(staleDispatches).toHaveLength(1);
+      expect(staleDispatches[0].folder).toBe('01-setup');
+      expect(staleDispatches[0].name).toBe('Setup');
+      expect(staleDispatches[0].preparedAt).toBe(staleTimestamp);
+      expect(staleDispatches[0].staleForSeconds).toBeGreaterThanOrEqual(90);
+      expect(staleDispatches[0].hint).toContain('dispatch_prepared');
+      expect(staleDispatches[0].hint).toContain('>60s');
+    });
+
+    it('does not flag dispatch_prepared tasks within 60 seconds', async () => {
+      const recentTimestamp = new Date(Date.now() - 30_000).toISOString(); // 30s ago
+      const taskService = {
+        list: () => [{ folder: '01-setup', name: 'Setup', status: 'dispatch_prepared', origin: 'plan' }],
+        getRawStatus: () => ({
+          status: 'dispatch_prepared',
+          origin: 'plan',
+          preparedAt: recentTimestamp,
+          workerSession: { sessionId: 'sess-1', workspaceMode: 'worktree' },
+        }),
+        computeRunnableStatus: () => ({ runnable: [], blocked: {} }),
+      } as unknown as TaskService;
+
+      const result = await getStatusHealth({ taskService });
+
+      const staleDispatches = (result.data as Record<string, unknown>).staleDispatches;
+      expect(staleDispatches).toBeNull();
+    });
+
+    it('does not flag dispatch_prepared tasks without preparedAt', async () => {
+      const taskService = {
+        list: () => [{ folder: '01-setup', name: 'Setup', status: 'dispatch_prepared', origin: 'plan' }],
+        getRawStatus: () => ({
+          status: 'dispatch_prepared',
+          origin: 'plan',
+          workerSession: { sessionId: 'sess-1', workspaceMode: 'worktree' },
+        }),
+        computeRunnableStatus: () => ({ runnable: [], blocked: {} }),
+      } as unknown as TaskService;
+
+      const result = await getStatusHealth({ taskService });
+
+      const staleDispatches = (result.data as Record<string, unknown>).staleDispatches;
+      expect(staleDispatches).toBeNull();
+    });
+
+    it('includes recovery hint suggesting retry or reset to pending', async () => {
+      const staleTimestamp = new Date(Date.now() - 120_000).toISOString(); // 2min ago
+      const taskService = {
+        list: () => [{ folder: '02-core', name: 'Core API', status: 'dispatch_prepared', origin: 'plan' }],
+        getRawStatus: () => ({
+          status: 'dispatch_prepared',
+          origin: 'plan',
+          preparedAt: staleTimestamp,
+          workerSession: { sessionId: 'sess-2', workspaceMode: 'worktree' },
+        }),
+        computeRunnableStatus: () => ({ runnable: [], blocked: {} }),
+      } as unknown as TaskService;
+
+      const result = await getStatusHealth({ taskService });
+
+      const staleDispatches = result.data.staleDispatches as Array<{ hint: string }>;
+      expect(staleDispatches[0].hint).toContain('retry dispatch');
+      expect(staleDispatches[0].hint).toContain('reset to pending');
+    });
+
+    it('detects multiple stale dispatches', async () => {
+      const staleTimestamp1 = new Date(Date.now() - 90_000).toISOString();
+      const staleTimestamp2 = new Date(Date.now() - 180_000).toISOString();
+      const taskService = {
+        list: () => [
+          { folder: '01-setup', name: 'Setup', status: 'dispatch_prepared', origin: 'plan' },
+          { folder: '02-core', name: 'Core', status: 'dispatch_prepared', origin: 'plan' },
+          { folder: '03-done', name: 'Done', status: 'done', origin: 'plan' },
+        ],
+        getRawStatus: (feature: string, folder: string) => {
+          if (folder === '01-setup') {
+            return {
+              status: 'dispatch_prepared',
+              origin: 'plan',
+              preparedAt: staleTimestamp1,
+              workerSession: { sessionId: 's1', workspaceMode: 'worktree' },
+            };
+          }
+          if (folder === '02-core') {
+            return {
+              status: 'dispatch_prepared',
+              origin: 'plan',
+              preparedAt: staleTimestamp2,
+              workerSession: { sessionId: 's2', workspaceMode: 'worktree' },
+            };
+          }
+          return { status: 'done', origin: 'plan' };
+        },
+        computeRunnableStatus: () => ({ runnable: [], blocked: {} }),
+      } as unknown as TaskService;
+
+      const result = await getStatusHealth({ taskService });
+
+      const staleDispatches = result.data.staleDispatches as Array<{ folder: string }>;
+      expect(staleDispatches).toHaveLength(2);
+      expect(staleDispatches.map((s) => s.folder)).toEqual(['01-setup', '02-core']);
     });
   });
 });

@@ -7,9 +7,9 @@ import { getTaskReportPath } from '../../utils/paths.js';
 import { deriveTaskFolder, slugifyTaskName } from '../../utils/slug.js';
 import { type BeadsRepository, throwIfInitFailure } from '../beads/BeadsRepository.js';
 import { mapBeadStatusToTaskStatus } from '../beads/beadStatus.js';
+import type { Diagnostic } from '../outcomes.js';
 import type { TaskWithDeps } from '../taskDependencyGraph.js';
 import { computeRunnableAndBlocked } from '../taskDependencyGraph.js';
-import type { Diagnostic } from '../outcomes.js';
 import type { BackgroundPatchFields, RunnableTask, RunnableTasksResult } from '../taskService.js';
 import { TASK_STATUS_SCHEMA_VERSION } from '../taskService.js';
 import { TransitionJournal } from './transition-journal.js';
@@ -41,7 +41,6 @@ interface LocalBackgroundState {
   idempotencyKey?: string;
   workerSession?: WorkerSession;
 }
-
 
 /**
  * TaskStore implementation for beadsMode='on'.
@@ -158,7 +157,6 @@ export class BeadsTaskStore implements TaskStore {
     this.moveLocalBackgroundState(featureName, currentFolder, nextFolder);
     this.refreshIndex(featureName);
   }
-
 
   get(featureName: string, folder: string): TaskInfo | null {
     // Check cache first for O(1) lookup
@@ -563,7 +561,9 @@ export class BeadsTaskStore implements TaskStore {
     const diagnostics: Diagnostic[] = [];
     const tasks = this.list(featureName);
     const beadIdToTask = new Map(
-      tasks.filter((task): task is TaskInfo & { beadId: string } => task.beadId !== undefined).map((task) => [task.beadId, task]),
+      tasks
+        .filter((task): task is TaskInfo & { beadId: string } => task.beadId !== undefined)
+        .map((task) => [task.beadId, task]),
     );
 
     const folderToBeadId = new Map<string, string>();
@@ -611,10 +611,7 @@ export class BeadsTaskStore implements TaskStore {
         continue;
       }
 
-      existingDepsByTask.set(
-        task.beadId,
-        new Set(depResult.value.map((dependency) => dependency.id)),
-      );
+      existingDepsByTask.set(task.beadId, new Set(depResult.value.map((dependency) => dependency.id)));
     }
 
     for (const edge of desiredEdges) {
@@ -686,11 +683,7 @@ export class BeadsTaskStore implements TaskStore {
     return diagnostics;
   }
 
-  private createDependencyDiagnostic(
-    code: string,
-    message: string,
-    context: Record<string, unknown>,
-  ): Diagnostic {
+  private createDependencyDiagnostic(code: string, message: string, context: Record<string, unknown>): Diagnostic {
     return {
       code,
       message,
@@ -782,7 +775,6 @@ export class BeadsTaskStore implements TaskStore {
       // Best-effort cleanup for local background overlay directories.
     }
   }
-
 
   private resolveBeadId(featureName: string, folder: string): string | undefined {
     const featureBeadIdIndex = this.beadIdIndex.get(featureName);

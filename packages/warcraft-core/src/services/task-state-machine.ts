@@ -9,7 +9,8 @@ import type { TaskStatusType } from '../types.js';
  * Core invariant: `done -> in_progress` is NEVER allowed in strict mode.
  */
 export const ALLOWED_TRANSITIONS: Record<TaskStatusType, readonly TaskStatusType[]> = {
-  pending: ['in_progress', 'cancelled'],
+  pending: ['in_progress', 'dispatch_prepared', 'cancelled'],
+  dispatch_prepared: ['in_progress', 'cancelled', 'pending'],
   in_progress: ['done', 'blocked', 'failed', 'partial', 'cancelled'],
   done: ['cancelled'],
   cancelled: ['pending'],

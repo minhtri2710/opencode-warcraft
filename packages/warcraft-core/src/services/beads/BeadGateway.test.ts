@@ -129,37 +129,38 @@ describe('BeadGateway', () => {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '');
 
-    const execSpy = spyOn(childProcess, 'execFileSync').mockImplementation(
-      ((_cmd: string, args?: readonly string[]): string => {
-        if (!args) {
-          return '';
-        }
-
-        if (args[0] === '--version') {
-          return 'beads_rust 1.2.3';
-        }
-
-        if (args[0] === 'init') {
-          fs.mkdirSync(path.join(projectRoot, '.beads'), { recursive: true });
-          fs.writeFileSync(path.join(projectRoot, '.beads', 'beads.db'), '');
-          return 'Initialized';
-        }
-
-        if (args[0] === 'config' && args[1] === 'list') {
-          return JSON.stringify({});
-        }
-
-        if (args[0] === 'config' && args[1] === 'set') {
-          return '';
-        }
-
-        if (args[0] === 'create') {
-          return '{"id":"epic-1"}';
-        }
-
+    const execSpy = spyOn(childProcess, 'execFileSync').mockImplementation(((
+      _cmd: string,
+      args?: readonly string[],
+    ): string => {
+      if (!args) {
         return '';
-      }) as typeof childProcess.execFileSync,
-    );
+      }
+
+      if (args[0] === '--version') {
+        return 'beads_rust 1.2.3';
+      }
+
+      if (args[0] === 'init') {
+        fs.mkdirSync(path.join(projectRoot, '.beads'), { recursive: true });
+        fs.writeFileSync(path.join(projectRoot, '.beads', 'beads.db'), '');
+        return 'Initialized';
+      }
+
+      if (args[0] === 'config' && args[1] === 'list') {
+        return JSON.stringify({});
+      }
+
+      if (args[0] === 'config' && args[1] === 'set') {
+        return '';
+      }
+
+      if (args[0] === 'create') {
+        return '{"id":"epic-1"}';
+      }
+
+      return '';
+    }) as typeof childProcess.execFileSync);
 
     const gateway = new BeadGateway(projectRoot);
     expect(gateway.createEpic('my-feature', 3)).toBe('epic-1');
@@ -768,7 +769,6 @@ describe('BeadGateway', () => {
     execSpy.mockRestore();
   });
 
-
   it('repeated upserts append comment snapshots and preserve latest-per-kind reads', () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'beadgw-test-'));
     const commentBodies: string[] = [];
@@ -926,7 +926,6 @@ describe('BeadGateway', () => {
     execSpy.mockRestore();
   });
 
-
   it('removes dependency between beads via br dep remove', () => {
     const execSpy = spyOn(childProcess, 'execFileSync').mockReturnValueOnce('beads_rust 1.2.3').mockReturnValue('');
     const gateway = new BeadGateway('/repo');
@@ -943,6 +942,29 @@ describe('BeadGateway', () => {
     execSpy.mockRestore();
   });
 
+  it('lists dependencies with --direction down --type blocks flags', () => {
+    const fixture = JSON.stringify([{ type: 'blocks', issue: { id: 'dep-1', title: 'Dep Task', status: 'open' } }]);
+    const execSpy = spyOn(childProcess, 'execFileSync')
+      .mockReturnValueOnce('beads_rust 1.2.3')
+      .mockReturnValue(fixture);
+    const gateway = new BeadGateway('/repo');
+
+    const deps = gateway.listDependencies('bd-1');
+
+    expect(deps).toEqual([{ id: 'dep-1', title: 'Dep Task', status: 'open' }]);
+    expect(execSpy).toHaveBeenCalledWith(
+      'br',
+      ['dep', 'list', 'bd-1', '--direction', 'down', '--type', 'blocks', '--json'],
+      {
+        cwd: '/repo',
+        encoding: 'utf-8',
+        timeout: 5_000,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    );
+
+    execSpy.mockRestore();
+  });
   it('lists child beads with --type parent-child filter', () => {
     const execSpy = spyOn(childProcess, 'execFileSync')
       .mockReturnValueOnce('beads_rust 1.2.3')

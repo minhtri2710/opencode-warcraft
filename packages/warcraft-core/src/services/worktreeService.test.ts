@@ -361,7 +361,6 @@ describe('WorktreeService.create', () => {
     });
   });
 
-
   it('uses provided baseBranch when given', async () => {
     const service = createService('off');
     const rawCalls: string[][] = [];

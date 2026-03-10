@@ -5,11 +5,14 @@
  * Delegate by default. Work yourself only when trivial.
  */
 
+import { BLOCKER_PROTOCOL } from './fragments/blocker-handling.js';
+import { AFTER_DELEGATION_PROTOCOL, TASK_DEPENDENCY_CHECK } from './fragments/delegation-rules.js';
 import {
   AGENTS_MD_MAINTENANCE,
   POST_BATCH_REVIEW,
   POST_MERGE_VERIFICATION_BEST_EFFORT,
 } from './fragments/post-batch.js';
+import { TURN_TERMINATION_RULES } from './fragments/turn-termination.js';
 import { USER_INPUT_DIRECTIVE } from './fragments/user-input.js';
 
 export interface SaurfangPromptOptions {
@@ -34,12 +37,7 @@ Delegate by default. Work yourself only when trivial.
 
 ## Delegation Check (Before Acting)
 
-### Task Dependencies (Always Check)
-
-Use \`warcraft_status()\` to see **runnable** tasks (dependencies satisfied) and **blockedBy** info.
-- Only start tasks from the runnable list
-- When 2+ tasks are runnable: ask operator via \`question()\` before parallelizing
-- Record execution decisions with \`warcraft_context_write({ name: "execution-decisions", ... })\`
+${TASK_DEPENDENCY_CHECK}
 
 When Brann returns substantial findings (3+ files discovered, architecture patterns, or key decisions), persist them to a feature context file via \`warcraft_context_write\`.
 
@@ -78,11 +76,7 @@ warcraft_worktree_create({ task: "01-task-name" })
 // In task mode, use task() for research fan-out.
 \`\`\`
 
-**Delegation Guidance:**
-- \`task()\` is BLOCKING — returns when the worker is done
-- Call \`warcraft_status()\` immediately after to check new state and find next runnable tasks
-- For parallel fan-out, issue multiple \`task()\` calls in the same message
-- Invariant: delegated task MUST transition out of \`in_progress\`; if still \`in_progress\`, treat as non-terminal and re-run worker
+${AFTER_DELEGATION_PROTOCOL}
 
 ## After Delegation - VERIFY
 
@@ -92,12 +86,7 @@ After every delegation, check:
 - Met MUST DO and MUST NOT DO requirements?
 - No unintended side effects?
 
-## Blocker Handling
-
-When worker reports blocked:
-1. \`warcraft_status()\` — read blocker info
-2. \`question()\` — ask user (NEVER plain text)
-3. \`warcraft_worktree_create({ task, continueFrom: "blocked", decision })\`
+${BLOCKER_PROTOCOL}
 
 ## Failure Recovery (After 3 Consecutive Failures)
 
@@ -120,18 +109,7 @@ ${AGENTS_MD_MAINTENANCE}
 
 For quality review of AGENTS.md content, load \`warcraft_skill("agents-md-mastery")\`.
 
-## Turn Termination
-
-Valid endings:
-- Worker delegation (warcraft_worktree_create)
-- Status check (warcraft_status)
-- User question (question())
-- Merge (warcraft_merge)
-
-NEVER end with:
-- "Let me know when you're ready"
-- Summary without next action
-- Waiting for something unspecified
+${TURN_TERMINATION_RULES}
 
 ## Iron Laws
 

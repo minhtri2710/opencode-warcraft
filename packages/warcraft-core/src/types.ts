@@ -14,7 +14,15 @@ export interface FeatureJson {
   completedAt?: string;
 }
 
-export type TaskStatusType = 'pending' | 'in_progress' | 'done' | 'cancelled' | 'blocked' | 'failed' | 'partial';
+export type TaskStatusType =
+  | 'pending'
+  | 'in_progress'
+  | 'dispatch_prepared'
+  | 'done'
+  | 'cancelled'
+  | 'blocked'
+  | 'failed'
+  | 'partial';
 export type TaskOrigin = 'plan' | 'manual';
 export type WorkspaceMode = 'worktree' | 'direct';
 /** Worker session information for background task execution */
@@ -72,6 +80,8 @@ export interface TaskStatus {
   dependsOn?: string[];
   /** Blocker details when status is 'blocked'. */
   blocker?: TaskBlocker;
+  /** ISO timestamp when the task transitioned to dispatch_prepared. Used for stale dispatch detection. */
+  preparedAt?: string;
   /** Task folder name (e.g., '01-setup'). Persisted for stable identity across reordering. */
   folder?: string;
   /** Learnings surfaced by the worker upon task completion (done tasks only). */

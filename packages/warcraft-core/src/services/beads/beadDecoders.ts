@@ -93,6 +93,7 @@ export function decodeListItems(output: string, target: string): ListItem[] {
  * Known shapes per dependency item:
  * - `{ type, issue: { id, title, status, issue_type } }` (embedded)
  * - `{ type, id, title, status }` (flat)
+ * - `{ issue_id, depends_on_id, dep_type }` (documented CLI schema)
  * - Wrapper object with array under envelope key.
  */
 export function decodeDependentIssues(
@@ -107,7 +108,7 @@ export function decodeDependentIssues(
   const children = new Map<string, ListItem>();
   for (const dependency of dependencies) {
     const dep = dependency as Record<string, unknown>;
-    const relationType = dep.type ? String(dep.type) : undefined;
+    const relationType = dep.type ? String(dep.type) : dep.dep_type ? String(dep.dep_type) : undefined;
     if (relationType && relationType !== acceptedRelationType) {
       continue;
     }

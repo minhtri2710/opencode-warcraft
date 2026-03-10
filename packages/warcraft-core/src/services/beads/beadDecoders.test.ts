@@ -94,6 +94,48 @@ describe('beadDecoders', () => {
       const items = decodeDependentIssues(output, 'test', 'parent-child', 'task');
       expect(items[0].type).toBe('task');
     });
+
+    it('decodes documented schema format {issue_id, depends_on_id, dep_type}', () => {
+      const output = JSON.stringify([{ issue_id: 'bd-abc', depends_on_id: 'bd-def', dep_type: 'blocks' }]);
+      const items = decodeDependentIssues(output, 'test', 'blocks');
+      expect(items).toHaveLength(1);
+      expect(items[0]).toEqual({ id: 'bd-abc', title: '', status: '', type: undefined });
+    });
+
+    it('filters documented schema by dep_type', () => {
+      const output = JSON.stringify([
+        { issue_id: 'bd-1', depends_on_id: 'bd-2', dep_type: 'blocks' },
+        { issue_id: 'bd-3', depends_on_id: 'bd-4', dep_type: 'parent-child' },
+      ]);
+      const items = decodeDependentIssues(output, 'test', 'blocks');
+      expect(items).toHaveLength(1);
+      expect(items[0].id).toBe('bd-1');
+    });
+
+    it('decodes mixed formats in the same response', () => {
+      const output = JSON.stringify([
+        { type: 'parent-child', issue: { id: 't-1', title: 'Embedded', status: 'open' } },
+        { type: 'parent-child', id: 't-2', title: 'Flat', status: 'closed' },
+        { issue_id: 't-3', depends_on_id: 't-0', dep_type: 'parent-child' },
+      ]);
+      const items = decodeDependentIssues(output, 'test', 'parent-child');
+      expect(items).toHaveLength(3);
+      expect(items[0].id).toBe('t-1');
+      expect(items[1].id).toBe('t-2');
+      expect(items[2].id).toBe('t-3');
+    });
+
+    it('skips items with unknown format (no id or issue_id)', () => {
+      const output = JSON.stringify([{ depends_on_id: 'bd-def', dep_type: 'blocks' }, { random_field: 'value' }]);
+      const items = decodeDependentIssues(output, 'test', 'blocks');
+      expect(items).toEqual([]);
+    });
+
+    it('applies issueTypeHint for documented schema items', () => {
+      const output = JSON.stringify([{ issue_id: 'bd-1', depends_on_id: 'bd-2', dep_type: 'parent-child' }]);
+      const items = decodeDependentIssues(output, 'test', 'parent-child', 'task');
+      expect(items[0].type).toBe('task');
+    });
   });
 
   describe('decodeTasksFromDepList', () => {

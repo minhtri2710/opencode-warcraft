@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { isUsable } from './outcomes.js';
 import { PlanService } from './planService';
 import { createStores } from './state/index.js';
 
@@ -415,5 +416,40 @@ describe('PlanService bead-backed approval (beadsMode: on)', () => {
     const featureJsonPath = path.join(testRoot, '.beads', 'artifacts', 'write-resets', 'feature.json');
     const localFeature = JSON.parse(fs.readFileSync(featureJsonPath, 'utf-8'));
     expect(localFeature.status).toBe('planning');
+  });
+
+  it('approve() returns ok outcome on success', () => {
+    const planContent = '# My Plan\n\nContent';
+    setupFeatureWithPlan('bead-approve-ok', planContent);
+    const mockRepo = new MockBeadsRepository();
+    const stores = createStores(testRoot, 'on', mockRepo as any);
+    const service = new PlanService(testRoot, stores.planStore, 'on');
+
+    const outcome = service.approve('bead-approve-ok');
+    expect(outcome.severity).toBe('ok');
+    expect(outcome.diagnostics).toHaveLength(0);
+  });
+
+  it('approve() returns fatal outcome when plan not found', () => {
+    // Create feature dir but no plan.md
+    const featurePath = path.join(testRoot, '.beads', 'artifacts', 'no-plan');
+    fs.mkdirSync(featurePath, { recursive: true });
+    fs.writeFileSync(
+      path.join(featurePath, 'feature.json'),
+      JSON.stringify({
+        name: 'no-plan',
+        epicBeadId: 'epic-1',
+        status: 'planning',
+        createdAt: new Date().toISOString(),
+      }),
+    );
+
+    const stores = createStores(testRoot, 'on', new MockBeadsRepository() as any);
+    const service = new PlanService(testRoot, stores.planStore, 'on');
+
+    const outcome = service.approve('no-plan');
+    expect(outcome.severity).toBe('fatal');
+    expect(outcome.diagnostics[0].code).toBe('plan_not_found');
+    expect(outcome.diagnostics[0].message).toContain('no-plan');
   });
 });

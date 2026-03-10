@@ -20,6 +20,7 @@ import {
   checkWarnings,
 } from '../utils/prompt-observability.js';
 import { getVerificationCommandsForCwd } from '../utils/runtime-commands.js';
+import { sanitizeLearnings } from '../utils/sanitize.js';
 import { DEFAULT_BUDGET } from './task-dispatch.js';
 import { resolveFeatureInput, validateTaskInput } from './tool-input.js';
 
@@ -36,17 +37,6 @@ function createTaskTrace(eventLogger: EventLogger, feature: string, task: string
 }
 
 type CompletionGate = 'build' | 'test' | 'lint';
-
-/**
- * Sanitise a `learnings` value so that malformed payloads
- * (non-array, non-string elements, empty / whitespace-only strings)
- * are silently discarded rather than persisted or causing a crash.
- */
-function sanitizeLearnings(raw: unknown): string[] | undefined {
-  if (!Array.isArray(raw)) return undefined;
-  const valid = raw.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
-  return valid.length > 0 ? valid : undefined;
-}
 
 export interface WorktreeToolsDependencies {
   featureService: FeatureService;
@@ -141,6 +131,9 @@ export class WorktreeTools {
         if (!dispatchResult.success) {
           return toolError(dispatchResult.error || 'Dispatch failed');
         }
+
+        // Transition from dispatch_prepared to in_progress now that worker is starting
+        taskService.transition(feature, task, 'in_progress');
 
         // --- UX layer: idempotency key, observability, response formatting ---
 
@@ -454,7 +447,11 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
         };
 
         if (workspaceMode === 'worktree') {
-          commitResult = await worktreeService.commitChanges(feature, task, `warcraft(${task}): ${summary.slice(0, 50)}`);
+          commitResult = await worktreeService.commitChanges(
+            feature,
+            task,
+            `warcraft(${task}): ${summary.slice(0, 50)}`,
+          );
 
           const baseCommit =
             typeof rawStatus?.baseCommit === 'string' && rawStatus.baseCommit.trim().length > 0
@@ -538,7 +535,9 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
             '',
             '## Changes',
             '',
-            workspaceMode === 'worktree' ? '_No file changes detected_' : '_Direct-mode execution; git diff is not available._',
+            workspaceMode === 'worktree'
+              ? '_No file changes detected_'
+              : '_Direct-mode execution; git diff is not available._',
             '',
           );
         }

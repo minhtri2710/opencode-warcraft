@@ -1,10 +1,8 @@
-import * as fs from 'fs';
 import * as path from 'path';
 import {
   AgentsMdService,
   BeadsRepository,
   BvTriageService,
-  buildEffectiveDependencies,
   type ConfigService,
   ContextService,
   computeTrustMetrics,
@@ -21,17 +19,22 @@ import {
 } from 'warcraft-core';
 import { COMPLETION_GATES, hasCompletionGateEvidence, isPathInside, validateTaskStatus } from './guards.js';
 import { createBuiltinMcps } from './mcp/index.js';
+import { createCheckBlocked } from './services/blocked-check.js';
+import { createCheckDependencies } from './services/dependency-check.js';
+import { createResolveFeature } from './services/feature-resolution.js';
+import { createCaptureSession, createUpdateFeatureMetadata } from './services/session-capture.js';
 import { getFilteredSkills } from './skills/builtin.js';
 import {
   BatchTools,
   ContextTools,
+  DoctorTools,
   FeatureTools,
   PlanTools,
   SkillTools,
   TaskTools,
   WorktreeTools,
 } from './tools/index.js';
-import type { BlockedResult, ToolContext } from './types.js';
+import type { BlockedResult } from './types.js';
 
 // ============================================================================
 // Service Composition Root
@@ -69,6 +72,7 @@ export interface WarcraftContainer {
   worktreeTools: WorktreeTools;
   batchTools: BatchTools;
   contextTools: ContextTools;
+  doctorTools: DoctorTools;
   skillTools: SkillTools;
   parallelExecution?: { strategy?: 'unbounded' | 'bounded'; maxConcurrency?: number };
 }
@@ -99,146 +103,15 @@ export function createWarcraftContainer(directory: string, configService: Config
     }
   ).parallelExecution;
 
-  // --- Feature resolution ---
+  // --- Extracted business logic (wired via factory functions) ---
 
-  const resolveFeature = (explicit?: string): string | null => {
-    const listFeaturesSafe = (): string[] => {
-      try {
-        return featureService.list();
-      } catch (error) {
-        const reason = error instanceof Error ? error.message : String(error);
-        console.warn(`[warcraft] Failed to list features (degraded: resolving as empty): ${reason}`);
-        return [];
-      }
-    };
-
-    if (explicit) {
-      return explicit;
-    }
-
-    const context = detectContext(directory);
-    if (context.feature) {
-      return context.feature;
-    }
-
-    const features = listFeaturesSafe();
-    if (features.length === 1) return features[0];
-
-    return null;
-  };
-
-  // --- Session & metadata helpers ---
-
-  const captureSession = (feature: string, toolContext: unknown) => {
-    const ctx = toolContext as ToolContext;
-    if (ctx?.sessionID) {
-      try {
-        const currentSession = featureService.getSession(feature);
-        if (currentSession !== ctx.sessionID) {
-          featureService.setSession(feature, ctx.sessionID);
-        }
-      } catch (error) {
-        const reason = error instanceof Error ? error.message : String(error);
-        console.warn(`[warcraft] Failed to capture session for '${feature}' (best-effort): ${reason}`);
-      }
-    }
-  };
-
-  const updateFeatureMetadata = (
-    feature: string,
-    patch: {
-      workflowPath?: 'standard' | 'lightweight';
-      reviewChecklistVersion?: 'v1';
-      reviewChecklistCompletedAt?: string;
-    },
-  ): void => {
-    try {
-      const exists = featureService.get(feature);
-      if (exists) {
-        featureService.patchMetadata(feature, patch);
-      }
-    } catch (error) {
-      const reason = error instanceof Error ? error.message : String(error);
-      console.warn(`[warcraft] Failed to update feature metadata for '${feature}' (best-effort): ${reason}`);
-    }
-  };
-
-  // --- Blocked check ---
-
-  const checkBlocked = (feature: string): BlockedResult => {
-    const blockedPath = path.join(getFeaturePath(directory, feature, configService.getBeadsMode()), 'BLOCKED');
-    try {
-      const reason = fs.readFileSync(blockedPath, 'utf-8').trim();
-      const message = `⛔ BLOCKED by Commander
-
-${reason || '(No reason provided)'}
-
-The human has blocked this feature. Wait for them to unblock it.
-To unblock: Remove ${blockedPath}`;
-      return { blocked: true, reason, message, blockedPath };
-    } catch {
-      // BLOCKED file does not exist — feature is not blocked
-      return { blocked: false };
-    }
-  };
-
-  // --- Dependency checking ---
-
-  const checkDependencies = (feature: string, taskFolder: string): { allowed: boolean; error?: string } => {
-    const taskStatus = taskService.getRawStatus(feature, taskFolder);
-    if (!taskStatus) {
-      return { allowed: true };
-    }
-
-    const tasks = taskService.list(feature).map((task) => {
-      const status = taskService.getRawStatus(feature, task.folder);
-      return {
-        folder: task.folder,
-        status: task.status,
-        dependsOn: status?.dependsOn,
-      };
-    });
-
-    const effectiveDeps = buildEffectiveDependencies(tasks);
-    const deps = effectiveDeps.get(taskFolder) ?? [];
-
-    if (deps.length === 0) {
-      return { allowed: true };
-    }
-
-    const unmetDeps: Array<{ folder: string; status: string }> = [];
-
-    for (const depFolder of deps) {
-      const depStatus = taskService.getRawStatus(feature, depFolder);
-
-      if (!depStatus || depStatus.status !== 'done') {
-        unmetDeps.push({
-          folder: depFolder,
-          status: depStatus?.status ?? 'unknown',
-        });
-      }
-    }
-
-    if (unmetDeps.length > 0) {
-      const depList = unmetDeps.map((d) => `"${d.folder}" (${d.status})`).join(', ');
-      const triage = taskStatus.beadId ? bvTriageService.getBlockerTriage(taskStatus.beadId) : null;
-      const bvHealth = bvTriageService.getHealth();
-      const triageHint = triage
-        ? ` Beads triage (bv): ${triage.summary}`
-        : bvHealth.lastError
-          ? ` Beads triage (bv unavailable): ${bvHealth.lastError}`
-          : '';
-
-      return {
-        allowed: false,
-        error:
-          `Dependency constraint: Task "${taskFolder}" cannot start - dependencies not done: ${depList}. ` +
-          `Only tasks with status 'done' satisfy dependencies.${triageHint}`,
-      };
-    }
-
-    return { allowed: true };
-  };
+  const resolveFeature = createResolveFeature(directory, featureService, detectContext);
+  const captureSession = createCaptureSession(featureService);
+  const updateFeatureMetadata = createUpdateFeatureMetadata(featureService);
+  const checkBlocked = createCheckBlocked((feature: string) =>
+    getFeaturePath(directory, feature, configService.getBeadsMode()),
+  );
+  const checkDependencies = createCheckDependencies(taskService, bvTriageService);
 
   // --- Tool modules ---
 
@@ -314,6 +187,12 @@ To unblock: Remove ${blockedPath}`;
     projectRoot: directory,
   });
   const skillTools = new SkillTools({ filteredSkills });
+  const doctorTools = new DoctorTools({
+    featureService,
+    taskService,
+    worktreeService,
+    checkBlocked,
+  });
 
   return {
     featureService,
@@ -339,6 +218,7 @@ To unblock: Remove ${blockedPath}`;
     worktreeTools,
     batchTools,
     contextTools,
+    doctorTools,
     skillTools,
     parallelExecution,
   };

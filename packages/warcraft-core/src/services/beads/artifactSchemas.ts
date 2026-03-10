@@ -40,7 +40,7 @@ export interface VersionedArtifact {
  */
 export interface TaskStateArtifact extends VersionedArtifact {
   /** Current task status */
-  status: 'pending' | 'in_progress' | 'done' | 'cancelled' | 'blocked' | 'failed' | 'partial';
+  status: 'pending' | 'in_progress' | 'dispatch_prepared' | 'done' | 'cancelled' | 'blocked' | 'failed' | 'partial';
   /** Task origin: plan or manual */
   origin: 'plan' | 'manual';
   /** Plan section title (optional) */

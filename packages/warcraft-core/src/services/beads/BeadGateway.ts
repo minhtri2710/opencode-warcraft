@@ -96,6 +96,8 @@ export class BeadGateway {
     }
 
     try {
+      // br config uses positional subcommands: `br config set <key> <value>` (also accepts key=value).
+      // The CLI Reference may document flag style (--set KEY=VALUE) but that is NOT supported.
       this.executeBr(['config', 'set', 'issue_prefix', desiredPrefix]);
     } catch (error) {
       throw new BeadGatewayError(
@@ -110,6 +112,8 @@ export class BeadGateway {
     let output = '';
 
     try {
+      // br config uses positional subcommands: `br config list --json`.
+      // The CLI Reference may document flag style (--list) but that is NOT supported.
       output = this.executeBr(['config', 'list', '--json']);
     } catch (error) {
       throw new BeadGatewayError(
@@ -198,7 +202,6 @@ export class BeadGateway {
       (details.includes('not found') || details.includes('does not exist') || details.includes('no such'))
     );
   }
-
 
   private isRepositoryInitializedOnDisk(): boolean {
     return existsSync(join(this.projectRoot, '.beads', 'beads.db'));
@@ -433,11 +436,9 @@ export class BeadGateway {
 
   addDependency(beadId: string, dependsOnBeadId: string): void {
     this.ensurePreflight();
-    this.runBr(
-      ['dep', 'add', beadId, dependsOnBeadId],
-      `add dependency: '${beadId}' depends on '${dependsOnBeadId}'`,
-      { isBenignError: (error) => this.isDependencyAlreadyPresentError(error) },
-    );
+    this.runBr(['dep', 'add', beadId, dependsOnBeadId], `add dependency: '${beadId}' depends on '${dependsOnBeadId}'`, {
+      isBenignError: (error) => this.isDependencyAlreadyPresentError(error),
+    });
   }
 
   removeDependency(beadId: string, dependsOnBeadId: string): void {
@@ -665,11 +666,7 @@ export class BeadGateway {
   // runBr: consolidated retry logic for NOT_INITIALIZED
   // ---------------------------------------------------------------------------
 
-  private runBr(
-    args: string[],
-    operation: string,
-    options?: { isBenignError?: (error: unknown) => boolean },
-  ): string {
+  private runBr(args: string[], operation: string, options?: { isBenignError?: (error: unknown) => boolean }): string {
     const shouldAttemptReinit = args[0] !== 'init';
     const isBenignError = (error: unknown): boolean => options?.isBenignError?.(error) ?? false;
 
@@ -718,7 +715,7 @@ export class BeadGateway {
 
           throw new BeadGatewayError(
             'command_error',
-            `Failed to ${operation} [BR_COMMAND_FAILED]: ${this.getSafeFailureReason(retryError)}` ,
+            `Failed to ${operation} [BR_COMMAND_FAILED]: ${this.getSafeFailureReason(retryError)}`,
             'BR_COMMAND_FAILED',
           );
         }

@@ -9,6 +9,7 @@ import type { TaskStatusType } from 'warcraft-core';
 const VALID_TASK_STATUSES = new Set<string>([
   'pending',
   'in_progress',
+  'dispatch_prepared',
   'done',
   'cancelled',
   'blocked',

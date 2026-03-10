@@ -13,6 +13,7 @@ describe('task-state-machine', () => {
       const allStatuses: TaskStatusType[] = [
         'pending',
         'in_progress',
+        'dispatch_prepared',
         'done',
         'cancelled',
         'blocked',
@@ -24,9 +25,16 @@ describe('task-state-machine', () => {
       }
     });
 
-    it('pending can transition to in_progress and cancelled', () => {
+    it('pending can transition to in_progress, dispatch_prepared, and cancelled', () => {
       expect(ALLOWED_TRANSITIONS.pending).toContain('in_progress');
+      expect(ALLOWED_TRANSITIONS.pending).toContain('dispatch_prepared');
       expect(ALLOWED_TRANSITIONS.pending).toContain('cancelled');
+    });
+
+    it('dispatch_prepared can transition to in_progress, cancelled, and pending', () => {
+      expect(ALLOWED_TRANSITIONS.dispatch_prepared).toContain('in_progress');
+      expect(ALLOWED_TRANSITIONS.dispatch_prepared).toContain('cancelled');
+      expect(ALLOWED_TRANSITIONS.dispatch_prepared).toContain('pending');
     });
 
     it('in_progress can transition to done, blocked, failed, partial, and cancelled', () => {
@@ -70,6 +78,8 @@ describe('task-state-machine', () => {
   describe('isTransitionAllowed', () => {
     it('returns true for allowed transitions', () => {
       expect(isTransitionAllowed('pending', 'in_progress')).toBe(true);
+      expect(isTransitionAllowed('pending', 'dispatch_prepared')).toBe(true);
+      expect(isTransitionAllowed('dispatch_prepared', 'in_progress')).toBe(true);
       expect(isTransitionAllowed('in_progress', 'done')).toBe(true);
       expect(isTransitionAllowed('in_progress', 'blocked')).toBe(true);
       expect(isTransitionAllowed('blocked', 'in_progress')).toBe(true);

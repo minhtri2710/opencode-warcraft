@@ -73,8 +73,8 @@ export function buildWorkerPrompt(params: WorkerPromptParams): string {
 
   const continuationLocation =
     workspaceMode === 'worktree'
-      ? 'The worktree already contains the previous worker\'s progress.'
-      : 'The project root already contains the previous worker\'s progress.';
+      ? "The worktree already contains the previous worker's progress."
+      : "The project root already contains the previous worker's progress.";
   const continuationSection = continueFrom
     ? `
 ## Continuation from Blocked State
@@ -122,10 +122,7 @@ This is a complex task. Break implementation into smaller verified steps.
     workspaceMode === 'worktree'
       ? 'You are a worker agent executing a task in an isolated git worktree.'
       : 'You are a worker agent executing a task directly in the project root (direct mode, no git worktree isolation).';
-  const branchRow =
-    workspaceMode === 'worktree'
-      ? `| Branch | ${branch} |`
-      : '| Branch | n/a (direct mode) |';
+  const branchRow = workspaceMode === 'worktree' ? `| Branch | ${branch} |` : '| Branch | n/a (direct mode) |';
   const workspaceRestriction =
     workspaceMode === 'worktree'
       ? `**CRITICAL**: All file operations MUST be within this worktree path:\n\`${workspacePath}\`\n\nDo NOT modify files outside this directory.`

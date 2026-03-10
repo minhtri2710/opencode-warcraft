@@ -227,9 +227,7 @@ describe('TaskTools', () => {
         created: [],
         removed: [],
         kept: ['03-keep-existing'],
-        reconciled: [
-          { from: '02-old-task', to: '01-test-task', planTitle: 'Test Task', beadId: 'task-1' },
-        ],
+        reconciled: [{ from: '02-old-task', to: '01-test-task', planTitle: 'Test Task', beadId: 'task-1' }],
         manual: ['99-manual-task'],
       };
 
@@ -249,9 +247,7 @@ describe('TaskTools', () => {
         created: ['01-test-task'],
         removed: [],
         kept: [],
-        reconciled: [
-          { from: '02-old-task', to: '01-test-task', planTitle: 'Test Task', beadId: 'task-1' },
-        ],
+        reconciled: [{ from: '02-old-task', to: '01-test-task', planTitle: 'Test Task', beadId: 'task-1' }],
         manual: [],
         diagnostics: [{ code: 'dep_sync_failed', message: 'Dependency sync failed', severity: 'degraded' }],
       };
@@ -270,8 +266,6 @@ describe('TaskTools', () => {
       expect(parsed.data.message).toContain('1 reconciled');
     });
   });
-
-
 });
 
 // ============================================================================

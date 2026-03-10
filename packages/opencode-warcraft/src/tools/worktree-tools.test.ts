@@ -877,7 +877,6 @@ describe('direct workspace mode', () => {
   });
 });
 
-
 /** Parse tool result JSON string into data object */
 function parseCommitResult(result: unknown): Record<string, unknown> {
   const json = JSON.parse(result as string);

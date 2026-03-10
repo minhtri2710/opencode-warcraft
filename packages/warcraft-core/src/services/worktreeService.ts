@@ -102,7 +102,6 @@ export class WorktreeService {
     );
   }
 
-
   private getWorktreesDir(): string {
     return path.join(this.config.warcraftDir, '.worktrees');
   }

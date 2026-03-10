@@ -8,6 +8,7 @@ export {
   getTaskDispatchLockPath,
   releaseAllDispatchLocks,
 } from './dispatch-task.js';
+export { DoctorTools, type DoctorToolsDependencies } from './doctor-tool.js';
 export { FeatureTools, type FeatureToolsDependencies } from './feature-tools.js';
 export { PlanTools, type PlanToolsDependencies } from './plan-tools.js';
 export { SkillTools, type SkillToolsDependencies } from './skill-tools.js';

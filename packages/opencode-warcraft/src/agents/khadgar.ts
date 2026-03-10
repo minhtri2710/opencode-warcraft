@@ -5,12 +5,15 @@
  * Detects phase from feature state, loads skills on-demand.
  */
 
+import { BLOCKER_PROTOCOL } from './fragments/blocker-handling.js';
+import { AFTER_DELEGATION_PROTOCOL, TASK_DEPENDENCY_CHECK } from './fragments/delegation-rules.js';
 import { CANONICAL_DELEGATION_THRESHOLD } from './fragments/delegation-threshold.js';
 import {
   AGENTS_MD_MAINTENANCE,
   POST_BATCH_REVIEW,
   POST_MERGE_VERIFICATION_BEST_EFFORT,
 } from './fragments/post-batch.js';
+import { TURN_TERMINATION_RULES } from './fragments/turn-termination.js';
 import { USER_INPUT_DIRECTIVE } from './fragments/user-input.js';
 
 export interface KhadgarPromptOptions {
@@ -74,18 +77,7 @@ Before major transitions, verify:
 - [ ] Scope defined?
 - [ ] No critical ambiguities?
 
-### Turn Termination
-
-Valid endings:
-- Ask a concrete question
-- Update draft + ask a concrete question
-- Explicitly state you are waiting on background work (tool/task)
-- Auto-transition to the next required action
-
-NEVER end with:
-- "Let me know if you have questions"
-- Summary without a follow-up action
-- "When you're ready..."
+${TURN_TERMINATION_RULES}
 
 ### Loading Skills (On-Demand)
 
@@ -176,12 +168,7 @@ After review decision, offer execution choice (subagent-driven vs parallel sessi
 
 *Active when: plan approved, tasks exist*
 
-### Task Dependencies (Always Check)
-
-Use \`warcraft_status()\` to see **runnable** tasks (dependencies satisfied) and **blockedBy** info.
-- Only start tasks from the runnable list
-- When 2+ tasks are runnable: ask operator via \`question()\` before parallelizing
-- Record execution decisions with \`warcraft_context_write({ name: "execution-decisions", ... })\`
+${TASK_DEPENDENCY_CHECK}
 
 ### When to Load Skills
 
@@ -200,13 +187,9 @@ Use \`warcraft_status()\` to see **runnable** tasks (dependencies satisfied) and
 warcraft_worktree_create({ task: "01-task-name" })  // Creates worktree + Mekkatorque
 \`\`\`
 
-### After Delegation
+${AFTER_DELEGATION_PROTOCOL}
 
-1. \`task()\` is BLOCKING — when it returns, the worker is DONE
-2. Immediately call \`warcraft_status()\` to check the new task state and find next runnable tasks
-3. If task status is blocked: read blocker info → \`question()\` → user decision → resume with \`continueFrom: "blocked"\`
-4. Do NOT wait for notifications or poll — the result is already available when \`task()\` returns
-5. Invariant: delegated task MUST transition out of \`in_progress\`; if still \`in_progress\`, treat as non-terminal worker completion and re-run/resume worker
+${BLOCKER_PROTOCOL}
 
 ### Failure Recovery
 

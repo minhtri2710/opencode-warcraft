@@ -100,7 +100,7 @@ As you research and plan, CONTINUOUSLY save findings using \`warcraft_context_wr
 
 ### Execution Phase - Stay Aligned
 
-During execution, call \`warcraft_status\` periodically to:
+During execution, call \`warcraft_status\` periodically to (not after context compaction, where state is already preserved):
 - Check current progress and pending work
 - See context files to read
 - Get reminded of next actions
@@ -208,6 +208,7 @@ const plugin: Plugin = async (ctx) => {
       warcraft_context_write: container.contextTools.writeContextTool(container.resolveFeature),
       warcraft_status: container.contextTools.getStatusTool(container.resolveFeature),
       warcraft_agents_md: container.contextTools.agentsMdTool(),
+      warcraft_doctor: container.doctorTools.doctorTool(),
     },
 
     command: {

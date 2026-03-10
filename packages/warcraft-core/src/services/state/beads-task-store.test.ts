@@ -123,7 +123,6 @@ describe('BeadsTaskStore reconciliation', () => {
   });
 });
 
-
 describe('BeadsTaskStore caching layer', () => {
   it('get() uses cache for existing tasks after list() is called', () => {
     let listCallCount = 0;
@@ -509,7 +508,13 @@ describe('BeadsTaskStore caching layer', () => {
           success: true as const,
           value:
             beadId === 'task-1'
-              ? { folder: '01-task-1', status: 'pending', origin: 'plan', planTitle: 'Task 1', dependsOn: ['02-task-2'] }
+              ? {
+                  folder: '01-task-1',
+                  status: 'pending',
+                  origin: 'plan',
+                  planTitle: 'Task 1',
+                  dependsOn: ['02-task-2'],
+                }
               : { folder: '02-task-2', status: 'pending', origin: 'plan', planTitle: 'Task 2', dependsOn: [] },
         }),
         listDependencies: () => ({ success: true as const, value: [] }),
@@ -544,7 +549,13 @@ describe('BeadsTaskStore caching layer', () => {
           success: true as const,
           value:
             beadId === 'task-1'
-              ? { folder: '01-task-1', status: 'pending', origin: 'plan', planTitle: 'Task 1', dependsOn: ['02-task-2'] }
+              ? {
+                  folder: '01-task-1',
+                  status: 'pending',
+                  origin: 'plan',
+                  planTitle: 'Task 1',
+                  dependsOn: ['02-task-2'],
+                }
               : { folder: '02-task-2', status: 'pending', origin: 'plan', planTitle: 'Task 2', dependsOn: [] },
         }),
         listDependencies: (beadId: string) => ({
@@ -619,7 +630,13 @@ describe('BeadsTaskStore caching layer', () => {
           success: true as const,
           value:
             beadId === 'task-1'
-              ? { folder: '01-task-1', status: 'pending', origin: 'plan', planTitle: 'Task 1', dependsOn: ['02-task-2'] }
+              ? {
+                  folder: '01-task-1',
+                  status: 'pending',
+                  origin: 'plan',
+                  planTitle: 'Task 1',
+                  dependsOn: ['02-task-2'],
+                }
               : { folder: '02-task-2', status: 'pending', origin: 'plan', planTitle: 'Task 2', dependsOn: [] },
         }),
         listDependencies: () => ({ success: true as const, value: [] }),
@@ -640,7 +657,6 @@ describe('BeadsTaskStore caching layer', () => {
       expect(diagnostics[0]?.message).toContain('task-1 -> task-2');
     });
   });
-
 
   it('getRunnableTasks() calls list() at most once even when processing many tasks', () => {
     let listCallCount = 0;

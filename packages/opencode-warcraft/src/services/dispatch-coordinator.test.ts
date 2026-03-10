@@ -125,7 +125,7 @@ describe('DispatchCoordinator', () => {
   // --------------------------------------------------------------------------
 
   describe('premature state mutation regression', () => {
-    it('does NOT set task to in_progress when prepareTaskDispatch fails', async () => {
+    it('does NOT set task to dispatch_prepared when prepareTaskDispatch fails', async () => {
       const tracker = createTransitionTracker();
       const deps = createMockDeps({
         taskService: {
@@ -143,12 +143,12 @@ describe('DispatchCoordinator', () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('Spec assembly explosion');
-      // CRITICAL: task should NOT have been set to in_progress
-      const inProgressTransitions = tracker.calls.filter((c) => c.toStatus === 'in_progress');
-      expect(inProgressTransitions.length).toBe(0);
+      // CRITICAL: task should NOT have been set to dispatch_prepared or in_progress
+      const dispatchPreparedTransitions = tracker.calls.filter((c) => c.toStatus === 'dispatch_prepared');
+      expect(dispatchPreparedTransitions.length).toBe(0);
     });
 
-    it('does NOT set task to in_progress when writeWorkerPrompt fails', async () => {
+    it('does NOT set task to dispatch_prepared when writeWorkerPrompt fails', async () => {
       const tracker = createTransitionTracker();
       const deps = createMockDeps({
         taskService: {
@@ -164,12 +164,12 @@ describe('DispatchCoordinator', () => {
       const result = await coordinator.dispatch(createRequest());
 
       expect(result.success).toBe(false);
-      // CRITICAL: task should NOT have been set to in_progress
-      const inProgressTransitions = tracker.calls.filter((c) => c.toStatus === 'in_progress');
-      expect(inProgressTransitions.length).toBe(0);
+      // CRITICAL: task should NOT have been set to dispatch_prepared or in_progress
+      const dispatchPreparedTransitions = tracker.calls.filter((c) => c.toStatus === 'dispatch_prepared');
+      expect(dispatchPreparedTransitions.length).toBe(0);
     });
 
-    it('sets task to in_progress ONLY after prep succeeds', async () => {
+    it('sets task to dispatch_prepared ONLY after prep succeeds', async () => {
       const tracker = createTransitionTracker();
       const deps = createMockDeps({
         taskService: {
@@ -182,9 +182,9 @@ describe('DispatchCoordinator', () => {
       const result = await coordinator.dispatch(createRequest());
 
       expect(result.success).toBe(true);
-      // Task should now be in_progress via transition()
-      const inProgressTransitions = tracker.calls.filter((c) => c.toStatus === 'in_progress');
-      expect(inProgressTransitions.length).toBe(1);
+      // Task should now be dispatch_prepared via transition()
+      const dispatchPreparedTransitions = tracker.calls.filter((c) => c.toStatus === 'dispatch_prepared');
+      expect(dispatchPreparedTransitions.length).toBe(1);
     });
   });
 
@@ -369,9 +369,9 @@ describe('DispatchCoordinator', () => {
       const coordinator = new DispatchCoordinator(deps);
       await coordinator.dispatch(createRequest());
 
-      const inProgressTransition = tracker.calls.find((c) => c.toStatus === 'in_progress');
-      expect(inProgressTransition).toBeDefined();
-      expect(inProgressTransition!.extras?.baseCommit).toBe('abc123');
+      const dispatchPreparedTransition = tracker.calls.find((c) => c.toStatus === 'dispatch_prepared');
+      expect(dispatchPreparedTransition).toBeDefined();
+      expect(dispatchPreparedTransition!.extras?.baseCommit).toBe('abc123');
     });
 
     it('returns direct workspace info and omits baseCommit when creation falls back to direct mode', async () => {
@@ -405,9 +405,9 @@ describe('DispatchCoordinator', () => {
       expect(result.branch).toBeUndefined();
       expect(result.createdWorktree).toBe(false);
 
-      const inProgressTransition = tracker.calls.find((c) => c.toStatus === 'in_progress');
-      expect(inProgressTransition).toBeDefined();
-      expect(inProgressTransition!.extras?.baseCommit).toBeUndefined();
+      const dispatchPreparedTransition = tracker.calls.find((c) => c.toStatus === 'dispatch_prepared');
+      expect(dispatchPreparedTransition).toBeDefined();
+      expect(dispatchPreparedTransition!.extras?.baseCommit).toBeUndefined();
       expect(patchCalls).toEqual([
         {
           feature: 'test-feature',
@@ -425,7 +425,6 @@ describe('DispatchCoordinator', () => {
         },
       ]);
     });
-
 
     it('does NOT include baseCommit when continuing from blocked', async () => {
       const tracker = createTransitionTracker();
@@ -446,9 +445,9 @@ describe('DispatchCoordinator', () => {
       const coordinator = new DispatchCoordinator(deps);
       await coordinator.dispatch(createRequest({ continueFrom: 'blocked', decision: 'yes' }));
 
-      const inProgressTransition = tracker.calls.find((c) => c.toStatus === 'in_progress');
-      expect(inProgressTransition).toBeDefined();
-      expect(inProgressTransition!.extras?.baseCommit).toBeUndefined();
+      const dispatchPreparedTransition = tracker.calls.find((c) => c.toStatus === 'dispatch_prepared');
+      expect(dispatchPreparedTransition).toBeDefined();
+      expect(dispatchPreparedTransition!.extras?.baseCommit).toBeUndefined();
     });
   });
 
@@ -526,6 +525,25 @@ describe('DispatchCoordinator', () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('already in progress');
+    });
+
+    it('rejects dispatch_prepared tasks for non-blocked resume', async () => {
+      const deps = createMockDeps({
+        taskService: {
+          ...createMockDeps().taskService,
+          get: () => ({
+            folder: '01-test-task',
+            name: 'Test Task',
+            status: 'dispatch_prepared' as const,
+            origin: 'plan' as const,
+          }),
+        },
+      });
+      const coordinator = new DispatchCoordinator(deps);
+      const result = await coordinator.dispatch(createRequest());
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('already being dispatched');
     });
   });
 
@@ -627,7 +645,6 @@ describe('DispatchCoordinator', () => {
       expect(createCalled).toBe(false);
       expect(getCalled).toBe(false);
     });
-
 
     it('rejects continueFrom=blocked when task is not blocked', async () => {
       const coordinator = new DispatchCoordinator(createMockDeps());

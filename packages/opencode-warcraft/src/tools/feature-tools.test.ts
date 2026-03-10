@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import * as child_process from 'child_process';
 import * as fs from 'fs';
 import type { FeatureService } from 'warcraft-core';
+import { ok } from 'warcraft-core';
 import { FeatureTools } from './feature-tools';
 
 const TEST_DIR = `/tmp/opencode-warcraft-feature-tools-test-${process.pid}`;
@@ -20,13 +21,13 @@ class MockFeatureService implements Partial<FeatureService> {
     this.createCallCount++;
     const epicBeadId = `epic-${this.createCallCount}`;
     this.features.set(name, { name, epicBeadId, priority });
-    return {
+    return ok({
       name,
       epicBeadId,
-      status: 'planning',
+      status: 'planning' as const,
       ticket,
       createdAt: new Date().toISOString(),
-    };
+    });
   }
 
   getCreateCallCount() {

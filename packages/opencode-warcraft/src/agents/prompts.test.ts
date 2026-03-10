@@ -142,7 +142,7 @@ describe('Saurfang (Orchestrator) prompt', () => {
 
     it('explains task() is BLOCKING for delegation', () => {
       expect(SAURFANG_PROMPT).toContain('BLOCKING');
-      expect(SAURFANG_PROMPT).toContain('returns when');
+      expect(SAURFANG_PROMPT).toContain('when it returns, the worker is DONE');
     });
 
     it('tells to check warcraft_status() after task() returns', () => {

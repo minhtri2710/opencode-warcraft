@@ -3171,6 +3171,4 @@ Second task description.
       ]);
     });
   });
-
-
 });

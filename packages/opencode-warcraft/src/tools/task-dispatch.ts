@@ -6,6 +6,7 @@ import {
   DEFAULT_BUDGET,
   type TruncationEvent,
 } from '../utils/prompt-budgeting.js';
+import { sanitizeLearnings } from '../utils/sanitize.js';
 import { classifyComplexity, type TaskComplexity } from '../utils/task-complexity.js';
 import type { CompletedTask, ContinueFromBlocked, WorkerContextFile } from '../utils/worker-prompt.js';
 import { buildWorkerPrompt } from '../utils/worker-prompt.js';
@@ -55,17 +56,6 @@ export interface TaskDispatchPrep {
   complexity: TaskComplexity;
   /** Prior-attempt context (present when previousAttempts > 0 and summary exists). */
   failureContext?: string;
-}
-
-/**
- * Sanitise a persisted `learnings` value so that malformed data
- * (non-array, non-string elements, empty / whitespace-only strings)
- * never propagates downstream.  Returns `undefined` when nothing valid remains.
- */
-function sanitizeLearnings(raw: unknown): string[] | undefined {
-  if (!Array.isArray(raw)) return undefined;
-  const valid = raw.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
-  return valid.length > 0 ? valid : undefined;
 }
 
 /**

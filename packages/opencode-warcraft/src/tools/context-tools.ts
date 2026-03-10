@@ -168,6 +168,30 @@ export class ContextTools {
               })()
             : null;
 
+        // Detect tasks stuck in dispatch_prepared for >60 seconds
+        const STALE_DISPATCH_THRESHOLD_MS = 60_000;
+        const now = Date.now();
+        const staleDispatchEntries = tasksSummary
+          .filter((t: { status: string; folder: string }) => t.status === 'dispatch_prepared')
+          .map((t: { folder: string; name: string }) => {
+            const raw = taskService.getRawStatus(featureName, t.folder);
+            const preparedAt = raw?.preparedAt;
+            if (!preparedAt) return null;
+            const elapsed = now - new Date(preparedAt).getTime();
+            if (elapsed <= STALE_DISPATCH_THRESHOLD_MS) return null;
+            return {
+              folder: t.folder,
+              name: t.name,
+              preparedAt,
+              staleForSeconds: Math.floor(elapsed / 1_000),
+              hint:
+                `Task ${t.folder} has been in dispatch_prepared for >60s. ` +
+                'Worker may have failed to start. Consider: retry dispatch or reset to pending.',
+            };
+          })
+          .filter((e: unknown): e is NonNullable<typeof e> => e != null);
+        const staleDispatches = staleDispatchEntries.length > 0 ? staleDispatchEntries : null;
+
         const { runnable, blocked: blockedBy } = taskService.computeRunnableStatus(featureName);
         const triageByTask: Record<string, { summary: string; source: string }> = {};
         const triageDetailsByTask: Record<
@@ -293,6 +317,7 @@ export class ContextTools {
             files: contextSummary,
           },
           worktreeHygiene: staleWarning,
+          staleDispatches,
           health: {
             reopenRate: trustMetrics.reopenRate,
             totalCompleted: trustMetrics.totalCompleted,

@@ -105,17 +105,24 @@ describe('guards.ts test suite', () => {
   });
 
   describe('validateTaskStatus', () => {
-    it('should accept all 7 valid task statuses', () => {
-      const validStatuses = ['pending', 'in_progress', 'done', 'cancelled', 'blocked', 'failed', 'partial'];
+    it('should accept all 8 valid task statuses', () => {
+      const validStatuses = [
+        'pending',
+        'in_progress',
+        'dispatch_prepared',
+        'done',
+        'cancelled',
+        'blocked',
+        'failed',
+        'partial',
+      ];
       validStatuses.forEach((status) => {
         expect(validateTaskStatus(status)).toBe(status);
       });
     });
 
     it('should throw error for invalid status', () => {
-      expect(() => validateTaskStatus('invalid')).toThrow(
-        'Invalid task status: "invalid". Valid values: pending, in_progress, done, cancelled, blocked, failed, partial',
-      );
+      expect(() => validateTaskStatus('invalid')).toThrow('Invalid task status: "invalid"');
     });
 
     it('should throw error for empty string', () => {

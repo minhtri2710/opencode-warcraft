@@ -159,7 +159,7 @@ describe('dispatch-task', () => {
       expect(result.taskToolCall!.prompt.length).toBeGreaterThan(0);
     });
 
-    it('transitions task status to in_progress', async () => {
+    it('transitions task status to dispatch_prepared', async () => {
       let transitionedStatus: string | undefined;
       const services = createMockServices({
         taskService: {
@@ -172,7 +172,7 @@ describe('dispatch-task', () => {
 
       await dispatchOneTask(createInput(), services);
 
-      expect(transitionedStatus).toBe('in_progress');
+      expect(transitionedStatus).toBe('dispatch_prepared');
     });
   });
 
@@ -884,7 +884,7 @@ describe('dispatch-task', () => {
   // --------------------------------------------------------------------------
 
   describe('premature state mutation regression', () => {
-    it('does NOT set task to in_progress when prep (buildSpecData) fails', async () => {
+    it('does NOT set task to dispatch_prepared when prep (buildSpecData) fails', async () => {
       const statusTransitions: string[] = [];
       const services = createMockServices({
         taskService: {
@@ -902,11 +902,12 @@ describe('dispatch-task', () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('Spec assembly explosion');
-      // CRITICAL: task should NOT have been transitioned to in_progress
+      // CRITICAL: task should NOT have been transitioned to dispatch_prepared or in_progress
+      expect(statusTransitions).not.toContain('dispatch_prepared');
       expect(statusTransitions).not.toContain('in_progress');
     });
 
-    it('does NOT set task to in_progress when writeWorkerPrompt fails', async () => {
+    it('does NOT set task to dispatch_prepared when writeWorkerPrompt fails', async () => {
       const statusTransitions: string[] = [];
       const services = createMockServices({
         taskService: {
@@ -923,20 +924,21 @@ describe('dispatch-task', () => {
       const result = await dispatchOneTask(createInput(), services);
 
       expect(result.success).toBe(false);
-      // CRITICAL: task should NOT have been transitioned to in_progress
+      // CRITICAL: task should NOT have been transitioned to dispatch_prepared or in_progress
+      expect(statusTransitions).not.toContain('dispatch_prepared');
       expect(statusTransitions).not.toContain('in_progress');
     });
 
-    it('sets task to in_progress only after prep succeeds', async () => {
-      let inProgressSet = false;
+    it('sets task to dispatch_prepared only after prep succeeds', async () => {
+      let dispatchPreparedSet = false;
       let prepCompleted = false;
 
       const services = createMockServices({
         taskService: {
           ...createMockServices().taskService,
           transition: (_f: string, _t: string, toStatus: string) => {
-            if (toStatus === 'in_progress') {
-              inProgressSet = true;
+            if (toStatus === 'dispatch_prepared') {
+              dispatchPreparedSet = true;
               // At this point, prep should have already completed
               expect(prepCompleted).toBe(true);
             }
@@ -951,7 +953,7 @@ describe('dispatch-task', () => {
 
       expect(result.success).toBe(true);
       expect(prepCompleted).toBe(true);
-      expect(inProgressSet).toBe(true);
+      expect(dispatchPreparedSet).toBe(true);
     });
   });
 });

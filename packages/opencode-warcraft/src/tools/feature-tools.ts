@@ -1,5 +1,6 @@
 import { type ToolDefinition, tool } from '@opencode-ai/plugin';
 import type { FeatureService } from 'warcraft-core';
+import { isUsable } from 'warcraft-core';
 import { toolError, toolSuccess } from '../types.js';
 import { resolveFeatureInput } from './tool-input.js';
 
@@ -31,10 +32,14 @@ export class FeatureTools {
         if (!Number.isInteger(priorityValue) || priorityValue < 1 || priorityValue > 5) {
           return toolError(`Priority must be an integer between 1 and 5 (inclusive), got: ${priorityValue}`);
         }
-        const feature = featureService.create(name, ticket, priorityValue);
+        const outcome = featureService.create(name, ticket, priorityValue);
+        if (!isUsable(outcome)) {
+          return toolError(outcome.diagnostics.map((d) => d.message).join('; '));
+        }
+        const feature = outcome.value;
         const epicBeadId = (feature as { epicBeadId?: string }).epicBeadId;
         return toolSuccess({
-          message: `Feature "${name}" created (epic: ${epicBeadId || 'unknown'}}).
+          message: `Feature "${name}" created (epic: ${epicBeadId || 'unknown'}).
 
 ## Discovery Phase Required
 
@@ -87,9 +92,12 @@ NEXT: Ask your first clarifying question about this feature.`,
       async execute({ name }) {
         const resolution = resolveFeatureInput(resolveFeature, name);
         if (!resolution.ok) return toolError(resolution.error);
-        const feature = resolution.feature;
-        featureService.complete(feature);
-        return toolSuccess({ message: `Feature "${feature}" marked as completed` });
+        const featureName = resolution.feature;
+        const outcome = featureService.complete(featureName);
+        if (!isUsable(outcome)) {
+          return toolError(outcome.diagnostics.map((d) => d.message).join('; '));
+        }
+        return toolSuccess({ message: `Feature "${featureName}" marked as completed` });
       },
     });
   }

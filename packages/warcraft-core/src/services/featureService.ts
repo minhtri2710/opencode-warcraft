@@ -1,6 +1,8 @@
 import type { BeadsMode, FeatureInfo, FeatureJson, FeatureStatusType, TaskInfo } from '../types.js';
 import { fileExists } from '../utils/fs.js';
 import { getPlanPath, sanitizeName } from '../utils/paths.js';
+import type { OperationOutcome } from './outcomes.js';
+import { diagnostic, fatal, ok } from './outcomes.js';
 import type { FeatureStore } from './state/types.js';
 
 export class FeatureService {
@@ -11,26 +13,34 @@ export class FeatureService {
     private readonly taskLister?: { list(featureName: string): TaskInfo[] },
   ) {}
 
-  create(name: string, ticket?: string, priority: number = 3): FeatureJson {
+  create(name: string, ticket?: string, priority: number = 3): OperationOutcome<FeatureJson> {
     name = sanitizeName(name);
 
     if (this.store.exists(name)) {
-      throw new Error(`Feature '${name}' already exists`);
+      return fatal([diagnostic('feature_already_exists', `Feature '${name}' already exists`, 'fatal')]);
     }
 
     // Validate priority
     if (!Number.isInteger(priority) || priority < 1 || priority > 5) {
-      throw new Error(`Priority must be an integer between 1 and 5 (inclusive), got: ${priority}`);
+      return fatal([
+        diagnostic(
+          'invalid_priority',
+          `Priority must be an integer between 1 and 5 (inclusive), got: ${priority}`,
+          'fatal',
+        ),
+      ]);
     }
 
-    return this.store.create(
-      {
-        name,
-        ticket,
-        status: 'planning',
-        createdAt: new Date().toISOString(),
-      },
-      priority,
+    return ok(
+      this.store.create(
+        {
+          name,
+          ticket,
+          status: 'planning',
+          createdAt: new Date().toISOString(),
+        },
+        priority,
+      ),
     );
   }
 
@@ -85,17 +95,19 @@ export class FeatureService {
     };
   }
 
-  complete(name: string): FeatureJson {
+  complete(name: string): OperationOutcome<FeatureJson> {
     const feature = this.get(name);
-    if (!feature) throw new Error(`Feature '${name}' not found`);
+    if (!feature) {
+      return fatal([diagnostic('feature_not_found', `Feature '${name}' not found`, 'fatal')]);
+    }
 
     if (feature.status === 'completed') {
-      throw new Error(`Feature '${name}' is already completed`);
+      return fatal([diagnostic('feature_already_completed', `Feature '${name}' is already completed`, 'fatal')]);
     }
 
     const updated = this.updateStatus(name, 'completed');
     this.store.complete(updated);
-    return updated;
+    return ok(updated);
   }
 
   setSession(name: string, sessionId: string): void {

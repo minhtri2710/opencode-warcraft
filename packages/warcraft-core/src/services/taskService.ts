@@ -4,8 +4,8 @@ import type {
   TaskInfo,
   TaskStatus,
   TaskStatusType,
-  TasksSyncResult,
   TaskSyncReconciliation,
+  TasksSyncResult,
   WorkerSession,
 } from '../types.js';
 import { readText } from '../utils/fs.js';
@@ -275,9 +275,7 @@ export class TaskService {
       const exactMatch = existingTasks.find(
         (existing) => this.isEligiblePlanMatch(existing, matchedExistingFolders) && existing.folder === planTask.folder,
       );
-      const titleMatch =
-        exactMatch ??
-        this.findTitleMatchCandidate(planTask, existingTasks, matchedExistingFolders);
+      const titleMatch = exactMatch ?? this.findTitleMatchCandidate(planTask, existingTasks, matchedExistingFolders);
 
       if (!titleMatch) {
         created.push(planTask.folder);
@@ -376,7 +374,9 @@ export class TaskService {
   }
 
   private isEligiblePlanMatch(existing: TaskInfo, matchedExistingFolders: Set<string>): boolean {
-    return existing.origin !== 'manual' && existing.status !== 'cancelled' && !matchedExistingFolders.has(existing.folder);
+    return (
+      existing.origin !== 'manual' && existing.status !== 'cancelled' && !matchedExistingFolders.has(existing.folder)
+    );
   }
 
   private findTitleMatchCandidate(
@@ -899,6 +899,7 @@ export class TaskService {
         case 'done':
           completed.push(runnableTask);
           break;
+        case 'dispatch_prepared':
         case 'in_progress':
           inProgress.push(runnableTask);
           break;
