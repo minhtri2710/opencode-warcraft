@@ -11,7 +11,12 @@ export type {
 } from './beads/BeadGateway.types.js';
 export type { RepositoryError, RepositoryErrorCode, Result, SyncPolicy } from './beads/BeadsRepository.js';
 export { BeadsRepository } from './beads/BeadsRepository.js';
-export type { ExecutionTrack, RobotPlanResult, RobotPlanSummary } from './beads/BeadsViewerGateway.js';
+export type {
+  ExecutionTrack,
+  RobotInsightsResult,
+  RobotPlanResult,
+  RobotPlanSummary,
+} from './beads/BeadsViewerGateway.js';
 export { BeadsViewerGateway } from './beads/BeadsViewerGateway.js';
 export type { BvBlockerTriageDetails, BvGlobalTriageDetails, BvTriageResult } from './beads/BvTriageService.js';
 export { BvTriageService } from './beads/BvTriageService.js';
@@ -54,6 +59,8 @@ export { InvalidTransitionError, isTransitionAllowed, validateTransition } from 
 export type { RunnableBlockedResult, TaskWithDeps } from './taskDependencyGraph.js';
 export { buildEffectiveDependencies, computeRunnableAndBlocked } from './taskDependencyGraph.js';
 export { TaskService } from './taskService.js';
+export type { TraceContext } from './trace-context.js';
+export { createChildSpan, createTraceContext } from './trace-context.js';
 export type {
   ApplyResult,
   CommitResult,

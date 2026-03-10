@@ -7,6 +7,7 @@
 
 import { describe, expect, it } from 'bun:test';
 import {
+  buildPromptObservabilityDetails,
   calculatePayloadMeta,
   calculatePromptMeta,
   checkWarnings,
@@ -239,5 +240,65 @@ describe('DEFAULT_THRESHOLDS', () => {
   it('has JSON payload threshold higher than worker prompt threshold', () => {
     // JSON payload includes worker prompt plus other fields
     expect(DEFAULT_THRESHOLDS.jsonPayloadMaxChars).toBeGreaterThanOrEqual(DEFAULT_THRESHOLDS.workerPromptMaxChars);
+  });
+});
+
+describe('buildPromptObservabilityDetails', () => {
+  it('includes hashes alongside prompt and payload sizes', () => {
+    const promptMeta: PromptMeta = {
+      planChars: 10,
+      contextChars: 20,
+      previousTasksChars: 30,
+      specChars: 40,
+      workerPromptChars: 50,
+    };
+    const payloadMeta: PayloadMeta = {
+      jsonPayloadChars: 60,
+      promptInlined: true,
+      promptReferencedByFile: false,
+    };
+
+    const details = buildPromptObservabilityDetails({
+      workerPrompt: 'worker prompt body',
+      jsonPayload: '{"ok":true}',
+      promptMeta,
+      payloadMeta,
+    });
+
+    expect(details.promptMeta).toEqual(promptMeta);
+    expect(details.payloadMeta).toEqual(payloadMeta);
+    expect(details.workerPromptHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(details.jsonPayloadHash).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it('changes hashes when content changes', () => {
+    const promptMeta: PromptMeta = {
+      planChars: 1,
+      contextChars: 1,
+      previousTasksChars: 1,
+      specChars: 1,
+      workerPromptChars: 1,
+    };
+    const payloadMeta: PayloadMeta = {
+      jsonPayloadChars: 1,
+      promptInlined: true,
+      promptReferencedByFile: false,
+    };
+
+    const a = buildPromptObservabilityDetails({
+      workerPrompt: 'a',
+      jsonPayload: 'payload-a',
+      promptMeta,
+      payloadMeta,
+    });
+    const b = buildPromptObservabilityDetails({
+      workerPrompt: 'b',
+      jsonPayload: 'payload-b',
+      promptMeta,
+      payloadMeta,
+    });
+
+    expect(a.workerPromptHash).not.toBe(b.workerPromptHash);
+    expect(a.jsonPayloadHash).not.toBe(b.jsonPayloadHash);
   });
 });

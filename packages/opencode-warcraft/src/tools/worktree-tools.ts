@@ -9,10 +9,16 @@ import type {
   TaskStatusType,
   WorktreeService,
 } from 'warcraft-core';
+import { createChildSpan, createTraceContext } from 'warcraft-core';
 import { DispatchCoordinator, type DispatchCoordinatorDeps } from '../services/dispatch-coordinator.js';
 import type { BlockedResult } from '../types.js';
 import { toolError, toolSuccess } from '../types.js';
-import { calculatePayloadMeta, calculatePromptMeta, checkWarnings } from '../utils/prompt-observability.js';
+import {
+  buildPromptObservabilityDetails,
+  calculatePayloadMeta,
+  calculatePromptMeta,
+  checkWarnings,
+} from '../utils/prompt-observability.js';
 import { getVerificationCommandsForCwd } from '../utils/runtime-commands.js';
 import { DEFAULT_BUDGET } from './task-dispatch.js';
 import { resolveFeatureInput, validateTaskInput } from './tool-input.js';
@@ -23,6 +29,11 @@ type ExecAsyncFn = (
 ) => Promise<{ stdout: string; stderr: string }>;
 
 const defaultExecAsync = promisify(execCb) as ExecAsyncFn;
+
+function createTaskTrace(eventLogger: EventLogger, feature: string, task: string) {
+  const latestTrace = eventLogger.getLatestTraceContext?.(feature, task);
+  return latestTrace ? createChildSpan(latestTrace) : createTraceContext();
+}
 
 type CompletionGate = 'build' | 'test' | 'lint';
 
@@ -211,6 +222,12 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
           promptInlined: true,
           promptReferencedByFile: false,
         });
+        const promptObservability = buildPromptObservabilityDetails({
+          workerPrompt,
+          jsonPayload,
+          promptMeta,
+          payloadMeta,
+        });
 
         const sizeWarnings = checkWarnings(promptMeta, payloadMeta);
 
@@ -224,12 +241,42 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
 
         const allWarnings = [...sizeWarnings, ...budgetWarnings];
 
+        const dispatchTrace = createTaskTrace(eventLogger, feature, task);
+        const promptPreparedTrace = createChildSpan(dispatchTrace);
+
+        eventLogger.emit({
+          type: 'prompt_prepared',
+          feature,
+          task,
+          ...promptPreparedTrace,
+          details: promptObservability,
+        });
+
+        if (dispatchResult.createdWorktree) {
+          eventLogger.emit({
+            type: 'worktree_created',
+            feature,
+            task,
+            ...createChildSpan(dispatchTrace),
+            details: {
+              branch: dispatchResult.branch,
+              worktreePath: dispatchResult.worktreePath,
+              continueFrom: continueFrom || null,
+            },
+          });
+        }
+
         // Emit dispatch event for trust metrics tracking
         eventLogger.emit({
           type: 'dispatch',
           feature,
           task,
-          details: { agent, continueFrom: continueFrom || null },
+          ...dispatchTrace,
+          details: {
+            agent,
+            continueFrom: continueFrom || null,
+            createdWorktree: dispatchResult.createdWorktree ?? false,
+          },
         });
 
         return toolSuccess({
@@ -363,6 +410,7 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
             type: 'blocked',
             feature,
             task,
+            ...createTaskTrace(eventLogger, feature, task),
             details: { reason: blocker?.reason, summary },
           });
 
@@ -463,6 +511,7 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
           type: 'commit',
           feature,
           task,
+          ...createTaskTrace(eventLogger, feature, task),
           details: { status, finalStatus, sha: commitResult.sha },
         });
 
@@ -568,7 +617,7 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
    */
   mergeTaskTool(resolveFeature: (name?: string) => string | null): ToolDefinition {
     // Capture deps in closure to avoid 'this' binding issues
-    const { taskService, worktreeService, verificationModel, execAsync: injectedExecAsync } = this.deps;
+    const { taskService, worktreeService, verificationModel, execAsync: injectedExecAsync, eventLogger } = this.deps;
     const execAsync = injectedExecAsync ?? defaultExecAsync;
     const projectDir = this.deps.projectDir ?? process.cwd();
     return tool({
@@ -616,6 +665,19 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
         const mergeResult: Record<string, unknown> = {
           message: `Task "${task}" merged successfully using ${strategy} strategy.\nCommit: ${result.sha}\nFiles changed: ${result.filesChanged?.length || 0}`,
         };
+        const mergeTrace = createTaskTrace(eventLogger, feature, task);
+
+        eventLogger.emit({
+          type: 'merge',
+          feature,
+          task,
+          ...mergeTrace,
+          details: {
+            strategy,
+            sha: result.sha,
+            filesChanged: result.filesChanged?.length || 0,
+          },
+        });
 
         // Perform opt-in worktree cleanup (non-fatal)
         const effectiveCleanup = cleanupRequested ?? false;
@@ -623,6 +685,13 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
           try {
             await worktreeService.remove(feature, task, false);
             mergeResult.cleanup = { requested: true, removed: true };
+            eventLogger.emit({
+              type: 'worktree_removed',
+              feature,
+              task,
+              ...createChildSpan(mergeTrace),
+              details: { requestedBy: 'warcraft_merge', deleteBranch: false },
+            });
           } catch (err: unknown) {
             const cleanupErr = err as { message?: string };
             mergeResult.cleanup = {
@@ -645,6 +714,13 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
             const output = [buildResult.stdout, buildResult.stderr, testResult.stdout, testResult.stderr]
               .filter(Boolean)
               .join('\n');
+            eventLogger.emit({
+              type: 'verification_run',
+              feature,
+              task,
+              ...createChildSpan(mergeTrace),
+              details: { passed: true, commands: { build: cmds.build, test: cmds.test } },
+            });
             return toolSuccess({
               ...mergeResult,
               verification: {
@@ -656,6 +732,17 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
           } catch (err: unknown) {
             const execErr = err as { stdout?: string; stderr?: string; message?: string };
             const output = [execErr.stdout, execErr.stderr].filter(Boolean).join('\n');
+            eventLogger.emit({
+              type: 'verification_run',
+              feature,
+              task,
+              ...createChildSpan(mergeTrace),
+              details: {
+                passed: false,
+                commands: { build: cmds.build, test: cmds.test },
+                error: execErr.message || 'Verification failed',
+              },
+            });
             return toolSuccess({
               ...mergeResult,
               verification: {

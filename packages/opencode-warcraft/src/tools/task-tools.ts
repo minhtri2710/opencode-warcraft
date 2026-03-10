@@ -1,6 +1,12 @@
 import { type ToolDefinition, tool } from '@opencode-ai/plugin';
 import type { EventLogger, FeatureService, PlanService, TaskService, TaskStatusType } from 'warcraft-core';
-import { detectWorkflowPath, InvalidTransitionError, validateLightweightPlan } from 'warcraft-core';
+import {
+  createChildSpan,
+  createTraceContext,
+  detectWorkflowPath,
+  InvalidTransitionError,
+  validateLightweightPlan,
+} from 'warcraft-core';
 import { toolError, toolSuccess } from '../types.js';
 import { resolveFeatureInput, validateTaskInput } from './tool-input.js';
 
@@ -155,10 +161,13 @@ export class TaskTools {
 
           // Detect reopen: status changing away from 'done' (for event logging)
           if (currentTask && currentTask.status === 'done' && validatedStatus !== 'done') {
+            const latestTrace = eventLogger.getLatestTraceContext?.(feature, task);
+            const reopenTrace = latestTrace ? createChildSpan(latestTrace) : createTraceContext();
             eventLogger.emit({
               type: 'reopen',
               feature,
               task,
+              ...reopenTrace,
               details: { previousStatus: 'done', newStatus: validatedStatus },
             });
           }

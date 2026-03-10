@@ -5,6 +5,8 @@
  * thresholds are exceeded, preventing silent truncation risks.
  */
 
+import { createHash } from 'crypto';
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -35,6 +37,13 @@ export interface PayloadMeta {
   promptInlined: boolean;
   /** Whether the prompt is referenced by file path */
   promptReferencedByFile: boolean;
+}
+
+export interface PromptObservabilityDetails extends Record<string, unknown> {
+  promptMeta: PromptMeta;
+  payloadMeta: PayloadMeta;
+  workerPromptHash: string;
+  jsonPayloadHash: string;
 }
 
 /**
@@ -134,6 +143,20 @@ export function calculatePayloadMeta(inputs: {
   };
 }
 
+export function buildPromptObservabilityDetails(inputs: {
+  workerPrompt: string;
+  jsonPayload: string;
+  promptMeta: PromptMeta;
+  payloadMeta: PayloadMeta;
+}): PromptObservabilityDetails {
+  return {
+    promptMeta: inputs.promptMeta,
+    payloadMeta: inputs.payloadMeta,
+    workerPromptHash: hashContent(inputs.workerPrompt),
+    jsonPayloadHash: hashContent(inputs.jsonPayload),
+  };
+}
+
 // ============================================================================
 // Warning Detection
 // ============================================================================
@@ -224,6 +247,10 @@ export function checkWarnings(
 function safeLength(str: string | null | undefined): number {
   if (str == null) return 0;
   return str.length;
+}
+
+function hashContent(content: string): string {
+  return createHash('sha256').update(content).digest('hex');
 }
 
 /**

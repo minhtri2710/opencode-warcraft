@@ -67,6 +67,7 @@ function createMockRepository(overrides: Partial<BeadsRepository> = {}): BeadsRe
     listEpics: () => ({ success: true, value: [{ id: 'bd-epic-1', title: 'test-feature', status: 'open' }] }),
     addWorkflowLabel: () => ({ success: true, value: undefined }),
     getRobotPlan: () => ({ success: false, error: new Error('Not implemented') }),
+    getRobotInsights: () => null,
     getViewerHealth: () => ({ success: false, error: new Error('Not implemented') }),
     importArtifacts: () => ({ success: true, value: undefined }),
     flushArtifacts: () => ({ success: true, value: undefined }),

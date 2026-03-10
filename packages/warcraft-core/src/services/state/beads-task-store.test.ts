@@ -190,6 +190,25 @@ describe('BeadsTaskStore caching layer', () => {
     expect(listCallCount).toBe(1);
   });
 
+  it('keeps closed task beads visible in feature task listings', () => {
+    const repository = {
+      getEpicByFeatureName: () => ({ success: true as const, value: 'epic-1' }),
+      listTaskBeadsForEpic: () => ({
+        success: true as const,
+        value: [{ id: 'task-1', title: 'Task 1', status: 'closed' as const, type: 'task' }],
+      }),
+      getTaskState: () => ({ success: true as const, value: null }),
+    };
+
+    const store = new BeadsTaskStore('/tmp/project', repository as any);
+
+    const tasks = store.list('test-feature');
+
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0]?.beadId).toBe('task-1');
+    expect(tasks[0]?.status).toBe('done');
+  });
+
   it('getRawStatus() does not read docs status.json fallback in beads mode', () => {
     const projectRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'beads-task-store-'));
     const legacyStatusPath = path.join(projectRoot, 'docs', 'test-feature', 'tasks', '01-task-1', 'status.json');
@@ -381,9 +400,8 @@ describe('BeadsTaskStore caching layer', () => {
       listDependencies: () => ({ success: true as const, value: [] }),
       addDependency: () => ({ success: true as const, value: undefined }),
       removeDependency: () => ({ success: true as const, value: undefined }),
-      getViewerGateway: () => ({
-        getHealth: () => ({ available: false }),
-      }),
+      getViewerHealth: () => ({ available: false }),
+      getRobotInsights: () => null,
     };
 
     const store = new BeadsTaskStore('/tmp/project', repository as any);

@@ -23,6 +23,7 @@ export interface DispatchResult {
   task: string;
   success: boolean;
   agent: string;
+  createdWorktree?: boolean;
   worktreePath?: string;
   branch?: string;
   error?: string;
@@ -300,6 +301,7 @@ export class DispatchCoordinator {
         task,
         success: true,
         agent,
+        createdWorktree: isNewWorktree,
         worktreePath: worktree.path,
         branch: worktree.branch,
         taskToolCall: {

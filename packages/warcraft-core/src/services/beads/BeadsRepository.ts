@@ -24,7 +24,7 @@ import {
 } from './artifactSchemas.js';
 import { BeadGateway, BeadGatewayError } from './BeadGateway.js';
 import type { AuditEntry, AuditRecordParams, BeadArtifactKind, BeadComment } from './BeadGateway.types.js';
-import type { RobotPlanResult } from './BeadsViewerGateway.js';
+import type { RobotInsightsResult, RobotPlanResult } from './BeadsViewerGateway.js';
 import { BeadsViewerGateway } from './BeadsViewerGateway.js';
 import type { BvHealth } from './bv-runner.js';
 
@@ -133,7 +133,7 @@ const DEFAULT_SYNC_POLICY: SyncPolicy = {
  * - Feature/task state CRUD operations
  * - Plan management (description, labels)
  * - Task artifact operations
- * - Robot plan queries (via BeadsViewerGateway)
+ * - Robot plan and insights queries (via BeadsViewerGateway)
  * - Sync policy enforcement
  * - Error normalization
  */
@@ -708,7 +708,7 @@ export class BeadsRepository {
     try {
       this.beforeRead();
 
-      const tasks = this.gateway.list({ type: 'task', parent: epicBeadId });
+      const tasks = this.gateway.list({ type: 'task', parent: epicBeadId, status: 'all' });
       return { success: true, value: tasks };
     } catch (error) {
       return {
@@ -822,6 +822,17 @@ export class BeadsRepository {
    */
   getRobotPlan(): RobotPlanResult | null {
     return this.viewerGateway.getRobotPlan();
+  }
+
+  /**
+   * Get robot insights with graph health diagnostics.
+   *
+   * Delegates to BeadsViewerGateway for bv --robot-insights output.
+   *
+   * @returns Robot insights result, or null if unavailable
+   */
+  getRobotInsights(): RobotInsightsResult | null {
+    return this.viewerGateway.getRobotInsights();
   }
 
   /**

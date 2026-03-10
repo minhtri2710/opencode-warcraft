@@ -834,7 +834,7 @@ describe('BeadGateway', () => {
 
     expect(execSpy).toHaveBeenCalledWith(
       'br',
-      ['dep', 'list', 'epic-1', '--direction', 'up', '--type', 'parent-child', '--json'],
+      ['dep', 'list', 'epic-1', '--direction', 'up', '--type', 'parent-child', '--json', '-a'],
       {
         cwd: '/repo',
         encoding: 'utf-8',
@@ -1062,6 +1062,31 @@ describe('BeadGateway', () => {
         expect((error as BeadGatewayError).code).toBe('parse_error');
         expect((error as BeadGatewayError).message).toContain('comment item is not an object');
       }
+
+      execSpy.mockRestore();
+    });
+
+    it('includes closed tasks when listing tasks for an epic', () => {
+      const execSpy = spyOn(childProcess, 'execFileSync')
+        .mockReturnValueOnce('beads_rust 1.2.3')
+        .mockReturnValue('[{"type":"parent-child","issue_id":"bd-1","title":"Task 1","status":"closed"}]');
+      const gateway = new BeadGateway('/repo');
+
+      const tasks = gateway.listTasksForEpic('epic-1');
+
+      expect(tasks).toHaveLength(1);
+      expect(tasks[0]?.beadId).toBe('bd-1');
+      expect(tasks[0]?.status).toBe('done');
+      expect(execSpy).toHaveBeenCalledWith(
+        'br',
+        ['dep', 'list', 'epic-1', '--direction', 'up', '--type', 'parent-child', '--json', '-a'],
+        {
+          cwd: '/repo',
+          encoding: 'utf-8',
+          timeout: 5_000,
+          stdio: ['ignore', 'pipe', 'pipe'],
+        },
+      );
 
       execSpy.mockRestore();
     });
@@ -1434,7 +1459,7 @@ describe('BeadGateway', () => {
 
       expect(execSpy).toHaveBeenCalledWith(
         'br',
-        ['dep', 'list', 'epic-1', '--direction', 'up', '--type', 'parent-child', '--json'],
+        ['dep', 'list', 'epic-1', '--direction', 'up', '--type', 'parent-child', '--json', '-a'],
         {
           cwd: '/repo',
           encoding: 'utf-8',

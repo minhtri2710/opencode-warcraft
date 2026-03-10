@@ -297,13 +297,6 @@ export class BeadsTaskStore implements TaskStore {
         throwIfInitFailure(syncResult.error, `[warcraft] Failed to sync bead status for '${status.beadId}'`);
         console.warn(`[warcraft] Failed to sync bead status for '${status.beadId}': ${syncResult.error.message}`);
       }
-      const flushResult = this.repository.flushArtifacts();
-      if (flushResult.success === false) {
-        throwIfInitFailure(
-          flushResult.error,
-          `[warcraft] Failed to flush artifacts after syncing bead status for '${status.beadId}'`,
-        );
-      }
 
       // Append transition comment for audit trail
       this.appendTransitionComment(status.beadId, prevStatus, status.status, status.summary);
@@ -346,14 +339,6 @@ export class BeadsTaskStore implements TaskStore {
         );
       }
 
-      // Flush to ensure parity with save() - background patches must be persisted
-      const flushResult = this.repository.flushArtifacts();
-      if (flushResult.success === false) {
-        throwIfInitFailure(
-          flushResult.error,
-          `[warcraft] Failed to flush artifacts after background patch for '${status.beadId}'`,
-        );
-      }
     }
 
     // Invalidate cache entry for the patched task
@@ -395,22 +380,10 @@ export class BeadsTaskStore implements TaskStore {
       return folder;
     }
 
-    const flushResult = this.repository.flushArtifacts();
-    if (flushResult.success === false) {
-      throwIfInitFailure(
-        flushResult.error,
-        `[warcraft] Failed to flush artifacts after writing '${kind}' for '${status.beadId}'`,
-      );
-    }
     return status.beadId;
   }
 
   readArtifact(featureName: string, folder: string, kind: TaskArtifactKind): string | null {
-    const importResult = this.repository.importArtifacts();
-    if (importResult.success === false) {
-      throwIfInitFailure(importResult.error, `[warcraft] Failed to import artifacts before reading '${kind}'`);
-    }
-
     const status = this.getRawStatus(featureName, folder);
     if (!status?.beadId) {
       return null;
@@ -642,11 +615,9 @@ export class BeadsTaskStore implements TaskStore {
 
     // Advisory cycle detection via bv --robot-insights (non-blocking)
     try {
-      // TODO: elevate to repository method
-      const viewerGateway = this.repository.getViewerGateway();
-      const health = viewerGateway.getHealth();
+      const health = this.repository.getViewerHealth();
       if (health.available) {
-        const insights = viewerGateway.getRobotInsights();
+        const insights = this.repository.getRobotInsights();
         if (insights?.cycles && insights.cycles.length > 0) {
           console.warn(
             `[warcraft] Advisory: bead graph has ${insights.cycles.length} cycle(s). ` +

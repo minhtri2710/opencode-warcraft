@@ -1560,7 +1560,7 @@ Align documentation wording.
   });
 
   describe('import/flush lifecycle', () => {
-    it('calls importArtifacts before readTaskBeadArtifact when beadsMode is on', () => {
+    it('does not force importArtifacts before readTaskBeadArtifact when beadsMode is on', () => {
       const featureName = 'test-feature';
       setupFeature(featureName);
       setupTask(featureName, '01-test-task', { beadId: 'bd-task-1' });
@@ -1576,13 +1576,13 @@ Align documentation wording.
         beadId: 'bd-task-1',
       } as TaskStatus);
 
-      // Spy on importArtifacts
+      // Spy on importArtifacts (read path should not force import)
       const importSpy = spyOn(onRepo.getGateway(), 'importArtifacts').mockImplementation(() => {});
       const readArtifactSpy = spyOn(onRepo.getGateway(), 'readArtifact').mockReturnValue('spec content');
 
       const result = onModeService.readTaskBeadArtifact(featureName, '01-test-task', 'spec');
 
-      expect(importSpy).toHaveBeenCalled();
+      expect(importSpy).not.toHaveBeenCalled();
       expect(readArtifactSpy).toHaveBeenCalledWith('bd-task-1', 'spec');
       expect(result).toBe('spec content');
 
@@ -1763,10 +1763,6 @@ Align documentation wording.
         success: true,
         value: undefined,
       }));
-      const flushSpy = spyOn(mockRepository, 'flushArtifacts').mockImplementation(() => ({
-        success: true,
-        value: undefined,
-      }));
 
       // Create service with beadsMode on and mock repository
       const onStores = createStores(PROJECT_ROOT, 'on', mockRepository as any);
@@ -1784,15 +1780,13 @@ Align documentation wording.
       // In on-mode, report is NOT written to filesystem (only bead artifacts)
       expect(fs.existsSync(reportPath)).toBe(false);
 
-      // Verify bead artifact was upserted and flushed
+      // Verify bead artifact was upserted through the repository write path
       expect(upsertSpy).toHaveBeenCalledWith('bd-task-1', 'report', reportContent);
-      expect(flushSpy).toHaveBeenCalled();
 
       // Verify a virtual path is still returned
       expect(reportPath).toContain('01-test-task');
 
       upsertSpy.mockRestore();
-      flushSpy.mockRestore();
       getRawStatusSpy.mockRestore();
     });
 

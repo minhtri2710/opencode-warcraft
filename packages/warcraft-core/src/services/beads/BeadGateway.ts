@@ -451,19 +451,17 @@ export class BeadGateway {
   }): Array<{ id: string; title: string; status: string; type?: string }> {
     this.ensurePreflight();
     const args = options?.parent
-      ? ['dep', 'list', options.parent, '--direction', 'up', '--type', 'parent-child', '--json']
+      ? ['dep', 'list', options.parent, '--direction', 'up', '--type', 'parent-child', '--json', '-a']
       : ['list', '--json'];
 
-    if (!options?.parent) {
-      if (options?.type) {
-        args.push('--type', options.type);
-      }
+    if (!options?.parent && options?.type) {
+      args.push('--type', options.type);
+    }
 
-      if (options?.status === 'all') {
-        args.push('-a');
-      } else if (options?.status === 'closed') {
-        args.push('-s', 'closed');
-      }
+    if (!options?.parent && options?.status === 'all') {
+      args.push('-a');
+    } else if (!options?.parent && options?.status === 'closed') {
+      args.push('-s', 'closed');
     }
 
     const output = this.runBr(args, options?.parent ? `list child beads under '${options.parent}'` : 'list beads');
@@ -490,7 +488,7 @@ export class BeadGateway {
   listTasksForEpic(epicId: string): TaskInfo[] {
     this.ensurePreflight();
     const output = this.runBr(
-      ['dep', 'list', epicId, '--direction', 'up', '--type', 'parent-child', '--json'],
+      ['dep', 'list', epicId, '--direction', 'up', '--type', 'parent-child', '--json', '-a'],
       `list tasks for epic '${epicId}'`,
     );
     return decodeTasksFromDepList(output, epicId);

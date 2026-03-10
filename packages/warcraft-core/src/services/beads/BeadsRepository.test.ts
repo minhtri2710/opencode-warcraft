@@ -181,6 +181,7 @@ class MockBeadGateway {
 class MockBeadsViewerGateway {
   public enabled = true;
   public robotPlanResult: import('./BeadsViewerGateway.js').RobotPlanResult | null = null;
+  public robotInsightsResult: import('./BeadsViewerGateway.js').RobotInsightsResult | null = null;
   public shouldThrow = false;
 
   getHealth() {
@@ -198,6 +199,13 @@ class MockBeadsViewerGateway {
       return null;
     }
     return this.robotPlanResult;
+  }
+
+  getRobotInsights() {
+    if (this.shouldThrow || !this.enabled) {
+      return null;
+    }
+    return this.robotInsightsResult;
   }
 }
 
@@ -406,6 +414,20 @@ describe('BeadsRepository', () => {
       // @ts-expect-error - type narrowing in test
       expect(Array.isArray(result.value)).toBe(true);
     });
+
+    it('requests all task beads so closed tasks stay visible', () => {
+      const listSpy = spyOn(mockGateway, 'list').mockReturnValue([
+        { id: 'task-1', title: 'Task 1', status: 'open', type: 'task' },
+        { id: 'task-2', title: 'Task 2', status: 'closed', type: 'task' },
+      ]);
+
+      const result = repository.listTaskBeadsForEpic('epic-1');
+
+      expect(listSpy).toHaveBeenCalledWith({ type: 'task', parent: 'epic-1', status: 'all' });
+      expect(result.success).toBe(true);
+      // @ts-expect-error - type narrowing in test
+      expect(result.value?.map((task) => task.id)).toEqual(['task-1', 'task-2']);
+    });
   });
 
   describe('Workflow Labels', () => {
@@ -474,6 +496,22 @@ describe('BeadsRepository', () => {
     it('should return null when robot plan unavailable', () => {
       mockViewer.robotPlanResult = null;
       const result = repository.getRobotPlan();
+      expect(result).toBeNull();
+    });
+
+    it('should get robot insights', () => {
+      mockViewer.robotInsightsResult = {
+        cycles: [{ beadIds: ['task-1', 'task-2', 'task-1'] }],
+      };
+
+      const result = repository.getRobotInsights();
+      expect(result).not.toBeNull();
+      expect(result?.cycles).toHaveLength(1);
+    });
+
+    it('should return null when robot insights unavailable', () => {
+      mockViewer.robotInsightsResult = null;
+      const result = repository.getRobotInsights();
       expect(result).toBeNull();
     });
 

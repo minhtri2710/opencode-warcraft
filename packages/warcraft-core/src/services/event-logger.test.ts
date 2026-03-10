@@ -25,6 +25,10 @@ describe('EventLogger', () => {
       expect(WARCRAFT_EVENT_TYPES).toContain('commit');
       expect(WARCRAFT_EVENT_TYPES).toContain('merge');
       expect(WARCRAFT_EVENT_TYPES).toContain('blocked');
+      expect(WARCRAFT_EVENT_TYPES).toContain('prompt_prepared');
+      expect(WARCRAFT_EVENT_TYPES).toContain('worktree_created');
+      expect(WARCRAFT_EVENT_TYPES).toContain('worktree_removed');
+      expect(WARCRAFT_EVENT_TYPES).toContain('verification_run');
       expect(WARCRAFT_EVENT_TYPES).toContain('retry');
       expect(WARCRAFT_EVENT_TYPES).toContain('degraded');
       // Trust metric event types
@@ -82,6 +86,25 @@ describe('EventLogger', () => {
       const parsed = JSON.parse(lines[0]);
       expect(parsed.details.reason).toBe('dependency not met');
       expect(parsed.details.blocker).toBe('01-base');
+    });
+
+    it('persists trace context fields with the event', () => {
+      const logger = createEventLogger(TEST_DIR);
+
+      logger.emit({
+        type: 'dispatch',
+        feature: 'f',
+        task: 't1',
+        traceId: 'trace-1',
+        spanId: 'span-1',
+        parentSpanId: 'span-0',
+      });
+
+      const lines = fs.readFileSync(LOG_FILE, 'utf-8').trim().split('\n');
+      const parsed = JSON.parse(lines[0]) as WarcraftEvent;
+      expect(parsed.traceId).toBe('trace-1');
+      expect(parsed.spanId).toBe('span-1');
+      expect(parsed.parentSpanId).toBe('span-0');
     });
 
     it('can emit reopen events', () => {
@@ -154,6 +177,43 @@ describe('EventLogger', () => {
       expect(() => logger.emit({ type: 'dispatch', feature: 'f', task: 't' })).not.toThrow();
       // No file should be created
       expect(fs.existsSync(LOG_FILE)).toBe(false);
+    });
+
+    it('returns null when trace context is requested', () => {
+      const logger = createNoopEventLogger();
+
+      expect(logger.getLatestTraceContext?.('f', 't')).toBeNull();
+    });
+  });
+
+  describe('getLatestTraceContext()', () => {
+    it('returns the most recent trace context for a task', () => {
+      const logger = createEventLogger(TEST_DIR);
+
+      logger.emit({ type: 'dispatch', feature: 'f', task: 't1', traceId: 'trace-1', spanId: 'span-1' });
+      logger.emit({
+        type: 'commit',
+        feature: 'f',
+        task: 't1',
+        traceId: 'trace-1',
+        spanId: 'span-2',
+        parentSpanId: 'span-1',
+      });
+      logger.emit({ type: 'dispatch', feature: 'f', task: 't2', traceId: 'trace-2', spanId: 'span-3' });
+
+      expect(logger.getLatestTraceContext?.('f', 't1')).toEqual({
+        traceId: 'trace-1',
+        spanId: 'span-2',
+        parentSpanId: 'span-1',
+      });
+    });
+
+    it('returns null when the task has no trace context yet', () => {
+      const logger = createEventLogger(TEST_DIR);
+
+      logger.emit({ type: 'dispatch', feature: 'f', task: 't1' });
+
+      expect(logger.getLatestTraceContext?.('f', 't1')).toBeNull();
     });
   });
 
