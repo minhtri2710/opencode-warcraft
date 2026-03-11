@@ -291,11 +291,13 @@ export class WorktreeService {
   async exportPatch(feature: string, step: string, baseBranch?: string): Promise<string> {
     const worktreePath = this.getWorktreePath(feature, step);
     const patchPath = path.join(worktreePath, '..', `${step}.patch`);
-    const worktreeGit = this.getGit(worktreePath);
-    const base = baseBranch || 'HEAD';
+    const diff = await this.getDiff(feature, step, baseBranch);
 
-    const diff = await worktreeGit.diff(`${base}...HEAD`, worktreePath);
-    await fs.writeFile(patchPath, diff);
+    if (diff.error) {
+      throw new Error(diff.error);
+    }
+
+    await fs.writeFile(patchPath, diff.diffContent);
 
     return patchPath;
   }

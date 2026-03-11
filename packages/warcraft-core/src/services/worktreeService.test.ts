@@ -1233,21 +1233,70 @@ describe('WorktreeService.checkConflicts', () => {
 // ============================================================================
 
 describe('WorktreeService.exportPatch', () => {
-  it('writes diff to patch file and returns path', async () => {
+  it('writes the diff resolved through getDiff base-commit handling', async () => {
     const service = createService('off');
 
+    const statusPath = (service as any).getStepStatusPath('feat', '01-step');
+    fs.mkdirSync(path.dirname(statusPath), { recursive: true });
+    fs.writeFileSync(statusPath, JSON.stringify({ baseCommit: 'status-base-sha' }));
+
+    let capturedRefspec = '';
     const mockGit = createMockGit({
-      diff: async () => 'diff --git a/file.ts b/file.ts\n+added\n',
+      status: async () => ({
+        staged: [],
+        modified: ['src/file.ts'],
+        not_added: [],
+        deleted: [],
+        created: [],
+      }),
+      diff: async (args: string | string[]) => {
+        const values = Array.isArray(args) ? args : [args];
+        const refArg = values.find((a: string) => a.includes('..HEAD'));
+
+        if (refArg && values.includes('--stat')) {
+          capturedRefspec = refArg;
+          return ' src/file.ts | 1 +\n 1 file changed, 1 insertion(+)\n';
+        }
+
+        if (refArg) {
+          capturedRefspec = refArg;
+          return 'diff --git a/src/file.ts b/src/file.ts\n+added\n';
+        }
+
+        return '';
+      },
     });
     (service as any).getGit = () => mockGit;
 
-    const _wtPath = setupWorktreeDir(service, 'feat', '01-step');
+    setupWorktreeDir(service, 'feat', '01-step');
 
     const patchPath = await service.exportPatch('feat', '01-step');
 
+    expect(capturedRefspec).toBe('status-base-sha..HEAD');
     expect(patchPath).toContain('01-step.patch');
     expect(fs.existsSync(patchPath)).toBe(true);
     expect(fs.readFileSync(patchPath, 'utf-8')).toContain('added');
+  });
+
+  it('throws instead of writing a misleading patch when getDiff returns an error', async () => {
+    const service = createService('off');
+
+    const mockGit = createMockGit({
+      status: async () => ({
+        staged: ['src/staged.ts'],
+        modified: [],
+        not_added: [],
+        deleted: [],
+        created: [],
+      }),
+    });
+    (service as any).getGit = () => mockGit;
+
+    const worktreePath = setupWorktreeDir(service, 'feat', '02-step');
+    const patchPath = path.join(worktreePath, '..', '02-step.patch');
+
+    await expect(service.exportPatch('feat', '02-step', 'abc123')).rejects.toThrow('requires base HEAD');
+    expect(fs.existsSync(patchPath)).toBe(false);
   });
 });
 
