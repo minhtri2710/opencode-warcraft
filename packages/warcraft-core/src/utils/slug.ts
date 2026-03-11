@@ -5,10 +5,18 @@ import { createHash } from 'crypto';
  * Lowercases, replaces whitespace runs with hyphens, strips non-alphanumeric/hyphen chars.
  */
 export function slugifyTaskName(name: string): string {
-  return name
+  const slug = name
     .toLowerCase()
     .replace(/\s+/g, '-')
     .replace(/[^a-z0-9-]/g, '');
+
+  // Preserve existing slugs for normal task names, but never emit an empty or hyphen-only folder segment.
+  if (/[a-z0-9]/.test(slug)) {
+    return slug;
+  }
+
+  const hash = createHash('sha256').update(name, 'utf8').digest('hex').slice(0, 8);
+  return `task-${hash}`;
 }
 
 export function slugifyIdentifierSegment(value: string): string {
