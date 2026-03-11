@@ -447,12 +447,6 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
         };
 
         if (workspaceMode === 'worktree') {
-          commitResult = await worktreeService.commitChanges(
-            feature,
-            task,
-            `warcraft(${task}): ${summary.slice(0, 50)}`,
-          );
-
           const baseCommit =
             typeof rawStatus?.baseCommit === 'string' && rawStatus.baseCommit.trim().length > 0
               ? rawStatus.baseCommit
@@ -460,6 +454,18 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
           if (!baseCommit) {
             return toolError(
               `Task "${task}" is missing baseCommit. Recreate the worktree with warcraft_worktree_create before completing.`,
+            );
+          }
+
+          commitResult = await worktreeService.commitChanges(
+            feature,
+            task,
+            `warcraft(${task}): ${summary.slice(0, 50)}`,
+          );
+
+          if (!commitResult.committed) {
+            return toolError(
+              `Cannot mark task "${task}" completed because no commit was created (${commitResult.message}). Task status unchanged.`,
             );
           }
 
@@ -543,12 +549,6 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
         }
 
         taskService.writeReport(feature, task, reportLines.join('\n'));
-
-        if (status === 'completed' && workspaceMode === 'worktree' && !commitResult.committed) {
-          return toolError(
-            `Cannot mark task "${task}" completed because no commit was created (${commitResult.message}). Task status unchanged.`,
-          );
-        }
 
         const finalStatus = status === 'completed' ? 'done' : status;
         taskService.transition(feature, task, validateTaskStatus(finalStatus), {
