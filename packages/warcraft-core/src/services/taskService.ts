@@ -204,10 +204,15 @@ export class TaskService {
         }
       }
     } catch (error) {
+      let rollbackSuccessCount = 0;
+      let rollbackFailureCount = 0;
+
       for (const folder of createdFolders) {
         try {
           this.store.delete(featureName, folder);
+          rollbackSuccessCount++;
         } catch (rollbackError) {
+          rollbackFailureCount++;
           const diag = fromError('rollback_failed', rollbackError, 'degraded', { folder, featureName });
           diagnostics.push(diag);
           this.logger.warn(`Rollback failed for '${folder}' during sync recovery: ${diag.message}`, {
@@ -219,9 +224,15 @@ export class TaskService {
       }
 
       const reason = error instanceof Error ? error.message : String(error);
+      const failureSuffix = rollbackFailureCount > 1 ? 's' : '';
+      const rollbackDetail =
+        rollbackFailureCount > 0
+          ? `Rolled back ${rollbackSuccessCount} of ${createdFolders.length} created tasks` +
+            ` (${rollbackFailureCount} rollback failure${failureSuffix}).`
+          : `Rolled back ${createdFolders.length} created tasks.`;
       throw new Error(
         `Task sync failed for '${featureName}' after creating ${createdFolders.length} of ${delta.created.length} tasks. ` +
-          `Rolled back ${createdFolders.length} created tasks. Original error: ${reason}`,
+          `${rollbackDetail} Original error: ${reason}`,
       );
     } finally {
       if (supportsTransitionBatch) {
