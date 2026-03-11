@@ -221,6 +221,81 @@ describe('TaskService.sync() - rollback and fault tolerance', () => {
   });
 });
 
+describe('TaskService.sync() - duplicate numbered task header validation', () => {
+  let service: TaskService;
+
+  beforeEach(() => {
+    cleanup();
+    fs.mkdirSync(TEST_DIR, { recursive: true });
+    const stores = createStores(TEST_DIR, 'off', createRepository('off'));
+    service = new TaskService(TEST_DIR, stores.taskStore, 'off');
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('rejects plan with duplicate numbered task headers', () => {
+    const featureName = 'dup-number-test';
+    setupFeature(featureName);
+
+    const planPath = path.join(TEST_DIR, 'docs', featureName, 'plan.md');
+    fs.writeFileSync(
+      planPath,
+      '# Plan\n\n### 1. Setup\n\nSetup the project.\n\n### 2. API\n\nBuild API.\n\n### 2. Frontend\n\nBuild frontend.\n\n### 3. Deploy\n\nDeploy it.\n',
+    );
+
+    expect(() => service.sync(featureName)).toThrow(/[Dd]uplicate/);
+    expect(() => service.sync(featureName)).toThrow(/2/);
+  });
+
+  it('error message mentions both colliding task names for duplicate numbers', () => {
+    const featureName = 'dup-names-test';
+    setupFeature(featureName);
+
+    const planPath = path.join(TEST_DIR, 'docs', featureName, 'plan.md');
+    fs.writeFileSync(
+      planPath,
+      '# Plan\n\n### 1. Init\n\nInit.\n\n### 2. Build API\n\nAPI.\n\n### 2. Build Frontend\n\nFrontend.\n',
+    );
+
+    try {
+      service.sync(featureName);
+      expect(true).toBe(false); // Should not reach here
+    } catch (error) {
+      const msg = (error as Error).message;
+      expect(msg).toContain('2');
+      expect(msg).toContain('Build API');
+      expect(msg).toContain('Build Frontend');
+    }
+  });
+
+  it('detects multiple duplicate number groups', () => {
+    const featureName = 'multi-dup-test';
+    setupFeature(featureName);
+
+    const planPath = path.join(TEST_DIR, 'docs', featureName, 'plan.md');
+    fs.writeFileSync(planPath, '# Plan\n\n### 1. A\n\nA.\n\n### 1. B\n\nB.\n\n### 2. C\n\nC.\n\n### 2. D\n\nD.\n');
+
+    expect(() => service.sync(featureName)).toThrow(/[Dd]uplicate/);
+  });
+
+  it('allows plans with unique numbered task headers', () => {
+    const featureName = 'unique-numbers-test';
+    setupFeature(featureName);
+
+    const planPath = path.join(TEST_DIR, 'docs', featureName, 'plan.md');
+    fs.writeFileSync(
+      planPath,
+      '# Plan\n\n### 1. Setup\n\nSetup.\n\n### 2. Build\n\nBuild.\n\n### 3. Deploy\n\nDeploy.\n',
+    );
+
+    // Should not throw
+    const result = service.sync(featureName);
+    expect(result.created).toHaveLength(3);
+  });
+});
+
 describe('Concurrent patchBackground interleaving', () => {
   beforeEach(() => {
     cleanup();
