@@ -376,6 +376,58 @@ describe('ContextTools', () => {
   });
 
   describe('warcraft_status task workspace summaries', () => {
+    it('returns blocked feature details instead of failing the tool when the feature is blocked', async () => {
+      const taskService = {
+        list: () => [{ folder: '01-task', name: 'Blocked Task', status: 'blocked' as const, origin: 'plan' as const }],
+        getRawStatus: () => ({
+          dependsOn: ['00-prereq'],
+          workerSession: { workspaceMode: 'direct' as const, workspacePath: '/repo/blocked' },
+        }),
+        computeRunnableStatus: () => ({ runnable: [], blocked: {} }),
+      } as unknown as TaskService;
+
+      const result = await getStatusHealth({
+        taskService,
+        checkBlocked: () => ({
+          blocked: true,
+          reason: 'Awaiting operator decision',
+          message: 'Feature is blocked',
+          blockedPath: '/repo/docs/test-feature/BLOCKED',
+        }),
+      });
+      const tasks = result.data.tasks as {
+        blockedFeature: {
+          feature: string;
+          reason: string | null;
+          blockedPath: string | null;
+          tasks: Array<{
+            folder: string;
+            name: string;
+            status: string;
+            dependsOn: string[] | null;
+            workspace: { mode: string; path: string | null; hasChanges: boolean | null } | null;
+          }>;
+        } | null;
+      };
+
+      expect(result.success).toBe(true);
+      expect(tasks.blockedFeature).toEqual({
+        feature: 'test-feature',
+        reason: 'Awaiting operator decision',
+        blockedPath: '/repo/docs/test-feature/BLOCKED',
+        tasks: [
+          {
+            folder: '01-task',
+            name: 'Blocked Task',
+            status: 'blocked',
+            origin: 'plan',
+            dependsOn: ['00-prereq'],
+            workspace: { mode: 'direct', path: '/repo/blocked', hasChanges: null },
+          },
+        ],
+      });
+    });
+
     it('keeps blocked tasks visible with their persisted workspace details', async () => {
       const taskService = {
         list: () => [{ folder: '01-task', name: 'Task', status: 'blocked' as const, origin: 'plan' as const }],
@@ -411,6 +463,63 @@ describe('ContextTools', () => {
         dependsOn: ['00-prereq'],
         workspace: { mode: 'direct', path: '/repo/root', hasChanges: null },
       });
+      expect((result.data.tasks as { blockedFeature: unknown }).blockedFeature).toBeNull();
+    });
+
+    it('keeps blocked tasks visible while continuing to prioritize other active work', async () => {
+      const taskService = {
+        list: () => [
+          { folder: '01-blocked', name: 'Blocked Task', status: 'blocked' as const, origin: 'plan' as const },
+          { folder: '02-active', name: 'Active Task', status: 'in_progress' as const, origin: 'plan' as const },
+        ],
+        getRawStatus: (_feature: string, folder: string) =>
+          folder === '01-blocked'
+            ? {
+                dependsOn: ['00-prereq'],
+                workerSession: { workspaceMode: 'direct' as const, workspacePath: '/repo/blocked' },
+              }
+            : {
+                workerSession: { workspaceMode: 'direct' as const, workspacePath: '/repo/active' },
+              },
+        computeRunnableStatus: () => ({ runnable: [], blocked: {} }),
+      } as unknown as TaskService;
+
+      const result = await getStatusHealth({ taskService });
+      const tasks = result.data.tasks as {
+        total: number;
+        pending: number;
+        inProgress: number;
+        done: number;
+        list: Array<{
+          folder: string;
+          status: string;
+          workspace: { mode: string; path: string | null; hasChanges: boolean | null } | null;
+        }>;
+      };
+
+      expect(tasks.total).toBe(2);
+      expect(tasks.pending).toBe(0);
+      expect(tasks.inProgress).toBe(1);
+      expect(tasks.done).toBe(0);
+      expect(tasks.list).toEqual([
+        {
+          folder: '01-blocked',
+          name: 'Blocked Task',
+          status: 'blocked',
+          origin: 'plan',
+          dependsOn: ['00-prereq'],
+          workspace: { mode: 'direct', path: '/repo/blocked', hasChanges: null },
+        },
+        {
+          folder: '02-active',
+          name: 'Active Task',
+          status: 'in_progress',
+          origin: 'plan',
+          dependsOn: null,
+          workspace: { mode: 'direct', path: '/repo/active', hasChanges: null },
+        },
+      ]);
+      expect(result.data.nextAction).toBe('Continue work on task: 02-active');
     });
 
     it('reports direct workspace details without probing worktrees', async () => {

@@ -26,11 +26,88 @@ export interface ContextToolsDependencies {
   projectRoot: string;
 }
 
+interface StatusBlockedTaskDetail {
+  folder: string;
+  name: string;
+  status: string;
+  origin: string;
+  dependsOn: string[] | null;
+  workspace:
+    | {
+        mode: 'direct';
+        path: string | null;
+        hasChanges: null;
+      }
+    | {
+        mode: 'worktree';
+        path: string;
+        branch: string;
+        hasChanges: boolean | null;
+      }
+    | null;
+}
+
+interface StatusBlockedFeatureDetail {
+  feature: string;
+  reason: string | null;
+  blockedPath: string | null;
+  tasks: StatusBlockedTaskDetail[];
+}
+
 /**
  * Context domain tools - Write context, get status, manage AGENTS.md
  */
 export class ContextTools {
   constructor(private readonly deps: ContextToolsDependencies) {}
+
+  private static async buildTaskSummary(
+    deps: ContextToolsDependencies,
+    featureName: string,
+    task: { folder: string; name: string; status: string; origin?: string },
+  ): Promise<StatusBlockedTaskDetail> {
+    const { taskService, worktreeService } = deps;
+    const rawStatus = taskService.getRawStatus(featureName, task.folder);
+    const workspaceMode = rawStatus?.workerSession?.workspaceMode ?? 'worktree';
+    const directWorkspacePath = rawStatus?.workerSession?.workspacePath;
+    const worktree = workspaceMode === 'worktree' ? await worktreeService.get(featureName, task.folder) : null;
+    const hasChanges =
+      workspaceMode === 'worktree' && worktree
+        ? await worktreeService.hasUncommittedChanges(worktree.feature, worktree.step)
+        : null;
+
+    return {
+      folder: task.folder,
+      name: task.name,
+      status: task.status,
+      origin: task.origin || 'plan',
+      dependsOn: rawStatus?.dependsOn ?? null,
+      workspace:
+        workspaceMode === 'direct'
+          ? { mode: 'direct', path: directWorkspacePath || null, hasChanges: null }
+          : worktree && worktree.branch
+            ? { mode: 'worktree', path: worktree.path, branch: worktree.branch, hasChanges }
+            : null,
+    };
+  }
+
+  private static async buildBlockedFeatureDetail(
+    deps: ContextToolsDependencies,
+    featureName: string,
+    blockedResult: BlockedResult,
+    tasks: Array<{ folder: string; name: string; status: string; origin?: string }>,
+  ): Promise<StatusBlockedFeatureDetail> {
+    const blockedTasks = tasks.filter((task) => task.status === 'blocked');
+    const taskDetails = await Promise.all(
+      blockedTasks.map((task) => ContextTools.buildTaskSummary(deps, featureName, task)),
+    );
+
+    return {
+      feature: featureName,
+      reason: blockedResult.reason ?? blockedResult.message ?? null,
+      blockedPath: blockedResult.blockedPath ?? null,
+      tasks: taskDetails,
+    };
+  }
 
   /**
    * Write a context file for the feature. Context files store persistent notes, decisions, and reference material.
@@ -72,6 +149,7 @@ export class ContextTools {
       bvTriageService,
       projectRoot,
     } = this.deps;
+    const deps = this.deps;
     return tool({
       description:
         'Get comprehensive status of a feature including plan, tasks, and context. Returns JSON with all relevant state for resuming work.',
@@ -90,40 +168,18 @@ export class ContextTools {
 
         const featureName = featureData.name;
 
-        const blockedResult = checkBlocked(featureName);
-        if (blockedResult.blocked) {
-          return toolError(blockedResult.message || 'Feature is blocked');
-        }
-
         const plan = planService.read(featureName);
         const tasks = taskService.list(featureName);
+        const blockedResult = checkBlocked(featureName);
+        const blockedFeature = blockedResult.blocked
+          ? await ContextTools.buildBlockedFeatureDetail(deps, featureName, blockedResult, tasks)
+          : null;
         const contextFiles = contextService.list(featureName);
 
         const tasksSummary = await Promise.all(
-          tasks.map(async (t: { folder: string; name: string; status: string; origin?: string }) => {
-            const rawStatus = taskService.getRawStatus(featureName, t.folder);
-            const workspaceMode = rawStatus?.workerSession?.workspaceMode ?? 'worktree';
-            const directWorkspacePath = rawStatus?.workerSession?.workspacePath;
-            const worktree = workspaceMode === 'worktree' ? await worktreeService.get(featureName, t.folder) : null;
-            const hasChanges =
-              workspaceMode === 'worktree' && worktree
-                ? await worktreeService.hasUncommittedChanges(worktree.feature, worktree.step)
-                : null;
-
-            return {
-              folder: t.folder,
-              name: t.name,
-              status: t.status,
-              origin: t.origin || 'plan',
-              dependsOn: rawStatus?.dependsOn ?? null,
-              workspace:
-                workspaceMode === 'direct'
-                  ? { mode: 'direct', path: directWorkspacePath || null, hasChanges: null }
-                  : worktree
-                    ? { mode: 'worktree', path: worktree.path, branch: worktree.branch, hasChanges }
-                    : null,
-            };
-          }),
+          tasks.map((task: { folder: string; name: string; status: string; origin?: string }) =>
+            ContextTools.buildTaskSummary(deps, featureName, task),
+          ),
         );
 
         const contextSummary = contextFiles.map((c: { name: string; content: string; updatedAt?: string }) => ({
@@ -301,6 +357,7 @@ export class ContextTools {
             inProgress: inProgressTasks.length,
             done: doneTasks.length,
             list: tasksSummary,
+            blockedFeature,
             runnable,
             blockedBy,
             triage: triageByTask,
