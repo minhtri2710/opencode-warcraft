@@ -144,6 +144,52 @@ describe('TaskService.sync() - rollback and fault tolerance', () => {
     expect(result.diagnostics![0].code).toBe('dep_sync_failed');
     expect(result.diagnostics![0].message).toContain('Dependency sync explosion');
   });
+  it('reports accurate rollback counts when some rollback deletes fail', () => {
+    const featureName = 'partial-rollback-test';
+    setupFeature(featureName);
+
+    const planPath = path.join(TEST_DIR, 'docs', featureName, 'plan.md');
+    fs.writeFileSync(
+      planPath,
+      '# Plan\n\n### 1. Task A\n\nDo A.\n\n### 2. Task B\n\nDo B.\n\n### 3. Task C\n\nDo C.\n',
+    );
+
+    const stores = createStores(TEST_DIR, 'off', createRepository('off'));
+
+    // Make flush throw so we enter the rollback path
+    spyOn(stores.taskStore, 'flush').mockImplementation(() => {
+      throw new Error('Simulated flush failure');
+    });
+
+    // Make delete fail for the second created folder during rollback
+    const originalDelete = stores.taskStore.delete.bind(stores.taskStore);
+    let deleteCallCount = 0;
+    spyOn(stores.taskStore, 'delete').mockImplementation((feat: string, folder: string) => {
+      // During task creation, createTask calls through to the store, not delete.
+      // During rollback, delete is called for each createdFolder.
+      deleteCallCount++;
+      if (deleteCallCount === 2) {
+        throw new Error('Permission denied');
+      }
+      return originalDelete(feat, folder);
+    });
+
+    const faultyService = new TaskService(TEST_DIR, stores.taskStore, 'off');
+
+    try {
+      faultyService.sync(featureName);
+      expect(true).toBe(false); // Should not reach here
+    } catch (error) {
+      const msg = (error as Error).message;
+      // Should mention how many were created
+      expect(msg).toContain('creating 3 of 3 tasks');
+      // Should report accurate rollback counts: 2 succeeded, 1 failed
+      expect(msg).toContain('Rolled back 2 of 3');
+      expect(msg).toContain('1 rollback failure');
+      expect(msg).toContain('Simulated flush failure');
+    }
+  });
+
   it('returns dependency diagnostics emitted by the task store', () => {
     const featureName = 'dep-diagnostics-test';
     setupFeature(featureName);
