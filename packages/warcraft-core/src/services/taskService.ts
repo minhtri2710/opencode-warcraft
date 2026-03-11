@@ -257,6 +257,7 @@ export class TaskService {
 
     const planTasks = this.parseTasksFromPlan(planContent);
 
+    this.validateUniqueTaskNumbers(planTasks);
     this.validateDependencyGraph(planTasks);
     this.detectSlugCollisions(planTasks);
 
@@ -710,6 +711,35 @@ export class TaskService {
 
     const previousTask = allTasks.find((t) => t.order === task.order - 1);
     return previousTask ? [previousTask.folder] : [];
+  }
+
+  /**
+   * Validate that no two parsed plan tasks share the same numeric order.
+   * Duplicate numbered headers make implicit dependency ordering ambiguous
+   * and must be rejected before task creation.
+   */
+  private validateUniqueTaskNumbers(tasks: ParsedTask[]): void {
+    const seen = new Map<number, string>();
+    const duplicates: Array<{ order: number; firstName: string; secondName: string }> = [];
+
+    for (const task of tasks) {
+      const existing = seen.get(task.order);
+      if (existing !== undefined) {
+        duplicates.push({ order: task.order, firstName: existing, secondName: task.name });
+      } else {
+        seen.set(task.order, task.name);
+      }
+    }
+
+    if (duplicates.length > 0) {
+      const details = duplicates
+        .map((d) => `  - Task number ${d.order}: "${d.firstName}" and "${d.secondName}"`)
+        .join('\n');
+      throw new Error(
+        `Duplicate numbered task headers in plan.md:\n${details}\n` +
+          `Each task must have a unique number. Please renumber the tasks in plan.md.`,
+      );
+    }
   }
 
   /**
