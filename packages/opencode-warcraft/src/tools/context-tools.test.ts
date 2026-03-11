@@ -376,6 +376,43 @@ describe('ContextTools', () => {
   });
 
   describe('warcraft_status task workspace summaries', () => {
+    it('keeps blocked tasks visible with their persisted workspace details', async () => {
+      const taskService = {
+        list: () => [{ folder: '01-task', name: 'Task', status: 'blocked' as const, origin: 'plan' as const }],
+        getRawStatus: () => ({
+          dependsOn: ['00-prereq'],
+          workerSession: { workspaceMode: 'direct' as const, workspacePath: '/repo/root' },
+        }),
+        computeRunnableStatus: () => ({ runnable: [], blocked: {} }),
+      } as unknown as TaskService;
+
+      const result = await getStatusHealth({ taskService });
+      const tasks = result.data.tasks as {
+        total: number;
+        pending: number;
+        inProgress: number;
+        done: number;
+        list: Array<{
+          folder: string;
+          status: string;
+          workspace: { mode: string; path: string | null; hasChanges: boolean | null } | null;
+          dependsOn: string[] | null;
+        }>;
+      };
+
+      expect(tasks.total).toBe(1);
+      expect(tasks.pending).toBe(0);
+      expect(tasks.inProgress).toBe(0);
+      expect(tasks.done).toBe(0);
+      expect(tasks.list).toHaveLength(1);
+      expect(tasks.list[0]).toMatchObject({
+        folder: '01-task',
+        status: 'blocked',
+        dependsOn: ['00-prereq'],
+        workspace: { mode: 'direct', path: '/repo/root', hasChanges: null },
+      });
+    });
+
     it('reports direct workspace details without probing worktrees', async () => {
       let getCalled = false;
       let hasChangesCalled = false;

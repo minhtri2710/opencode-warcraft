@@ -227,7 +227,8 @@ Create a task that will be blocked by the worker needing clarification.`,
         };
       }>((await hooks.tool!.warcraft_status.execute({ feature: featureName }, toolContext)) as string);
       const taskBlocked = statusBlocked.tasks?.list?.find((t) => t.folder === '01-blockable-task');
-      expect(taskBlocked).toBeUndefined();
+      expect(taskBlocked?.status).toBe('blocked');
+      expect(taskBlocked?.workspace?.path).toBe(initialWorkspacePath);
 
       // Step 4: Resume with decision using blocked-only resume semantics
       const resumeRaw = (await hooks.tool!.warcraft_worktree_create.execute(
