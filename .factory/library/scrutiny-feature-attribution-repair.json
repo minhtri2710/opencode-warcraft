@@ -1,0 +1,57 @@
+{
+  "generatedAt": "2026-03-11T00:00:00Z",
+  "featureId": "scrutiny-feature-attribution-repair",
+  "summary": "Auditable attribution repair record for scrutiny-blocking execution-state features whose implementation behavior is already present on HEAD.",
+  "repairs": [
+    {
+      "featureId": "dispatch-session-propagation",
+      "scrutinyIssue": "Recorded commit 63c32c1 was contaminated with unrelated files.",
+      "invalidCommit": "63c32c1e338b6e12ebfb7e36d40a935f9aa398fd",
+      "repairedAttribution": {
+        "type": "feature-scoped-commit",
+        "commitId": "321b693",
+        "reason": "Mission progress log records that contaminated commit 63c32c1 was replaced by isolated commit 321b693 containing only batch session-propagation files.",
+        "evidence": [
+          "progress_log.jsonl dismissal at 2026-03-11T03:54:09.198Z",
+          "git show --stat 321b693",
+          "scrutiny review for dispatch-session-propagation"
+        ]
+      }
+    },
+    {
+      "featureId": "resume-and-completion-contracts",
+      "scrutinyIssue": "Recorded commit c7b2a4e was unrelated E2E preflight script.",
+      "invalidCommit": "c7b2a4efcda78a2a7e009819841d5cb048eaa853",
+      "repairedAttribution": {
+        "type": "verification-only-record",
+        "behaviorCommits": ["6739552", "79de78c", "fc7226d", "7c85a43"],
+        "reason": "Feature completed as explicit verification-only closure after prerequisite runtime fixes landed in earlier scoped commits; no single new code change was required in the assigned session.",
+        "evidence": [
+          "handoff 2026-03-11T07-37-59-975Z__resume-and-completion-contracts__b96f847f-9294-4d56-9213-264ee74820a7.json",
+          "git show --stat 6739552 79de78c fc7226d 7c85a43",
+          "task-dispatch, dispatch-coordinator, and worktree-commit contract validators recorded in the handoff"
+        ],
+        "covers": {
+          "completedTaskLearningsFlow": ["6739552", "79de78c"],
+          "blockedResumeRuntime": ["fc7226d"],
+          "failClosedCompletionRuntime": ["7c85a43"]
+        }
+      }
+    },
+    {
+      "featureId": "worktree-create-smoke-timeout-fix",
+      "scrutinyIssue": "Recorded commit 7c85a43 belonged to a different fail-closed completion feature.",
+      "invalidCommit": "7c85a43",
+      "repairedAttribution": {
+        "type": "verification-only-record",
+        "behaviorCommits": ["0c72ab7"],
+        "reason": "The assigned session established that the smoke timeout was already resolved on HEAD and validated the existing smoke test path without further code edits; the attributable repo change touching the smoke surface is commit 0c72ab7.",
+        "evidence": [
+          "handoff 2026-03-11T05-45-31-737Z__worktree-create-smoke-timeout-fix__20249953-ddc4-4bb9-bfab-7adfaead6b47.json",
+          "git show --stat 0c72ab7",
+          "integration-smoke validator output recorded in the handoff"
+        ]
+      }
+    }
+  ]
+}
