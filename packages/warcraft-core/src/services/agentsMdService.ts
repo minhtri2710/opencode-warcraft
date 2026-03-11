@@ -66,7 +66,7 @@ export class AgentsMdService {
   }
 
   private extractFindings(contexts: ContextFile[]): string[] {
-    const findings: string[] = [];
+    const findings = new Map<string, string>();
 
     // Regex patterns for actionable findings
     const patterns = [
@@ -92,8 +92,9 @@ export class AgentsMdService {
           if (matches) {
             for (const match of matches) {
               const finding = match.trim();
-              if (finding && !findings.includes(finding)) {
-                findings.push(finding);
+              const normalizedFinding = this.normalizeFinding(finding);
+              if (finding && !findings.has(normalizedFinding)) {
+                findings.set(normalizedFinding, finding);
               }
             }
           }
@@ -101,22 +102,31 @@ export class AgentsMdService {
       }
     }
 
-    return findings;
+    return [...findings.values()];
   }
 
   private generateProposals(findings: string[], current: string): string[] {
-    const proposals: string[] = [];
-    const currentLower = current.toLowerCase();
+    const proposals = new Map<string, string>();
+    const currentNormalized = this.normalizeFinding(current);
 
     for (const finding of findings) {
       // Check if finding already exists in current AGENTS.md
-      const findingLower = finding.toLowerCase();
-      if (!currentLower.includes(findingLower)) {
-        proposals.push(finding);
+      const normalizedFinding = this.normalizeFinding(finding);
+      if (!currentNormalized.includes(normalizedFinding) && !proposals.has(normalizedFinding)) {
+        proposals.set(normalizedFinding, finding);
       }
     }
 
-    return proposals;
+    return [...proposals.values()];
+  }
+
+  private normalizeFinding(value: string): string {
+    return value
+      .toLowerCase()
+      .replaceAll(/[`*_]/g, '')
+      .replaceAll(/[.,:;!?]/g, ' ')
+      .replaceAll(/\s+/g, ' ')
+      .trim();
   }
 
   private formatDiff(proposals: string[]): string {

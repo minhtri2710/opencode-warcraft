@@ -503,11 +503,15 @@ export class ContextTools {
           const result = await agentsMdService.init();
           if (result.existed) {
             return toolSuccess({
-              message: `AGENTS.md already exists (${result.content.length} chars). Use 'sync' to propose updates.`,
+              message:
+                `AGENTS.md already exists (${result.content.length} chars). ` +
+                "This init action is preview-only and did not modify AGENTS.md. Use 'sync' to propose updates.",
             });
           }
           return toolSuccess({
-            message: `Generated AGENTS.md from codebase scan (${result.content.length} chars):\n\n${result.content}\n\n⚠️ This has NOT been written to disk. Ask the user via question() whether to write it to AGENTS.md.`,
+            message:
+              `Generated AGENTS.md preview from codebase scan (${result.content.length} chars):\n\n${result.content}` +
+              '\n\n⚠️ This preview did NOT modify AGENTS.md. Ask the user via question() whether to write it to AGENTS.md.',
           });
         }
 
@@ -515,15 +519,21 @@ export class ContextTools {
           if (!feature) return toolError('feature name required for sync action');
           const result = await agentsMdService.sync(feature);
           if (result.proposals.length === 0) {
-            return toolSuccess({ message: 'No new findings to sync to AGENTS.md.' });
+            return toolSuccess({
+              message:
+                `No new actionable findings to propose for AGENTS.md from feature "${feature}". ` +
+                'Sync is preview-only and did not modify AGENTS.md.',
+            });
           }
           return toolSuccess({
-            message: `Proposed AGENTS.md updates from feature "${feature}":\n\n${result.diff}\n\n⚠️ These changes have NOT been applied. Ask the user via question() whether to apply them.`,
+            message:
+              `Proposed AGENTS.md preview updates from feature "${feature}":\n\n${result.diff}` +
+              '\n\n⚠️ This sync action did NOT modify AGENTS.md. Ask the user via question() whether to apply these proposals.',
           });
         }
 
         if (action === 'apply') {
-          if (!content)
+          if (!content?.trim())
             return toolError(
               'content required for apply action. Use init or sync first to get content, then apply with the approved content.',
             );

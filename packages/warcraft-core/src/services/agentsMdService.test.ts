@@ -168,6 +168,29 @@ describe('AgentsMdService', () => {
       expect(result.proposals.length).toBe(0);
       expect(result.diff).toBe('');
     });
+
+    test('skips duplicate actionable findings when AGENTS.md already represents them with punctuation differences', async () => {
+      const existingContent = '# Agent Guidelines\n\nPrefer async/await over .then()\n';
+      fs.writeFileSync(path.join(testDir, 'AGENTS.md'), existingContent);
+
+      contextService.write('test-feature', 'decisions', 'Prefer async/await over .then();');
+
+      const result = await service.sync('test-feature');
+
+      expect(result.proposals).toEqual([]);
+      expect(result.diff).toBe('');
+    });
+
+    test('deduplicates repeated findings across context files after extracting findings', async () => {
+      contextService.write('test-feature', 'one', 'Prefer async/await over .then()');
+      contextService.write('test-feature', 'two', 'Prefer async/await over .then();');
+      contextService.write('test-feature', 'three', 'We use Zustand');
+
+      const result = await service.sync('test-feature');
+
+      expect(result.proposals).toHaveLength(1);
+      expect(result.proposals[0]).toContain('We use Zustand');
+    });
   });
 
   describe('apply()', () => {

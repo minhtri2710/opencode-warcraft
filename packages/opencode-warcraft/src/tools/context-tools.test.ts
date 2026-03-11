@@ -743,6 +743,104 @@ describe('ContextTools', () => {
     });
   });
 
+  describe('warcraft_agents_md', () => {
+    function getAgentsMdTool(overrides: Partial<Record<string, unknown>> = {}) {
+      return new ContextTools(createMockDeps(overrides)).agentsMdTool();
+    }
+
+    it('init existing-file branch explicitly says preview-only and non-mutating', async () => {
+      const agentsMdService = {
+        init: async () => ({ existed: true, content: '# Existing' }),
+      } as unknown as AgentsMdService;
+
+      const result = JSON.parse(await getAgentsMdTool({ agentsMdService }).execute({ action: 'init' }));
+
+      expect(result.success).toBe(true);
+      expect(result.data.message).toContain('preview-only');
+      expect(result.data.message).toContain('did not modify AGENTS.md');
+    });
+
+    it('init generated branch explicitly says preview-only and non-mutating', async () => {
+      const agentsMdService = {
+        init: async () => ({ existed: false, content: '# Generated' }),
+      } as unknown as AgentsMdService;
+
+      const result = JSON.parse(await getAgentsMdTool({ agentsMdService }).execute({ action: 'init' }));
+
+      expect(result.success).toBe(true);
+      expect(result.data.message).toContain('Generated AGENTS.md preview');
+      expect(result.data.message).toContain('did NOT modify AGENTS.md');
+    });
+
+    it('sync no-op branch explicitly says there are no new actionable findings and that nothing was modified', async () => {
+      const agentsMdService = {
+        sync: async () => ({ proposals: [], diff: '' }),
+      } as unknown as AgentsMdService;
+
+      const result = JSON.parse(
+        await getAgentsMdTool({ agentsMdService }).execute({ action: 'sync', feature: 'test-feature' }),
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.data.message).toContain('No new actionable findings');
+      expect(result.data.message).toContain('did not modify AGENTS.md');
+    });
+
+    it('sync proposal branch explicitly says preview-only and non-mutating', async () => {
+      const agentsMdService = {
+        sync: async () => ({ proposals: ['Prefer async/await'], diff: '+ Prefer async/await' }),
+      } as unknown as AgentsMdService;
+
+      const result = JSON.parse(
+        await getAgentsMdTool({ agentsMdService }).execute({ action: 'sync', feature: 'test-feature' }),
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.data.message).toContain('preview updates');
+      expect(result.data.message).toContain('did NOT modify AGENTS.md');
+    });
+
+    it('apply rejects whitespace-only content', async () => {
+      let applyCalled = false;
+      const agentsMdService = {
+        apply: () => {
+          applyCalled = true;
+          return { path: '/tmp/AGENTS.md', chars: 0, isNew: false };
+        },
+      } as unknown as AgentsMdService;
+
+      const result = JSON.parse(
+        await getAgentsMdTool({ agentsMdService }).execute({ action: 'apply', content: '   ' }),
+      );
+
+      expect(result).toEqual({
+        success: false,
+        error:
+          'content required for apply action. Use init or sync first to get content, then apply with the approved content.',
+      });
+      expect(applyCalled).toBe(false);
+    });
+
+    it('apply reports whether AGENTS.md was created or updated', async () => {
+      const createdService = {
+        apply: () => ({ path: '/tmp/AGENTS.md', chars: 12, isNew: true }),
+      } as unknown as AgentsMdService;
+      const updatedService = {
+        apply: () => ({ path: '/tmp/AGENTS.md', chars: 20, isNew: false }),
+      } as unknown as AgentsMdService;
+
+      const created = JSON.parse(
+        await getAgentsMdTool({ agentsMdService: createdService }).execute({ action: 'apply', content: '# Content' }),
+      );
+      const updated = JSON.parse(
+        await getAgentsMdTool({ agentsMdService: updatedService }).execute({ action: 'apply', content: '# Content 2' }),
+      );
+
+      expect(created.data.message).toContain('AGENTS.md created');
+      expect(updated.data.message).toContain('AGENTS.md updated');
+    });
+  });
+
   describe('stale worktree age context', () => {
     it('includes ageInDays for stale worktrees with known lastCommitAge', async () => {
       const threeDaysMs = 3 * 86_400_000;
