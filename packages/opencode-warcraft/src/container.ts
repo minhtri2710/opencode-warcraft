@@ -96,7 +96,7 @@ export function createWarcraftContainer(directory: string, configService: Config
   const eventLogger = createEventLogger(directory);
 
   // Initialize BV Triage Service with explicit state ownership
-  const bvTriageService = new BvTriageService(directory, configService.getBeadsMode() !== 'off');
+  const bvTriageService = new BvTriageService(directory, beadsMode !== 'off');
   const parallelExecution = (
     configService.get() as {
       parallelExecution?: { strategy?: 'unbounded' | 'bounded'; maxConcurrency?: number };
