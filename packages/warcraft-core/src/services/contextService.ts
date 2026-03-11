@@ -78,7 +78,7 @@ export class ContextService {
     if (contexts.length === 0) return { archived: [], archivePath: '' };
 
     const contextPath = getContextPath(this.projectRoot, featureName, this.beadsModeProvider.getBeadsMode());
-    const archiveDir = path.join(contextPath, '..', 'archive');
+    const archiveDir = path.join(path.dirname(contextPath), 'archive');
     ensureDir(archiveDir);
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');

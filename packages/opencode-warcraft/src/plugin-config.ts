@@ -287,14 +287,20 @@ export async function applyWarcraftConfig(
 
   // Explicitly deny warcraft tools for OpenCode built-in default agents
   const builtInAgents = ['build', 'plan'];
-  const configAgentObj = opencodeConfig.agent as Record<string, any>;
+  const configAgentObj = opencodeConfig.agent as Record<string, unknown> | undefined;
   if (configAgentObj) {
     for (const builtIn of builtInAgents) {
-      if (!configAgentObj[builtIn]) {
-        configAgentObj[builtIn] = {};
-      }
-      const currentPermission = configAgentObj[builtIn].permission || {};
-      configAgentObj[builtIn].permission = withWarcraftToolPermissions(currentPermission, 'deny');
+      const existingConfig = configAgentObj[builtIn];
+      const normalizedConfig =
+        existingConfig && typeof existingConfig === 'object'
+          ? (existingConfig as { permission?: Record<string, string> })
+          : {};
+      const currentPermission = normalizedConfig.permission ?? {};
+
+      configAgentObj[builtIn] = {
+        ...normalizedConfig,
+        permission: withWarcraftToolPermissions(currentPermission, 'deny'),
+      };
     }
   }
 

@@ -4,7 +4,7 @@ import * as path from 'path';
 import { ConfigService } from 'warcraft-core';
 import { createWarcraftContainer } from './container.js';
 import { buildCompactionPrompt } from './hooks/compaction-hook.js';
-import { resetHookCounters, shouldExecuteHook } from './hooks/hook-cadence.js';
+import { createHookCadenceTracker } from './hooks/hook-cadence.js';
 import { applySandboxHook } from './hooks/sandbox-hook.js';
 import { createVariantHook, isWarcraftAgent } from './hooks/variant-hook.js';
 import { applyWarcraftConfig } from './plugin-config.js';
@@ -106,7 +106,6 @@ During execution, call \`warcraft_status\` periodically to (not after context co
 - Get reminded of next actions
 `;
 
-let cachedStatusHint: { hint: string; featureName: string; expiresAt: number } | null = null;
 const STATUS_HINT_TTL_MS = 30_000;
 
 // ============================================================================
@@ -137,8 +136,8 @@ const plugin: Plugin = async (ctx) => {
   });
 
   const container = createWarcraftContainer(directory, configService);
-  // Reset hook cadence counters on plugin init to ensure clean state
-  resetHookCounters();
+  const hookCadence = createHookCadenceTracker();
+  let cachedStatusHint: { hint: string; featureName: string; expiresAt: number } | null = null;
 
   return {
     'experimental.chat.system.transform': async (
@@ -150,7 +149,7 @@ const plugin: Plugin = async (ctx) => {
       if (inputAgent && !isWarcraftAgent(inputAgent)) return;
 
       // Static system prompt: gated by cadence
-      if (shouldExecuteHook('experimental.chat.system.transform', container.configService)) {
+      if (hookCadence.shouldExecuteHook('experimental.chat.system.transform', container.configService)) {
         output.system.push(WARCRAFT_SYSTEM_PROMPT);
       }
 

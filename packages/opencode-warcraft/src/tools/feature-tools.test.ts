@@ -16,6 +16,7 @@ function cleanup() {
 class MockFeatureService implements Partial<FeatureService> {
   private features: Map<string, { name: string; epicBeadId: string; priority?: number }> = new Map();
   private createCallCount = 0;
+  private completeCallCount = 0;
 
   create(name: string, ticket?: string, priority?: number) {
     this.createCallCount++;
@@ -30,8 +31,22 @@ class MockFeatureService implements Partial<FeatureService> {
     });
   }
 
+  complete(name: string) {
+    this.completeCallCount++;
+    return ok({
+      name,
+      epicBeadId: this.features.get(name)?.epicBeadId ?? `epic-${this.completeCallCount}`,
+      status: 'completed' as const,
+      createdAt: new Date().toISOString(),
+    });
+  }
+
   getCreateCallCount() {
     return this.createCallCount;
+  }
+
+  getCompleteCallCount() {
+    return this.completeCallCount;
   }
 
   getLastPriority() {
@@ -143,6 +158,18 @@ describe('FeatureTools', () => {
       });
       const parsed = JSON.parse(result);
       expect(parsed.error).toContain('0');
+    });
+  });
+  describe('completeFeatureTool', () => {
+    it('returns a tool error for invalid explicit feature input instead of throwing', async () => {
+      const tool = featureTools.completeFeatureTool((name) => name ?? 'active-feature');
+
+      const result = await tool.execute({ name: '../bad' });
+      const parsed = JSON.parse(result);
+
+      expect(parsed.success).toBe(false);
+      expect(parsed.error).toContain('feature: Name cannot contain path separators');
+      expect(mockFeatureService.getCompleteCallCount()).toBe(0);
     });
   });
 });

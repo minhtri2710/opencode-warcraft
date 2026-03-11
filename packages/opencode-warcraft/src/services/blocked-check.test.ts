@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
 import { createCheckBlocked } from './blocked-check.js';
@@ -81,5 +81,27 @@ describe('createCheckBlocked', () => {
     const result = checkBlocked('path-feature');
 
     expect(result.blockedPath).toBe(path.join(TEST_DIR, 'docs', 'path-feature', 'BLOCKED'));
+  });
+  it('fails closed when BLOCKED exists but cannot be read', () => {
+    const featureDir = ensureFeatureDir('unreadable-feature');
+    fs.writeFileSync(path.join(featureDir, 'BLOCKED'), 'secret');
+    const getPath = (feature: string) => path.join(TEST_DIR, 'docs', feature);
+    const readSpy = spyOn(fs, 'readFileSync').mockImplementation((() => {
+      const error = new Error('permission denied') as NodeJS.ErrnoException;
+      error.code = 'EACCES';
+      throw error;
+    }) as typeof fs.readFileSync);
+
+    try {
+      const checkBlocked = createCheckBlocked(getPath);
+      const result = checkBlocked('unreadable-feature');
+
+      expect(result.blocked).toBe(true);
+      expect(result.reason).toContain('Unable to read BLOCKED file');
+      expect(result.message).toContain('filesystem error');
+      expect(result.blockedPath).toBe(path.join(TEST_DIR, 'docs', 'unreadable-feature', 'BLOCKED'));
+    } finally {
+      readSpy.mockRestore();
+    }
   });
 });

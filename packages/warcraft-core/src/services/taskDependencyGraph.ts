@@ -116,7 +116,7 @@ export function buildEffectiveDependencies(tasks: TaskWithDeps[]): Map<string, s
     }
 
     const order = orderByFolder.get(task.folder);
-    if (!order || order <= 1) {
+    if (order == null || order <= 0) {
       effectiveDeps.set(task.folder, []);
       continue;
     }

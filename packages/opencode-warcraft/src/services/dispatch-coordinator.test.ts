@@ -1,5 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import * as fs from 'fs';
+import * as warcraftCore from 'warcraft-core';
 import { DispatchCoordinator, type DispatchCoordinatorDeps, type DispatchRequest } from './dispatch-coordinator.js';
 
 // ============================================================================
@@ -288,6 +289,64 @@ describe('DispatchCoordinator', () => {
       expect(successes.length).toBe(1);
       expect(failures.length).toBe(1);
       expect(failures[0].error).toContain('already being dispatched');
+    });
+
+    it('allows the same feature/task to dispatch concurrently when lock directories differ', async () => {
+      const delayedCreate = async () => {
+        await new Promise((r) => setTimeout(r, 100));
+        return {
+          mode: 'worktree' as const,
+          path: '/tmp/worktree',
+          branch: 'warcraft/test-feature/01-test-task',
+          commit: 'abc123',
+          feature: 'test-feature',
+          step: '01-test-task',
+        };
+      };
+
+      const coordinatorA = new DispatchCoordinator(
+        createMockDeps({
+          lockDir: `${TEST_DIR}/locks-a`,
+          worktreeService: {
+            ...createMockDeps().worktreeService,
+            create: delayedCreate,
+          },
+        }),
+      );
+      const coordinatorB = new DispatchCoordinator(
+        createMockDeps({
+          lockDir: `${TEST_DIR}/locks-b`,
+          worktreeService: {
+            ...createMockDeps().worktreeService,
+            create: delayedCreate,
+          },
+        }),
+      );
+
+      const [r1, r2] = await Promise.all([
+        coordinatorA.dispatch(createRequest()),
+        coordinatorB.dispatch(createRequest()),
+      ]);
+
+      expect(r1.success).toBe(true);
+      expect(r2.success).toBe(true);
+    });
+
+    it('surfaces unexpected lock acquisition errors instead of reporting contention', async () => {
+      const acquireLockSpy = spyOn(warcraftCore, 'acquireLock').mockImplementation(async () => {
+        throw new Error('lock storage exploded');
+      });
+
+      try {
+        const coordinator = new DispatchCoordinator(createMockDeps());
+        const result = await coordinator.dispatch(createRequest());
+
+        expect(result.success).toBe(false);
+        expect(result.error).toContain('lock storage exploded');
+        expect(result.error).not.toContain('already being dispatched');
+      } finally {
+        acquireLockSpy.mockRestore();
+      }
     });
 
     it('allows concurrent dispatch of different tasks', async () => {

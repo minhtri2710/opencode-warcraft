@@ -38,7 +38,14 @@ export function resolveFeatureInput(
   explicitFeature?: string,
 ): FeatureResolution {
   if (explicitFeature) {
-    validatePathSegment(explicitFeature, 'feature');
+    try {
+      validatePathSegment(explicitFeature, 'feature');
+    } catch (error) {
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
   }
   const feature = resolveFeature(explicitFeature);
   if (!feature) {

@@ -97,13 +97,13 @@ export class DoctorTools {
 
             // Check stuck dispatch_prepared
             if (task.status === 'dispatch_prepared' && rawStatus) {
-              const startedAt = rawStatus.startedAt ? new Date(rawStatus.startedAt).getTime() : null;
-              if (startedAt && now - startedAt > DISPATCH_PREPARED_STALE_MS) {
+              const preparedAt = rawStatus.preparedAt ? new Date(rawStatus.preparedAt).getTime() : null;
+              if (preparedAt && now - preparedAt > DISPATCH_PREPARED_STALE_MS) {
                 stuckDispatchPrepared.push({
                   feature: featureName,
                   folder: task.folder,
                   name: task.name,
-                  staleForSeconds: Math.round((now - startedAt) / 1000),
+                  staleForSeconds: Math.round((now - preparedAt) / 1000),
                 });
               }
             }

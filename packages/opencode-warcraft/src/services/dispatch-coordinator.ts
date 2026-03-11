@@ -117,6 +117,10 @@ export function releaseAllDispatchLocks(): void {
   activeLocks.clear();
 }
 
+function isLockContentionError(error: unknown): boolean {
+  return error instanceof Error && error.message.startsWith('Failed to acquire lock on ');
+}
+
 /**
  * Acquire a per-task dispatch lock. Returns a release function, or null if
  * the task is already being dispatched.
@@ -126,14 +130,13 @@ async function acquireDispatchLock(
   feature: string,
   task: string,
 ): Promise<{ release: () => void } | null> {
-  const lockKey = `${feature}/${task}`;
+  const lockPath = getTaskDispatchLockPath(lockDir, feature, task);
+  const lockKey = lockPath;
 
   // Fast in-process check
   if (activeLocks.has(lockKey)) {
     return null;
   }
-
-  const lockPath = getTaskDispatchLockPath(lockDir, feature, task);
 
   // Ensure lock directory exists
   fs.mkdirSync(path.dirname(lockPath), { recursive: true });
@@ -152,9 +155,12 @@ async function acquireDispatchLock(
 
     activeLocks.set(lockKey, release);
     return { release };
-  } catch {
-    // Lock acquisition failed — task is already being dispatched
-    return null;
+  } catch (error) {
+    if (isLockContentionError(error)) {
+      // Another process or thread already holds the lock.
+      return null;
+    }
+    throw error;
   }
 }
 
@@ -233,7 +239,11 @@ export class DispatchCoordinator {
     // --- Guard 6: Per-task concurrency lock ---
     let lockHandle: { release: () => void } | null = null;
     if (this.deps.lockDir) {
-      lockHandle = await acquireDispatchLock(this.deps.lockDir, feature, task);
+      try {
+        lockHandle = await acquireDispatchLock(this.deps.lockDir, feature, task);
+      } catch (error) {
+        return fail(error instanceof Error ? error.message : String(error));
+      }
       if (!lockHandle) {
         return fail(`Task "${task}" is already being dispatched (concurrency lock held)`);
       }

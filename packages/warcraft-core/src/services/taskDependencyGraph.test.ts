@@ -187,13 +187,26 @@ describe('buildEffectiveDependencies', () => {
     // 02-api gets sequential dep on 01-setup
     expect(deps.get('02-api')).toEqual(['01-setup']);
 
-    // 02-frontend also gets sequential dep on 01-setup (from the first 02-* folder)
-    // The duplicate prefix means 02-frontend is NOT registered in folderByOrder
-    // so its implicit dependency still resolves via the original 02-api mapping
-    expect(deps.has('02-frontend')).toBe(true);
+    // 02-frontend also gets sequential dep on 01-setup.
+    // The duplicate prefix means 02-frontend is not itself registered in folderByOrder,
+    // but its implicit fallback still resolves via order 1 -> 01-setup.
+    expect(deps.get('02-frontend')).toEqual(['01-setup']);
 
     // 03-finalize depends on the first 02-* entry (02-api)
     expect(deps.get('03-finalize')).toEqual(['02-api']);
+  });
+  it('supports sequential fallback when numbering starts at 00', () => {
+    const tasks: TaskWithDeps[] = [
+      { folder: '00-init', status: 'pending', dependsOn: undefined },
+      { folder: '01-setup', status: 'pending', dependsOn: undefined },
+      { folder: '02-api', status: 'pending', dependsOn: undefined },
+    ];
+
+    const deps = buildEffectiveDependencies(tasks);
+
+    expect(deps.get('00-init')).toEqual([]);
+    expect(deps.get('01-setup')).toEqual(['00-init']);
+    expect(deps.get('02-api')).toEqual(['01-setup']);
   });
 });
 

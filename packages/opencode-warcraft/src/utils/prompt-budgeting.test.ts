@@ -11,6 +11,13 @@
 import { describe, expect, it } from 'bun:test';
 import { applyContextBudget, applyTaskBudget, DEFAULT_BUDGET } from './prompt-budgeting.js';
 
+function getInlinedContextChars(result: ReturnType<typeof applyContextBudget>): number {
+  const namesOnlyFiles = new Set(result.namesOnlyFiles ?? []);
+  return result.files
+    .filter((file) => !namesOnlyFiles.has(file.name))
+    .reduce((sum, file) => sum + file.content.length, 0);
+}
+
 // ============================================================================
 // Task Budgeting Tests
 // ============================================================================
@@ -120,22 +127,60 @@ describe('applyContextBudget', () => {
 
     const result = applyContextBudget(files, { maxContextChars: 1000 });
 
-    expect(result.files[0].content.length).toBeLessThanOrEqual(1000 + 50); // Allow for marker
+    expect(result.files[0].content.length).toBe(1000);
     expect(result.files[0].content).toContain('...[truncated]');
     expect(result.files[0].truncated).toBe(true);
+    expect(getInlinedContextChars(result)).toBe(1000);
   });
 
-  it('switches to name-only listing when total exceeds budget', () => {
+  it('switches the overflowing file and all later files to name-only listing', () => {
     const files = [
-      { name: 'file1', content: 'A'.repeat(5000) },
-      { name: 'file2', content: 'B'.repeat(5000) },
-      { name: 'file3', content: 'C'.repeat(5000) },
+      { name: 'file1', content: 'A'.repeat(5) },
+      { name: 'file2', content: 'B'.repeat(20) },
+      { name: 'file3', content: 'C'.repeat(3) },
     ];
 
-    const result = applyContextBudget(files, { maxTotalContextChars: 5000 });
+    const result = applyContextBudget(files, { maxContextChars: 8, maxTotalContextChars: 10 });
 
-    // Should include some files in full/truncated form, then switch to name-only
-    expect(result.truncationEvents.some((e) => e.type === 'context_names_only')).toBe(true);
+    expect(result.files[0]).toMatchObject({
+      name: 'file1',
+      content: 'AAAAA',
+      truncated: false,
+    });
+    expect(result.files[1]).toMatchObject({
+      name: 'file2',
+      content: '[Content available at: context/file2.md]',
+      truncated: true,
+      originalLength: 20,
+      pathHint: 'context/file2.md',
+    });
+    expect(result.files[2]).toMatchObject({
+      name: 'file3',
+      content: '[Content available at: context/file3.md]',
+      truncated: true,
+      originalLength: 3,
+      pathHint: 'context/file3.md',
+    });
+    expect(result.namesOnlyFiles).toEqual(['file2', 'file3']);
+    expect(result.truncationEvents.filter((e) => e.type === 'context_truncated')).toHaveLength(0);
+    expect(result.truncationEvents.find((e) => e.type === 'context_names_only')?.affected).toEqual(['file2', 'file3']);
+    expect(getInlinedContextChars(result)).toBe(5);
+    expect(getInlinedContextChars(result)).toBeLessThanOrEqual(10);
+  });
+
+  it('allows an exact total budget boundary without switching to name-only', () => {
+    const files = [
+      { name: 'file1', content: 'A'.repeat(4) },
+      { name: 'file2', content: 'B'.repeat(6) },
+    ];
+
+    const result = applyContextBudget(files, { maxContextChars: 10, maxTotalContextChars: 10 });
+
+    expect(result.namesOnlyFiles).toBeUndefined();
+    expect(result.truncationEvents.some((e) => e.type === 'context_names_only')).toBe(false);
+    expect(result.files[0].content).toBe('AAAA');
+    expect(result.files[1].content).toBe('BBBBBB');
+    expect(getInlinedContextChars(result)).toBe(10);
   });
 
   it('preserves small context files unchanged', () => {
@@ -218,7 +263,7 @@ describe('prompt budgeting bounds growth', () => {
     expect(totalChars).toBeLessThanOrEqual(maxExpected);
   });
 
-  it('keeps total context content under threshold with large context files', () => {
+  it('keeps total inlined context content under threshold with large context files', () => {
     // Simulate large context files
     const files = Array.from({ length: 10 }, (_, i) => ({
       name: `context-${i}`,
@@ -226,11 +271,8 @@ describe('prompt budgeting bounds growth', () => {
     }));
 
     const result = applyContextBudget(files, DEFAULT_BUDGET);
+    const totalChars = getInlinedContextChars(result);
 
-    // Calculate total chars in result
-    const totalChars = result.files.reduce((sum, f) => sum + f.content.length, 0);
-
-    // Should be bounded
-    expect(totalChars).toBeLessThanOrEqual(DEFAULT_BUDGET.maxTotalContextChars + 500);
+    expect(totalChars).toBeLessThanOrEqual(DEFAULT_BUDGET.maxTotalContextChars);
   });
 });

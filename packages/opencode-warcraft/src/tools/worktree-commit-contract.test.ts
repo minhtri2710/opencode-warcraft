@@ -163,6 +163,85 @@ describe('worktree_commit terminal contract', () => {
     expect(result.success).toBe(false);
     expect(result.error).toContain('missing baseCommit');
   });
+  it('checks baseCommit before creating a commit or report', async () => {
+    let commitCalls = 0;
+    let reportWrites = 0;
+    const deps = createMockDeps({
+      taskService: {
+        ...createMockDeps().taskService,
+        getRawStatus: () => null,
+        writeReport: () => {
+          reportWrites += 1;
+        },
+      } as any,
+      worktreeService: {
+        ...createMockDeps().worktreeService,
+        commitChanges: async () => {
+          commitCalls += 1;
+          return { committed: true, sha: 'abc123', message: 'test' };
+        },
+      } as any,
+    });
+
+    const tools = new WorktreeTools(deps);
+    const commitTool = tools.commitWorktreeTool(() => 'test-feature');
+    const raw = await commitTool.execute(
+      {
+        task: '01-test',
+        summary: 'build: exit 0, test: exit 0, lint: exit 0',
+        status: 'completed',
+      },
+      MOCK_CONTEXT,
+    );
+    const result = parseResult(raw);
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('missing baseCommit');
+    expect(commitCalls).toBe(0);
+    expect(reportWrites).toBe(0);
+  });
+
+  it('does not write a report or transition when no commit is created', async () => {
+    let reportWrites = 0;
+    let transitionCalls = 0;
+    const deps = createMockDeps({
+      taskService: {
+        ...createMockDeps().taskService,
+        writeReport: () => {
+          reportWrites += 1;
+        },
+        transition: () => {
+          transitionCalls += 1;
+        },
+      } as any,
+      worktreeService: {
+        ...createMockDeps().worktreeService,
+        commitChanges: async () => ({
+          committed: false,
+          sha: 'abc123',
+          message: 'No changes to commit',
+        }),
+      } as any,
+    });
+
+    const tools = new WorktreeTools(deps);
+    const commitTool = tools.commitWorktreeTool(() => 'test-feature');
+    const raw = await commitTool.execute(
+      {
+        task: '01-test',
+        summary: 'build: exit 0, test: exit 0, lint: exit 0',
+        status: 'completed',
+      },
+      MOCK_CONTEXT,
+    );
+    const result = parseResult(raw);
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('no commit was created');
+    expect(reportWrites).toBe(0);
+    expect(transitionCalls).toBe(0);
+  });
+
   it('returns ok:true, terminal:true for blocked status', async () => {
     const tools = new WorktreeTools(createMockDeps());
     const commitTool = tools.commitWorktreeTool(() => 'test-feature');

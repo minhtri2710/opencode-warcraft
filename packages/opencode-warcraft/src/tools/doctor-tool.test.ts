@@ -71,7 +71,7 @@ describe('DoctorTools', () => {
       expect(result.data.summary).toContain('0 issues');
     });
 
-    it('detects stuck dispatch_prepared tasks', async () => {
+    it('detects stuck dispatch_prepared tasks using preparedAt', async () => {
       const now = new Date();
       const twoMinutesAgo = new Date(now.getTime() - 120_000).toISOString();
 
@@ -81,7 +81,7 @@ describe('DoctorTools', () => {
           getRawStatus: () => ({
             status: 'dispatch_prepared',
             origin: 'plan',
-            startedAt: twoMinutesAgo,
+            preparedAt: twoMinutesAgo,
           }),
         },
       });
@@ -92,6 +92,46 @@ describe('DoctorTools', () => {
       expect(check!.status).toBe('warning');
       expect(check!.message).toContain('dispatch_prepared');
       expect(check!.details).toBeDefined();
+    });
+
+    it('does not flag recent dispatch_prepared tasks', async () => {
+      const now = new Date();
+      const thirtySecondsAgo = new Date(now.getTime() - 30_000).toISOString();
+
+      const result = await runDoctor({
+        taskService: {
+          list: () => [{ folder: '01-setup', name: 'Setup', status: 'dispatch_prepared', origin: 'plan' }],
+          getRawStatus: () => ({
+            status: 'dispatch_prepared',
+            origin: 'plan',
+            preparedAt: thirtySecondsAgo,
+          }),
+        },
+      });
+
+      expect(result.success).toBe(true);
+      const check = result.data.checks.find((c) => c.name === 'stuck_dispatch_prepared');
+      expect(check).toBeDefined();
+      expect(check!.status).toBe('ok');
+      expect(check!.message).toContain('No stuck dispatch_prepared tasks.');
+    });
+
+    it('does not flag dispatch_prepared tasks without preparedAt', async () => {
+      const result = await runDoctor({
+        taskService: {
+          list: () => [{ folder: '01-setup', name: 'Setup', status: 'dispatch_prepared', origin: 'plan' }],
+          getRawStatus: () => ({
+            status: 'dispatch_prepared',
+            origin: 'plan',
+          }),
+        },
+      });
+
+      expect(result.success).toBe(true);
+      const check = result.data.checks.find((c) => c.name === 'stuck_dispatch_prepared');
+      expect(check).toBeDefined();
+      expect(check!.status).toBe('ok');
+      expect(check!.message).toContain('No stuck dispatch_prepared tasks.');
     });
 
     it('detects stuck in_progress tasks without recent activity', async () => {
@@ -223,7 +263,7 @@ describe('DoctorTools', () => {
           getRawStatus: () => ({
             status: 'dispatch_prepared',
             origin: 'plan',
-            startedAt: twoMinutesAgo,
+            preparedAt: twoMinutesAgo,
           }),
         },
         checkBlocked: () => ({

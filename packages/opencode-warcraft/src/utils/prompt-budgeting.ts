@@ -253,36 +253,43 @@ export function applyContextBudget(files: ContextInput[], config: BudgetConfig =
   let totalChars = 0;
   let switchedToNamesOnly = false;
 
-  for (const file of files) {
+  const toNameOnly = (file: ContextInput, pathHint: string): BudgetedContext => ({
+    name: file.name,
+    content: `[Content available at: ${pathHint}]`,
+    truncated: true,
+    originalLength: file.content.length,
+    pathHint,
+  });
+
+  const appendNameOnlyFile = (file: ContextInput, pathHint: string): void => {
+    namesOnlyFiles.push(file.name);
+    budgetedFiles.push(toNameOnly(file, pathHint));
+  };
+
+  for (const [index, file] of files.entries()) {
     const pathHint = feature
       ? `<feature>/context/${file.name}.md in the active warcraft root`
       : `context/${file.name}.md`;
 
-    // Check if we've exceeded total budget - switch to names only
-    if (totalChars >= maxTotalContextChars && !switchedToNamesOnly) {
-      switchedToNamesOnly = true;
-      truncationEvents.push({
-        type: 'context_names_only',
-        message: `Switched to name-only listing after ${totalChars} chars (budget: ${maxTotalContextChars})`,
-        affected: files.slice(files.indexOf(file)).map((f) => f.name),
-      });
-    }
-
     if (switchedToNamesOnly) {
-      // Name-only: just include the name and path hint
-      namesOnlyFiles.push(file.name);
-      budgetedFiles.push({
-        name: file.name,
-        content: `[Content available at: ${pathHint}]`,
-        truncated: true,
-        originalLength: file.content.length,
-        pathHint,
-      });
+      appendNameOnlyFile(file, pathHint);
       continue;
     }
 
-    // Truncate individual file if needed
     const { result, truncated } = truncateWithMarker(file.content, maxContextChars);
+    const nextTotalChars = totalChars + result.length;
+
+    if (nextTotalChars > maxTotalContextChars) {
+      switchedToNamesOnly = true;
+      truncationEvents.push({
+        type: 'context_names_only',
+        message: `Switched to name-only listing after ${totalChars} chars to stay within budget of ${maxTotalContextChars}`,
+        affected: files.slice(index).map((remainingFile) => remainingFile.name),
+      });
+
+      appendNameOnlyFile(file, pathHint);
+      continue;
+    }
 
     if (truncated) {
       truncationEvents.push({
@@ -300,7 +307,7 @@ export function applyContextBudget(files: ContextInput[], config: BudgetConfig =
       pathHint: truncated ? pathHint : undefined,
     });
 
-    totalChars += result.length;
+    totalChars = nextTotalChars;
   }
 
   return {

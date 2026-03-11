@@ -90,6 +90,21 @@ describe('AgentsMdService', () => {
       expect(result.content).toContain('bun test');
       expect(result.content).toContain('bun run dev');
     });
+    test('detects bun when only bun.lock is present', async () => {
+      const packageJson = {
+        name: 'test-repo',
+        scripts: {
+          test: 'bun test',
+        },
+      };
+      fs.writeFileSync(path.join(testDir, 'package.json'), JSON.stringify(packageJson, null, 2));
+      fs.writeFileSync(path.join(testDir, 'bun.lock'), '');
+
+      const result = await service.init();
+
+      expect(result.content).toContain('bun test');
+      expect(result.content).toContain('bun');
+    });
   });
 
   describe('sync()', () => {

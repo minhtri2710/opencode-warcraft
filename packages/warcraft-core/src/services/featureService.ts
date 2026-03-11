@@ -67,17 +67,20 @@ export class FeatureService {
     const feature = this.get(name);
     if (!feature) throw new Error(`Feature '${name}' not found`);
 
-    feature.status = status;
+    const updated: FeatureJson = {
+      ...feature,
+      status,
+    };
 
-    if (status === 'approved' && !feature.approvedAt) {
-      feature.approvedAt = new Date().toISOString();
+    if (status === 'approved' && !updated.approvedAt) {
+      updated.approvedAt = new Date().toISOString();
     }
-    if (status === 'completed' && !feature.completedAt) {
-      feature.completedAt = new Date().toISOString();
+    if (status === 'completed' && !updated.completedAt) {
+      updated.completedAt = new Date().toISOString();
     }
 
-    this.store.save(feature);
-    return feature;
+    this.store.save(updated);
+    return updated;
   }
 
   getInfo(name: string): FeatureInfo | null {
@@ -114,8 +117,10 @@ export class FeatureService {
     const feature = this.get(name);
     if (!feature) throw new Error(`Feature '${name}' not found`);
 
-    feature.sessionId = sessionId;
-    this.store.save(feature);
+    this.store.save({
+      ...feature,
+      sessionId,
+    });
   }
 
   getSession(name: string): string | undefined {

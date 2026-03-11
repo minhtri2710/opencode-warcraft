@@ -9,6 +9,7 @@ import { FeatureService } from './featureService';
 import type { OperationOutcome } from './outcomes.js';
 import { isUsable } from './outcomes.js';
 import { createStores } from './state/index.js';
+import type { FeatureStore } from './state/types.js';
 import { TaskService } from './taskService.js';
 
 let testRoot = '';
@@ -77,6 +78,18 @@ function createMockRepository(overrides: Partial<BeadsRepository> = {}): BeadsRe
   };
 
   return { ...defaultRepo, ...overrides };
+}
+
+function createFeatureStoreStub(initialFeature: FeatureJson, overrides: Partial<FeatureStore> = {}): FeatureStore {
+  return {
+    exists: (name: string) => name === initialFeature.name,
+    create: () => initialFeature,
+    get: () => initialFeature,
+    list: () => [initialFeature.name],
+    save: () => {},
+    complete: () => {},
+    ...overrides,
+  };
 }
 
 describe('FeatureService flat layout', () => {
@@ -651,6 +664,59 @@ describe('FeatureService getTasks folder stability', () => {
     expect(tasks[0].folder).toBe('01-api');
     expect(tasks[1].folder).toBe('02-frontend');
     expect(tasks[2].folder).toBe('03-setup');
+  });
+});
+
+describe('FeatureService store ownership', () => {
+  it('clones updateStatus changes before saving', () => {
+    const sharedFeature: FeatureJson = {
+      name: 'shared-feature',
+      epicBeadId: 'bd-epic-1',
+      status: 'planning',
+      createdAt: '2024-01-01T00:00:00.000Z',
+    };
+    let savedFeature: FeatureJson | null = null;
+
+    const service = new FeatureService(
+      testRoot,
+      createFeatureStoreStub(sharedFeature, {
+        save: (feature: FeatureJson) => {
+          savedFeature = feature;
+        },
+      }),
+      'off',
+    );
+
+    const updated = service.updateStatus('shared-feature', 'approved');
+
+    expect(updated).not.toBe(sharedFeature);
+    expect(savedFeature).toBe(updated);
+    expect(sharedFeature.status).toBe('planning');
+    expect(sharedFeature.approvedAt).toBeUndefined();
+    expect(updated.status).toBe('approved');
+    expect(updated.approvedAt).toBeDefined();
+  });
+
+  it('does not mutate the shared feature object when setSession save fails', () => {
+    const sharedFeature: FeatureJson = {
+      name: 'shared-feature',
+      epicBeadId: 'bd-epic-1',
+      status: 'planning',
+      createdAt: '2024-01-01T00:00:00.000Z',
+    };
+
+    const service = new FeatureService(
+      testRoot,
+      createFeatureStoreStub(sharedFeature, {
+        save: () => {
+          throw new Error('save failed');
+        },
+      }),
+      'off',
+    );
+
+    expect(() => service.setSession('shared-feature', 'session-123')).toThrow('save failed');
+    expect(sharedFeature.sessionId).toBeUndefined();
   });
 });
 

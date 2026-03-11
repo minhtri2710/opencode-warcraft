@@ -1,40 +1,43 @@
 import type { ConfigService } from 'warcraft-core';
 
-/**
- * Per-hook turn counters for cadence-based firing.
- * Turn 1 always fires. Subsequent turns fire when (turn - 1) % cadence === 0.
- *
- * Hook names should come from a bounded set (e.g. registered plugin hook points).
- * If unbounded names are used, the size guard in {@link shouldExecuteHook} will
- * clear the map and log a warning to prevent unbounded memory growth.
- */
-const hookCounters = new Map<string, number>();
+const MAX_HOOK_COUNTERS = 100;
 
-/**
- * Check whether a hook should execute on this turn.
- * Increments the internal counter for the hook each call.
- */
-export function shouldExecuteHook(
-  hookName: string,
-  configService: ConfigService,
-  options?: { safetyCritical?: boolean },
-): boolean {
-  const cadence = configService.getHookCadence(hookName, options);
-  const currentTurn = (hookCounters.get(hookName) ?? 0) + 1;
-  hookCounters.set(hookName, currentTurn);
-
-  if (hookCounters.size > 100) {
-    hookCounters.clear();
-    console.warn('[warcraft] hookCounters exceeded max size, clearing');
-  }
-
-  if (currentTurn === 1) return true;
-  return (currentTurn - 1) % cadence === 0;
+export interface HookCadenceTracker {
+  shouldExecuteHook(hookName: string, configService: ConfigService, options?: { safetyCritical?: boolean }): boolean;
+  reset(): void;
 }
 
 /**
- * Reset all hook counters. Used for testing.
+ * Create a per-plugin cadence tracker so hook turn state stays scoped to one
+ * plugin instance instead of bleeding across repositories or sessions.
  */
-export function resetHookCounters(): void {
-  hookCounters.clear();
+export function createHookCadenceTracker(): HookCadenceTracker {
+  const hookCounters = new Map<string, number>();
+
+  return {
+    shouldExecuteHook(hookName: string, configService: ConfigService, options?: { safetyCritical?: boolean }): boolean {
+      const cadence = configService.getHookCadence(hookName, options);
+      const previousTurn = hookCounters.get(hookName) ?? 0;
+      const currentTurn = previousTurn + 1;
+
+      if (hookCounters.has(hookName)) {
+        hookCounters.delete(hookName);
+      } else if (hookCounters.size >= MAX_HOOK_COUNTERS) {
+        const oldestHook = hookCounters.keys().next().value;
+        if (oldestHook !== undefined) {
+          hookCounters.delete(oldestHook);
+          console.warn(`[warcraft] hookCounters exceeded max size, evicting oldest entry: ${oldestHook}`);
+        }
+      }
+
+      hookCounters.set(hookName, currentTurn);
+
+      if (currentTurn === 1) return true;
+      return (currentTurn - 1) % cadence === 0;
+    },
+
+    reset(): void {
+      hookCounters.clear();
+    },
+  };
 }

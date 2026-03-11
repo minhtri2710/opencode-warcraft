@@ -1,96 +1,105 @@
-import { afterEach, describe, expect, it, spyOn } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
 import { ConfigService } from 'warcraft-core';
-import { resetHookCounters, shouldExecuteHook } from './hook-cadence.js';
-
-afterEach(() => {
-  resetHookCounters();
-});
+import { createHookCadenceTracker } from './hook-cadence.js';
 
 describe('Hook cadence system', () => {
   it('fires every turn when cadence is 1 (default)', () => {
+    const tracker = createHookCadenceTracker();
     const configService = new ConfigService();
     spyOn(configService, 'getHookCadence').mockReturnValue(1);
 
     for (let i = 0; i < 5; i++) {
-      expect(shouldExecuteHook('test.hook', configService)).toBe(true);
+      expect(tracker.shouldExecuteHook('test.hook', configService)).toBe(true);
     }
   });
 
   it('fires on turns 1, 4, 7, 10 when cadence is 3', () => {
+    const tracker = createHookCadenceTracker();
     const configService = new ConfigService();
     spyOn(configService, 'getHookCadence').mockReturnValue(3);
 
     const results: boolean[] = [];
     for (let i = 0; i < 10; i++) {
-      results.push(shouldExecuteHook('test.hook', configService));
+      results.push(tracker.shouldExecuteHook('test.hook', configService));
     }
-    // Turn 1=true, 2=false, 3=false, 4=true, 5=false, 6=false, 7=true, 8=false, 9=false, 10=true
     expect(results).toEqual([true, false, false, true, false, false, true, false, false, true]);
   });
 
   it('fires every turn when cadence is 1 explicitly', () => {
+    const tracker = createHookCadenceTracker();
     const configService = new ConfigService();
     spyOn(configService, 'getHookCadence').mockReturnValue(1);
 
     const results: boolean[] = [];
     for (let i = 0; i < 3; i++) {
-      results.push(shouldExecuteHook('test.hook', configService));
+      results.push(tracker.shouldExecuteHook('test.hook', configService));
     }
     expect(results).toEqual([true, true, true]);
   });
 
   it('fires every turn for safety-critical hooks', () => {
+    const tracker = createHookCadenceTracker();
     const configService = new ConfigService();
     spyOn(configService, 'getHookCadence').mockReturnValue(1);
 
     for (let i = 0; i < 5; i++) {
-      expect(shouldExecuteHook('test.hook', configService, { safetyCritical: true })).toBe(true);
+      expect(tracker.shouldExecuteHook('test.hook', configService, { safetyCritical: true })).toBe(true);
     }
   });
 
   it('tracks independent counters per hook name', () => {
+    const tracker = createHookCadenceTracker();
     const configService = new ConfigService();
     spyOn(configService, 'getHookCadence').mockReturnValue(2);
 
-    // Hook A: turn 1 (true), turn 2 (true)
-    expect(shouldExecuteHook('hookA', configService)).toBe(true);
-    // Hook B: turn 1 (true)
-    expect(shouldExecuteHook('hookB', configService)).toBe(true);
-    // Hook A: turn 2 (false for cadence 2)
-    expect(shouldExecuteHook('hookA', configService)).toBe(false);
-    // Hook B: turn 2 (false for cadence 2)
-    expect(shouldExecuteHook('hookB', configService)).toBe(false);
-    // Hook A: turn 3 (true for cadence 2)
-    expect(shouldExecuteHook('hookA', configService)).toBe(true);
+    expect(tracker.shouldExecuteHook('hookA', configService)).toBe(true);
+    expect(tracker.shouldExecuteHook('hookB', configService)).toBe(true);
+    expect(tracker.shouldExecuteHook('hookA', configService)).toBe(false);
+    expect(tracker.shouldExecuteHook('hookB', configService)).toBe(false);
+    expect(tracker.shouldExecuteHook('hookA', configService)).toBe(true);
   });
 
-  it('counter reset works', () => {
+  it('reset works per tracker instance', () => {
+    const tracker = createHookCadenceTracker();
     const configService = new ConfigService();
     spyOn(configService, 'getHookCadence').mockReturnValue(3);
 
-    shouldExecuteHook('test.hook', configService); // turn 1 - true
-    shouldExecuteHook('test.hook', configService); // turn 2 - false
-    resetHookCounters();
-    expect(shouldExecuteHook('test.hook', configService)).toBe(true); // reset: turn 1 again
+    tracker.shouldExecuteHook('test.hook', configService);
+    tracker.shouldExecuteHook('test.hook', configService);
+    tracker.reset();
+
+    expect(tracker.shouldExecuteHook('test.hook', configService)).toBe(true);
   });
 
-  it('clears counters and warns when map exceeds 100 entries', () => {
+  it('keeps tracker instances isolated from each other', () => {
+    const trackerA = createHookCadenceTracker();
+    const trackerB = createHookCadenceTracker();
     const configService = new ConfigService();
-    spyOn(configService, 'getHookCadence').mockReturnValue(1);
+    spyOn(configService, 'getHookCadence').mockReturnValue(3);
+
+    expect(trackerA.shouldExecuteHook('test.hook', configService)).toBe(true);
+    expect(trackerA.shouldExecuteHook('test.hook', configService)).toBe(false);
+    expect(trackerB.shouldExecuteHook('test.hook', configService)).toBe(true);
+  });
+
+  it('evicts the least-recently-used counter instead of clearing all counters', () => {
+    const tracker = createHookCadenceTracker();
+    const configService = new ConfigService();
+    spyOn(configService, 'getHookCadence').mockReturnValue(3);
     const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
 
-    // Fill with 100 unique hooks (no guard triggered yet)
-    for (let i = 0; i < 100; i++) {
-      shouldExecuteHook(`hook-${i}`, configService);
+    expect(tracker.shouldExecuteHook('hook-0', configService)).toBe(true);
+    for (let i = 1; i < 100; i++) {
+      tracker.shouldExecuteHook(`hook-${i}`, configService);
     }
+    expect(tracker.shouldExecuteHook('hook-0', configService)).toBe(false);
     expect(warnSpy).not.toHaveBeenCalled();
 
-    // The 101st unique hook should trigger the guard
-    shouldExecuteHook('hook-overflow', configService);
-    expect(warnSpy).toHaveBeenCalledWith('[warcraft] hookCounters exceeded max size, clearing');
+    tracker.shouldExecuteHook('hook-overflow', configService);
+    expect(warnSpy).toHaveBeenCalledWith('[warcraft] hookCounters exceeded max size, evicting oldest entry: hook-1');
 
-    // After clear, the next call should be turn 1 again (map was cleared)
-    expect(shouldExecuteHook('hook-0', configService)).toBe(true);
+    expect(tracker.shouldExecuteHook('hook-0', configService)).toBe(false);
+    expect(tracker.shouldExecuteHook('hook-1', configService)).toBe(true);
 
     warnSpy.mockRestore();
   });

@@ -159,7 +159,8 @@ export class AgentsMdService {
 
   private detectPackageManager(): string {
     // Check for lock files
-    if (fileExists(path.join(this.rootDir, 'bun.lockb'))) return 'bun';
+    if (fileExists(path.join(this.rootDir, 'bun.lock')) || fileExists(path.join(this.rootDir, 'bun.lockb')))
+      return 'bun';
     if (fileExists(path.join(this.rootDir, 'pnpm-lock.yaml'))) return 'pnpm';
     if (fileExists(path.join(this.rootDir, 'yarn.lock'))) return 'yarn';
     if (fileExists(path.join(this.rootDir, 'package-lock.json'))) return 'npm';
