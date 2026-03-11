@@ -1,0 +1,33 @@
+{
+  "featureId": "scrutiny-feature-attribution-repair",
+  "reviewedAt": "2026-03-11T08:31:21Z",
+  "commitId": "0f9d9a0066b66b69ee60d29af9929f6c8b5ebb5a",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The feature produced an auditable attribution record commit, but the implementation does not fully satisfy the mission contract because the record misattributes `worktree-create-smoke-timeout-fix` to commit `0c72ab7`, which is a broad E2E lane reorganization commit rather than a feature-scoped smoke-timeout artifact or an explicit verification-only record grounded in the actual fix commit(s). The dispatch-session-propagation repair to `321b693` is well supported, and the verification-only record for resume-and-completion-contracts is consistent with the validated prerequisite commits.",
+    "issues": [
+      {
+        "file": ".factory/library/scrutiny-feature-attribution-repair.json",
+        "line": 41,
+        "severity": "blocking",
+        "description": "The attribution repair record claims `worktree-create-smoke-timeout-fix` is attributable to commit `0c72ab7`, but `git show --stat 0c72ab7` shows a broad lane-based E2E reorganization touching 14 files, not a feature-scoped smoke-timeout fix commit. This does not meet the feature requirement to align history with the actual implementing commit(s) or an explicitly supported verification-only trail for the smoke-timeout feature."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The `audit-fix-worker` skill allows verification-only closure but does not clearly define what counts as acceptable attribution evidence for verification-only history repair, which likely contributed to citing a broad unrelated commit (`0c72ab7`) as the smoke-timeout artifact.",
+      "evidence": ".factory/skills/audit-fix-worker/SKILL.md step 12 says to create a minimal feature-scoped attribution/verification commit or return for a supported verification-only decision, but it does not require that referenced behavior commits be scoped to the feature under repair."
+    },
+    {
+      "area": "services",
+      "observation": "Mission guidance expects `.factory/library/` artifacts to be used for shared knowledge, but the repo `.gitignore` excludes `.factory/`, forcing workers to use `git add -f` for required mission records.",
+      "evidence": "Worker handoff for `scrutiny-feature-attribution-repair` records that `.factory/library/scrutiny-feature-attribution-repair.json` needed `git add -f`; repo service manifest at `.factory/services.yaml` does not mention this caveat."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Fail: the new attribution-repair commit `0f9d9a0` successfully records a clean replacement for `dispatch-session-propagation` and a plausible verification-only trail for `resume-and-completion-contracts`, but it still misattributes `worktree-create-smoke-timeout-fix` to broad E2E commit `0c72ab7`, so follow-up scrutiny cannot yet trace all three features to valid scoped artifacts."
+}
