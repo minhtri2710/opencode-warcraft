@@ -33,6 +33,10 @@
     "build": "bun run clean && bun run generate-skills && bun build src/index.ts --outdir dist --target node --format esm --packages=bundle && tsc --emitDeclarationOnly",
     "dev": "opencode plugin dev",
     "test": "bun test",
+    "test:e2e:smoke": "bun test ./src/e2e/agent-mode.test.ts ./src/e2e/config-autoload-skills.test.ts",
+    "test:e2e:host": "bun run ./scripts/e2e-preflight.ts host ./src/e2e/plugin-smoke.test.ts ./src/e2e/integration-smoke.test.ts ./src/e2e/lifecycle.test.ts ./src/e2e/dispatch-seam.test.ts ./src/e2e/direct-mode-seam.test.ts ./src/e2e/blocked-resume-seam.test.ts ./src/e2e/batch-partial-seam.test.ts ./src/e2e/runtime-spec-contract.test.ts",
+    "test:e2e:runtime": "bun run ./scripts/e2e-preflight.ts runtime ./src/e2e/opencode-runtime-smoke.test.ts",
+    "test:e2e": "bun run test:e2e:smoke && bun run test:e2e:host",
     "typecheck": "tsc --noEmit"
   },
   "peerDependencies": {

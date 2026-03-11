@@ -10,6 +10,7 @@ import {
   cleanupTempProjectRoot,
   createTempProjectRoot,
   getHostPreflightSkipReason,
+  isRequestedE2eLane,
   setupGitProject,
 } from './helpers/test-env.js';
 
@@ -46,8 +47,9 @@ const PRECONDITION_SKIP_REASON = getHostPreflightSkipReason({
   requireGit: true,
   requireBr: true,
 });
-const describeIfHostReady = PRECONDITION_SKIP_REASON ? describe.skip : describe;
-const runIfHostReady = PRECONDITION_SKIP_REASON ? it.skip : it;
+const SHOULD_RUN_HOST_LANE = isRequestedE2eLane('host') && !PRECONDITION_SKIP_REASON;
+const describeIfHostReady = SHOULD_RUN_HOST_LANE ? describe : describe.skip;
+const runIfHostReady = SHOULD_RUN_HOST_LANE ? it : it.skip;
 
 function createStubShell(): PluginInput['$'] {
   let shell: PluginInput['$'];
@@ -106,7 +108,7 @@ function parseToolResponse<T>(output: string): T {
   return (parsed.data ?? parsed) as T;
 }
 
-describeIfHostReady('e2e: opencode-warcraft plugin (in-process)', () => {
+describeIfHostReady('e2e:host: opencode-warcraft plugin (in-process)', () => {
   let testRoot: string;
   let originalHome: string | undefined;
 
@@ -656,7 +658,8 @@ Do gamma work (depends on alpha and beta)
       };
 
       expect(blockedResult.success).toBe(false);
-      expect(blockedResult.error).toContain('03-task-gamma (dependencies not met)');
+      expect(blockedResult.error).toContain('03-task-gamma');
+      expect(blockedResult.error).toContain('Dependency constraint');
     },
     15_000,
   );

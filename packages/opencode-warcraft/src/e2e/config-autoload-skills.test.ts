@@ -31,7 +31,7 @@ function createProject(worktree: string) {
   };
 }
 
-describe('config hook autoLoadSkills injection', () => {
+describe('e2e:smoke: config hook autoLoadSkills injection', () => {
   let testRoot: string;
   let originalHome: string | undefined;
 
@@ -368,7 +368,7 @@ describe('config hook autoLoadSkills injection', () => {
   });
 });
 
-describe('file-based skill fallback in autoLoadSkills', () => {
+describe('e2e:smoke: file-based skill fallback in autoLoadSkills', () => {
   let testRoot: string;
   let originalHome: string | undefined;
 

@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import type { PluginInput } from '@opencode-ai/plugin';
-import * as fs from 'fs';
 import * as path from 'path';
 import plugin from '../index';
 import { ensureFeatureExists } from './helpers/feature-setup.js';
@@ -9,7 +8,9 @@ import {
   cleanupTempProjectRoot,
   createTempProjectRoot,
   getHostPreflightSkipReason,
+  isRequestedE2eLane,
   setupGitProject,
+  waitForCondition,
 } from './helpers/test-env.js';
 
 const { client: OPENCODE_CLIENT } = createTestOpencodeClient();
@@ -25,8 +26,9 @@ const PRECONDITION_SKIP_REASON = getHostPreflightSkipReason({
   requireGit: true,
   requireBr: true,
 });
-const describeIfHostReady = PRECONDITION_SKIP_REASON ? describe.skip : describe;
-const runIfHostReady = PRECONDITION_SKIP_REASON ? it.skip : it;
+const SHOULD_RUN_HOST_LANE = isRequestedE2eLane('host') && !PRECONDITION_SKIP_REASON;
+const describeIfHostReady = SHOULD_RUN_HOST_LANE ? describe : describe.skip;
+const runIfHostReady = SHOULD_RUN_HOST_LANE ? it : it.skip;
 
 function createStubShell(): PluginInput['$'] {
   let shell: PluginInput['$'];
@@ -111,7 +113,7 @@ ${title} — seam test.
 ${tasks}`;
 }
 
-describeIfHostReady('e2e: direct-mode seam — fallback behavior when worktree unavailable', () => {
+describeIfHostReady('e2e:host: direct-mode seam — fallback behavior when worktree unavailable', () => {
   let testRoot: string;
   let originalHome: string | undefined;
 
@@ -369,12 +371,18 @@ Create a task that will be discarded.`,
       expect(discardParsed.success).toBe(true);
       expect(discardParsed.data?.message).toContain('aborted');
 
-      // Verify task is back to pending
-      const statusAfter = parseToolResponse<{
-        tasks?: {
-          list?: Array<{ folder: string; status: string }>;
-        };
-      }>((await hooks.tool!.warcraft_status.execute({ feature: featureName }, toolContext)) as string);
+      // Verify task is back to pending. Beads-backed status updates can lag briefly after discard.
+      const statusAfter = await waitForCondition(
+        async () =>
+          parseToolResponse<{
+            tasks?: {
+              list?: Array<{ folder: string; status: string }>;
+            };
+          }>((await hooks.tool!.warcraft_status.execute({ feature: featureName }, toolContext)) as string),
+        (status) =>
+          status.tasks?.list?.some((t) => t.folder === '01-discardable-task' && t.status === 'pending') === true,
+        10_000,
+      );
       const taskAfter = statusAfter.tasks?.list?.find((t) => t.folder === '01-discardable-task');
       expect(taskAfter?.status).toBe('pending');
     },

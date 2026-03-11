@@ -59,6 +59,43 @@ Recommended local checks:
 bun run lint               # Type-check all packages
 ```
 
+## Manual E2E test lanes
+
+The package-level E2E entrypoints live in `packages/opencode-warcraft/package.json`. The commands below assume you are running from that directory:
+
+```bash
+cd packages/opencode-warcraft
+```
+
+| Lane | Command | What it covers | Prerequisites |
+|------|---------|----------------|---------------|
+| Smoke | `bun run test:e2e:smoke` | Fast local checks that do not require `git`, `br`, or the OpenCode runtime (`agent-mode.test.ts`, `config-autoload-skills.test.ts`) | Bun + repo dependencies |
+| Host | `bun run test:e2e:host` | Main manual plugin workflow coverage against the host-backed beads path | `git`, `br`, writable temp directory |
+| Runtime | `bun run test:e2e:runtime` | Opt-in OpenCode runtime/provider smoke (`opencode-runtime-smoke.test.ts`) | Host lane prerequisites plus a working OpenCode runtime and a tool-capable provider/model |
+| Default | `bun run test:e2e` | Recommended default manual run: smoke, then host | Same as the smoke and host lanes |
+
+Recommended run order:
+
+1. `bun run test:e2e:smoke`
+2. `bun run test:e2e:host`
+3. `bun run test:e2e:runtime` only when you want to validate the real runtime/provider path
+
+### Preflight and skip behavior
+
+- `test:e2e:host` and `test:e2e:runtime` run a preflight wrapper before Bun's test runner. If `git`, `br`, or a writable temp directory are unavailable, the command fails immediately with an actionable message instead of relying on skipped-test output.
+- A plain `bun test` now skips the host-backed and runtime-only suites unless you explicitly opt into `test:e2e:host` or `test:e2e:runtime`. That keeps the broader developer test run fast while preserving the heavier manual lanes.
+- The runtime lane is stricter because `bun run test:e2e:runtime` turns startup/provider/prompt issues into test failures. Outside that explicit lane, the runtime suite stays skipped instead of pretending the opt-in runtime path succeeded.
+
+### Runtime lane notes
+
+- The runtime smoke starts a real OpenCode server, discovers providers via `/config/providers`, opens the permission event stream, and asks the model to call `warcraft_feature_create`.
+- If no tool-capable default model is available, or the prompt cannot complete, the runtime lane fails by design. Configure your local OpenCode provider/model first, then rerun.
+- Expect the runtime lane to be slower and more environment-sensitive than `smoke` or `host`.
+
+### Beads-backed assumptions
+
+The host and runtime lanes intentionally exercise the real beads-backed workflow. Assertions currently look for artifacts under `.beads/artifacts/...`, and the runtime smoke also verifies the `.beads/artifacts/.worktrees/<feature>/` layout. These tests are not meant to simulate `beadsMode: "off"`; they validate the canonical manual path.
+
 ### Planning-mode delegation
 
 During planning, "don't execute" means "don't implement" (no code edits, no worktrees). Read-only exploration is explicitly allowed and encouraged, both via local tools and by delegating to Scout.

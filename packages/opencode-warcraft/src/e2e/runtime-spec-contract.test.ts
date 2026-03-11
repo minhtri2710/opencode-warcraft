@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'bun:test';
 import * as fs from 'fs';
-import { createTempProjectRoot, getHostPreflightSkipReason } from './helpers/test-env.js';
+import { createTempProjectRoot, getHostPreflightSkipReason, isRequestedE2eLane } from './helpers/test-env.js';
 
 const PRECONDITION_SKIP_REASON = getHostPreflightSkipReason({ requireBr: true });
-const describeIfHostReady = PRECONDITION_SKIP_REASON ? describe.skip : describe;
-const runIfHostReady = PRECONDITION_SKIP_REASON ? it.skip : it;
+const SHOULD_RUN_HOST_LANE = isRequestedE2eLane('host') && !PRECONDITION_SKIP_REASON;
+const describeIfHostReady = SHOULD_RUN_HOST_LANE ? describe : describe.skip;
+const runIfHostReady = SHOULD_RUN_HOST_LANE ? it : it.skip;
 
-describeIfHostReady('integration: runtime spec contract verification', () => {
+describeIfHostReady('e2e:host: runtime spec contract verification', () => {
   runIfHostReady('plugin loads with refactored service architecture', async () => {
     // This test verifies that the plugin module loads correctly
     // after the BV triage service and spec formatting refactor

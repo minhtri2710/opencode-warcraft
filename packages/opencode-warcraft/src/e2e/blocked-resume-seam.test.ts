@@ -7,6 +7,7 @@ import {
   cleanupTempProjectRoot,
   createTempProjectRoot,
   getHostPreflightSkipReason,
+  isRequestedE2eLane,
   setupGitProject,
 } from './helpers/test-env.js';
 
@@ -23,8 +24,9 @@ const PRECONDITION_SKIP_REASON = getHostPreflightSkipReason({
   requireGit: true,
   requireBr: true,
 });
-const describeIfHostReady = PRECONDITION_SKIP_REASON ? describe.skip : describe;
-const runIfHostReady = PRECONDITION_SKIP_REASON ? it.skip : it;
+const SHOULD_RUN_HOST_LANE = isRequestedE2eLane('host') && !PRECONDITION_SKIP_REASON;
+const describeIfHostReady = SHOULD_RUN_HOST_LANE ? describe : describe.skip;
+const runIfHostReady = SHOULD_RUN_HOST_LANE ? it : it.skip;
 
 function createStubShell(): PluginInput['$'] {
   let shell: PluginInput['$'];
@@ -116,7 +118,7 @@ ${title} — seam test.
 ${tasks}`;
 }
 
-describeIfHostReady('e2e: blocked/resume seam — blocked → decision → resume → completed', () => {
+describeIfHostReady('e2e:host: blocked/resume seam — blocked → decision → resume → completed', () => {
   let testRoot: string;
   let originalHome: string | undefined;
 

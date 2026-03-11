@@ -3,7 +3,12 @@ import { createOpencodeClient, createOpencodeServer, type Config as OpencodeConf
 import * as fs from 'fs';
 import { createServer } from 'net';
 import * as path from 'path';
-import { cleanupTempProjectRoot, createTempProjectRoot, getHostPreflightSkipReason } from './helpers/test-env.js';
+import {
+  cleanupTempProjectRoot,
+  createTempProjectRoot,
+  getHostPreflightSkipReason,
+  isRequestedE2eLane,
+} from './helpers/test-env.js';
 
 const EXPECTED_TOOLS = [
   'warcraft_feature_create',
@@ -90,13 +95,32 @@ async function getFreePort(): Promise<number> {
   });
 }
 
-function safeRm(dir: string) {
+function safeRm(dir: string): void {
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
-const PRECONDITION_SKIP_REASON = getHostPreflightSkipReason({ requireBr: true });
-const describeIfHostReady = PRECONDITION_SKIP_REASON ? describe.skip : describe;
-const runIfHostReady = PRECONDITION_SKIP_REASON ? it.skip : it;
+const PRECONDITION_SKIP_REASON = getHostPreflightSkipReason({
+  requireGit: true,
+  requireBr: true,
+});
+const SHOULD_RUN_RUNTIME_LANE = isRequestedE2eLane('runtime') && !PRECONDITION_SKIP_REASON;
+const describeIfHostReady = SHOULD_RUN_RUNTIME_LANE ? describe : describe.skip;
+const runIfHostReady = SHOULD_RUN_RUNTIME_LANE ? it : it.skip;
+
+function skipOrFailRuntimeLane(detail: string, cause?: unknown): void {
+  const message = `[warcraft:e2e] Runtime lane cannot run: ${detail}`;
+
+  if (isRequestedE2eLane('runtime')) {
+    throw cause instanceof Error ? new Error(message, { cause }) : new Error(message);
+  }
+
+  if (cause === undefined) {
+    console.warn(`${message}. Skipping runtime smoke outside the explicit runtime lane.`);
+    return;
+  }
+
+  console.warn(`${message}. Skipping runtime smoke outside the explicit runtime lane.`, cause);
+}
 
 function pickWarcraftPluginEntry(): string {
   const tsEntry = path.resolve(import.meta.dir, '..', 'index.ts');
@@ -158,7 +182,7 @@ async function waitForTools(
   return lastIds.length ? lastIds : await idsProvider();
 }
 
-describeIfHostReady('e2e: OpenCode runtime loads opencode-warcraft', () => {
+describeIfHostReady('e2e:runtime: OpenCode runtime loads opencode-warcraft', () => {
   runIfHostReady(
     'exposes warcraft tools via /experimental/tool/ids',
     async () => {
@@ -184,7 +208,7 @@ describeIfHostReady('e2e: OpenCode runtime loads opencode-warcraft', () => {
       try {
         port = await getFreePort();
       } catch (err) {
-        console.warn('[warcraft] Skipping runtime e2e test: unable to bind localhost port', err);
+        skipOrFailRuntimeLane('unable to bind a localhost port for the OpenCode test server', err);
         return;
       }
 
@@ -201,10 +225,13 @@ describeIfHostReady('e2e: OpenCode runtime loads opencode-warcraft', () => {
           config,
         });
       } catch (err) {
-        console.warn('[warcraft] Skipping runtime e2e test: unable to start opencode server', err);
+        skipOrFailRuntimeLane('unable to start the OpenCode server', err);
         return;
       }
-      if (!server) return;
+      if (!server) {
+        skipOrFailRuntimeLane('OpenCode server started without a usable server handle');
+        return;
+      }
 
       const client = createOpencodeClient({
         baseUrl: server.url,
@@ -256,6 +283,9 @@ describeIfHostReady('e2e: OpenCode runtime loads opencode-warcraft', () => {
 
         const defaultModel = await getDefaultModel(client);
         if (!defaultModel) {
+          skipOrFailRuntimeLane(
+            'no tool-capable default model/provider was available via /config/providers; configure OpenCode with a tool-capable model and retry',
+          );
           return;
         }
 
@@ -294,9 +324,12 @@ describeIfHostReady('e2e: OpenCode runtime loads opencode-warcraft', () => {
             },
           });
         } catch (err) {
-          console.warn('[warcraft] Skipping runtime e2e test: prompt did not complete', err);
           abortController.abort();
           await permissionTask.catch(() => undefined);
+          skipOrFailRuntimeLane(
+            'the runtime prompt did not complete within 15 seconds; verify provider configuration, model availability, and permission flow',
+            err,
+          );
           return;
         } finally {
           clearTimeout(promptTimer);
@@ -311,6 +344,9 @@ describeIfHostReady('e2e: OpenCode runtime loads opencode-warcraft', () => {
         if (!hasToolPart) {
           abortController.abort();
           await permissionTask.catch(() => undefined);
+          skipOrFailRuntimeLane(
+            'the runtime prompt completed without calling warcraft_feature_create; verify tool-call support and runtime tool visibility',
+          );
           return;
         }
 

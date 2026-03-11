@@ -1,7 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import type { PluginInput } from '@opencode-ai/plugin';
-import * as fs from 'fs';
-import * as path from 'path';
 import plugin from '../index';
 import { ensureFeatureExists } from './helpers/feature-setup.js';
 import { createTestOpencodeClient } from './helpers/opencode-client.js';
@@ -9,7 +7,9 @@ import {
   cleanupTempProjectRoot,
   createTempProjectRoot,
   getHostPreflightSkipReason,
+  isRequestedE2eLane,
   setupGitProject,
+  waitForCondition,
 } from './helpers/test-env.js';
 
 const { client: OPENCODE_CLIENT } = createTestOpencodeClient();
@@ -25,8 +25,9 @@ const PRECONDITION_SKIP_REASON = getHostPreflightSkipReason({
   requireGit: true,
   requireBr: true,
 });
-const describeIfHostReady = PRECONDITION_SKIP_REASON ? describe.skip : describe;
-const runIfHostReady = PRECONDITION_SKIP_REASON ? it.skip : it;
+const SHOULD_RUN_HOST_LANE = isRequestedE2eLane('host') && !PRECONDITION_SKIP_REASON;
+const describeIfHostReady = SHOULD_RUN_HOST_LANE ? describe : describe.skip;
+const runIfHostReady = SHOULD_RUN_HOST_LANE ? it : it.skip;
 
 function createStubShell(): PluginInput['$'] {
   let shell: PluginInput['$'];
@@ -111,7 +112,7 @@ ${title} — seam test.
 ${tasks}`;
 }
 
-describeIfHostReady('e2e: dispatch seam — dispatch_prepared → in_progress → completed → merge', () => {
+describeIfHostReady('e2e:host: dispatch seam — dispatch_prepared → in_progress → completed → merge', () => {
   let testRoot: string;
   let originalHome: string | undefined;
 
@@ -235,12 +236,18 @@ Create a file to validate the dispatch flow.`,
         'transition to in_progress',
       );
 
-      // Verify in_progress state
-      const statusInProgress = parseToolResponse<{
-        tasks?: {
-          list?: Array<{ folder: string; status: string }>;
-        };
-      }>((await hooks.tool!.warcraft_status.execute({ feature: featureName }, toolContext)) as string);
+      // Verify in_progress state. Beads-backed status updates can lag briefly after task_update.
+      const statusInProgress = await waitForCondition(
+        async () =>
+          parseToolResponse<{
+            tasks?: {
+              list?: Array<{ folder: string; status: string }>;
+            };
+          }>((await hooks.tool!.warcraft_status.execute({ feature: featureName }, toolContext)) as string),
+        (status) =>
+          status.tasks?.list?.some((t) => t.folder === '01-dispatch-task' && t.status === 'in_progress') === true,
+        10_000,
+      );
       const taskInProgress = statusInProgress.tasks?.list?.find((t) => t.folder === '01-dispatch-task');
       expect(taskInProgress?.status).toBe('in_progress');
 

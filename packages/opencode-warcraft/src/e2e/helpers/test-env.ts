@@ -8,6 +8,15 @@ type HostPreflightOptions = {
   requireBr?: boolean;
 };
 
+export type E2eLane = 'smoke' | 'host' | 'runtime';
+
+export type HostPreflightResult = {
+  missing: string[];
+  reason: string | null;
+};
+
+export const WARCRAFT_E2E_LANE_ENV = 'WARCRAFT_E2E_LANE';
+
 function commandExists(command: string): boolean {
   try {
     execSync(`command -v ${command}`, { stdio: 'ignore' });
@@ -36,7 +45,11 @@ function tempDirectoryIsWritable(): boolean {
   }
 }
 
-export function getHostPreflightSkipReason(options: HostPreflightOptions): string | null {
+function isE2eLane(value: string | undefined): value is E2eLane {
+  return value === 'smoke' || value === 'host' || value === 'runtime';
+}
+
+export function getHostPreflightResult(options: HostPreflightOptions): HostPreflightResult {
   const missing: string[] = [];
 
   if (options.requireGit && !commandExists('git')) {
@@ -51,11 +64,40 @@ export function getHostPreflightSkipReason(options: HostPreflightOptions): strin
     missing.push('writable temp directory');
   }
 
-  if (missing.length === 0) {
-    return null;
+  return {
+    missing,
+    reason: missing.length === 0 ? null : `missing host prerequisites: ${missing.join(', ')}`,
+  };
+}
+
+export function getHostPreflightSkipReason(options: HostPreflightOptions): string | null {
+  return getHostPreflightResult(options).reason;
+}
+
+export function getRequestedE2eLane(): E2eLane | null {
+  const requestedLane = process.env[WARCRAFT_E2E_LANE_ENV];
+  return isE2eLane(requestedLane) ? requestedLane : null;
+}
+
+export function isRequestedE2eLane(lane: E2eLane): boolean {
+  return getRequestedE2eLane() === lane;
+}
+
+export async function waitForCondition<T>(
+  probe: () => Promise<T>,
+  predicate: (value: T) => boolean,
+  timeoutMs = 5_000,
+  intervalMs = 200,
+): Promise<T> {
+  const deadline = Date.now() + timeoutMs;
+  let lastValue = await probe();
+
+  while (!predicate(lastValue) && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    lastValue = await probe();
   }
 
-  return `missing host prerequisites: ${missing.join(', ')}`;
+  return lastValue;
 }
 
 export function createTempProjectRoot(prefix: string): string {

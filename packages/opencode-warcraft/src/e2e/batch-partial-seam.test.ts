@@ -7,7 +7,9 @@ import {
   cleanupTempProjectRoot,
   createTempProjectRoot,
   getHostPreflightSkipReason,
+  isRequestedE2eLane,
   setupGitProject,
+  waitForCondition,
 } from './helpers/test-env.js';
 
 const { client: OPENCODE_CLIENT } = createTestOpencodeClient();
@@ -23,8 +25,9 @@ const PRECONDITION_SKIP_REASON = getHostPreflightSkipReason({
   requireGit: true,
   requireBr: true,
 });
-const describeIfHostReady = PRECONDITION_SKIP_REASON ? describe.skip : describe;
-const runIfHostReady = PRECONDITION_SKIP_REASON ? it.skip : it;
+const SHOULD_RUN_HOST_LANE = isRequestedE2eLane('host') && !PRECONDITION_SKIP_REASON;
+const describeIfHostReady = SHOULD_RUN_HOST_LANE ? describe : describe.skip;
+const runIfHostReady = SHOULD_RUN_HOST_LANE ? it : it.skip;
 
 function createStubShell(): PluginInput['$'] {
   let shell: PluginInput['$'];
@@ -109,7 +112,7 @@ ${title} — seam test.
 ${tasks}`;
 }
 
-describeIfHostReady('e2e: batch partial seam — mixed success/failure in batch dispatch', () => {
+describeIfHostReady('e2e:host: batch partial seam — mixed success/failure in batch dispatch', () => {
   let testRoot: string;
   let originalHome: string | undefined;
 
@@ -300,17 +303,21 @@ Gamma task — depends on alpha and beta, should NOT dispatch yet.`,
         'beta to done',
       );
 
-      // Step 5: Preview again — gamma should now be runnable
-      const previewAfter = parseToolResponse<{
-        summary: { runnable: number; blocked: number; done?: number };
-        runnable: Array<{ folder: string }>;
-      }>(
-        (await hooks.tool!.warcraft_batch_execute.execute(
-          { mode: 'preview', feature: featureName },
-          toolContext,
-        )) as string,
+      // Step 5: Preview again — gamma should become runnable once completed task states flush.
+      const previewAfter = await waitForCondition(
+        async () =>
+          parseToolResponse<{
+            summary: { runnable: number; blocked: number; done?: number };
+            runnable: Array<{ folder: string }>;
+          }>(
+            (await hooks.tool!.warcraft_batch_execute.execute(
+              { mode: 'preview', feature: featureName },
+              toolContext,
+            )) as string,
+          ),
+        (preview) => preview.summary.runnable === 1 && preview.runnable.some((task) => task.folder === '03-task-gamma'),
+        10_000,
       );
-
       expect(previewAfter.summary.runnable).toBe(1);
       expect(previewAfter.runnable.map((r) => r.folder)).toContain('03-task-gamma');
 

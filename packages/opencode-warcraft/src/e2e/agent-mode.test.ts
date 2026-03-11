@@ -16,7 +16,7 @@ function createProject(worktree: string) {
   };
 }
 
-describe('agentMode gating', () => {
+describe('e2e:smoke: agentMode gating', () => {
   let testRoot: string;
   let originalHome: string | undefined;
 
