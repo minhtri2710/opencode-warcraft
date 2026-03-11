@@ -26,6 +26,80 @@ export interface ContextToolsDependencies {
   projectRoot: string;
 }
 
+interface StatusResponseData {
+  feature: {
+    name: string;
+    status: string;
+    ticket: string | null;
+    createdAt: string;
+  };
+  plan: {
+    exists: boolean;
+    status: string;
+    approved: boolean;
+  };
+  tasks: {
+    total: number;
+    pending: number;
+    inProgress: number;
+    done: number;
+    list: StatusBlockedTaskDetail[];
+    blockedFeature: StatusBlockedFeatureDetail | null;
+    runnable: string[];
+    blockedBy: Record<string, string[]>;
+    triage: Record<string, { summary: string; source: string }>;
+    triageGlobal: { summary: string } | null;
+    triageHealth: unknown;
+    analytics: {
+      provider: string;
+      generatedAt: string;
+      health: unknown;
+      global: unknown;
+      blockedTaskInsights: Record<
+        string,
+        {
+          source: string;
+          summary: string;
+          topBlockers: string[];
+          blockerChain: unknown | null;
+          causality: unknown | null;
+        }
+      >;
+    };
+  };
+  context: {
+    fileCount: number;
+    files: Array<{ name: string; chars: number; updatedAt?: string }>;
+  };
+  worktreeHygiene: {
+    count: number;
+    message: string;
+    worktrees: Array<{ feature: string; step: string; path: string; ageInDays?: number }>;
+  } | null;
+  staleDispatches: Array<{
+    folder: string;
+    name: string;
+    preparedAt: string;
+    staleForSeconds: number;
+    hint: string;
+  }> | null;
+  health: {
+    reopenRate: number;
+    totalCompleted: number;
+    reopenCount: number;
+    blockedMttrMs: number | null;
+  };
+  nextAction: string;
+}
+
+interface StaleDispatchDetail {
+  folder: string;
+  name: string;
+  preparedAt: string;
+  staleForSeconds: number;
+  hint: string;
+}
+
 interface StatusBlockedTaskDetail {
   folder: string;
   name: string;
@@ -109,6 +183,240 @@ export class ContextTools {
     };
   }
 
+  private static async buildStatusResponseData(
+    deps: ContextToolsDependencies,
+    featureData: { name: string; status: string; ticket?: string | null; createdAt: string },
+    blockedResult: BlockedResult,
+  ): Promise<StatusResponseData> {
+    const { planService, taskService, contextService, worktreeService, bvTriageService, projectRoot } = deps;
+    const featureName = featureData.name;
+    const plan = planService.read(featureName);
+    const tasks = taskService.list(featureName);
+    const blockedFeature = blockedResult.blocked
+      ? await ContextTools.buildBlockedFeatureDetail(deps, featureName, blockedResult, tasks)
+      : null;
+    const contextFiles = contextService.list(featureName);
+
+    const tasksSummary = await Promise.all(
+      tasks.map((task: { folder: string; name: string; status: string; origin?: string }) =>
+        ContextTools.buildTaskSummary(deps, featureName, task),
+      ),
+    );
+
+    const contextSummary = contextFiles.map((c: { name: string; content: string; updatedAt?: string }) => ({
+      name: c.name,
+      chars: c.content.length,
+      updatedAt: c.updatedAt,
+    }));
+
+    const pendingTasks = tasksSummary.filter((t: { status: string }) => t.status === 'pending');
+    const inProgressTasks = tasksSummary.filter(
+      (t: { status: string }) => t.status === 'in_progress' || t.status === 'dispatch_prepared',
+    );
+    const doneTasks = tasksSummary.filter((t: { status: string }) => t.status === 'done');
+
+    const allWorktrees = await worktreeService.listAll(featureName);
+    const staleWorktrees = allWorktrees.filter((wt: StaleWorktreeInfo) => wt.isStale);
+    const staleWarning =
+      staleWorktrees.length > 0
+        ? (() => {
+            const worktreesWithAge = staleWorktrees.map((wt: StaleWorktreeInfo) => {
+              const entry: { feature: string; step: string; path: string; ageInDays?: number } = {
+                feature: wt.feature,
+                step: wt.step,
+                path: wt.path,
+              };
+              if (wt.lastCommitAge != null && Number.isFinite(wt.lastCommitAge)) {
+                entry.ageInDays = Math.floor(wt.lastCommitAge / 86_400_000);
+              }
+              return entry;
+            });
+            const ages = worktreesWithAge.map((w) => w.ageInDays).filter((a): a is number => a != null);
+            const oldestAge = ages.length > 0 ? Math.max(...ages) : null;
+            const agePart = oldestAge != null ? ` (oldest: ${oldestAge} day${oldestAge === 1 ? '' : 's'})` : '';
+            const message =
+              `${staleWorktrees.length} stale worktree(s) detected${agePart}. ` +
+              'Run warcraft_worktree_prune to review and clean up, ' +
+              'or use warcraft_merge with cleanup: true to merge and remove.';
+            return {
+              count: staleWorktrees.length,
+              message,
+              worktrees: worktreesWithAge,
+            };
+          })()
+        : null;
+
+    const STALE_DISPATCH_THRESHOLD_MS = 60_000;
+    const now = Date.now();
+    const staleDispatchEntries: StaleDispatchDetail[] = tasksSummary
+      .filter((t: { status: string; folder: string }) => t.status === 'dispatch_prepared')
+      .flatMap((t: { folder: string; name: string }) => {
+        const raw = taskService.getRawStatus(featureName, t.folder);
+        const preparedAt = raw?.preparedAt;
+        if (!preparedAt) return [];
+        const elapsed = now - new Date(preparedAt).getTime();
+        if (elapsed <= STALE_DISPATCH_THRESHOLD_MS) return [];
+        return [
+          {
+            folder: t.folder,
+            name: t.name,
+            preparedAt,
+            staleForSeconds: Math.floor(elapsed / 1_000),
+            hint:
+              `Task ${t.folder} has been in dispatch_prepared for >60s. ` +
+              'Worker may have failed to start. Consider: retry dispatch or reset to pending.',
+          },
+        ];
+      });
+    const staleDispatches = staleDispatchEntries.length > 0 ? staleDispatchEntries : null;
+
+    const { runnable, blocked: blockedBy } = taskService.computeRunnableStatus(featureName);
+    const triageByTask: Record<string, { summary: string; source: string }> = {};
+    const triageDetailsByTask: Record<
+      string,
+      {
+        source: string;
+        summary: string;
+        topBlockers: string[];
+        blockerChain: unknown | null;
+        causality: unknown | null;
+      }
+    > = {};
+    for (const taskFolder of Object.keys(blockedBy)) {
+      const raw = taskService.getRawStatus(featureName, taskFolder);
+      if (!raw?.beadId) {
+        continue;
+      }
+      const triage = bvTriageService.getBlockerTriageDetails(raw.beadId);
+      if (triage !== null) {
+        triageByTask[taskFolder] = {
+          source: 'bv',
+          summary: triage.summary,
+        };
+        triageDetailsByTask[taskFolder] = {
+          source: 'bv',
+          summary: triage.summary,
+          topBlockers: triage.topBlockers,
+          blockerChain: triage.blockerChain,
+          causality: triage.causality,
+        };
+      }
+    }
+    const globalTriageDetails = bvTriageService.getGlobalTriageDetails();
+    const globalTriage = globalTriageDetails ? { summary: globalTriageDetails.summary } : null;
+    const triageHealth = bvTriageService.getHealth();
+    const analyticsProvider = triageHealth.enabled ? (triageHealth.available ? 'bv' : 'unavailable') : 'disabled';
+
+    const getNextAction = (
+      planStatus: string | null,
+      taskList: Array<{ status: string; folder: string }>,
+      runnableTasks: string[],
+    ): string => {
+      if (!planStatus || planStatus === 'draft') {
+        return 'Write or revise plan with warcraft_plan_write, then get approval';
+      }
+      if (planStatus === 'review') {
+        return 'Await plan approval or revise the plan';
+      }
+      if (taskList.length === 0) {
+        return 'Generate tasks from plan with warcraft_tasks_sync';
+      }
+      const inProgress = taskList.find((t) => t.status === 'in_progress' || t.status === 'dispatch_prepared');
+      if (inProgress) {
+        return `Continue work on task: ${inProgress.folder}`;
+      }
+      if (runnableTasks.length > 1) {
+        return `${runnableTasks.length} tasks are ready to start in parallel: ${runnableTasks.join(', ')}`;
+      }
+      if (runnableTasks.length === 1) {
+        return `Start next task with warcraft_worktree_create: ${runnableTasks[0]}`;
+      }
+      const pending = taskList.find((t) => t.status === 'pending');
+      if (pending) {
+        return 'Pending tasks exist but are blocked by dependencies. Check blockedBy for details.';
+      }
+      return 'All tasks complete. Review and merge or complete feature.';
+    };
+
+    const planStatus =
+      featureData.status === 'planning'
+        ? 'draft'
+        : featureData.status === 'approved'
+          ? 'approved'
+          : featureData.status === 'executing'
+            ? 'locked'
+            : 'none';
+
+    let trustMetrics: {
+      reopenRate: number;
+      totalCompleted: number;
+      reopenCount: number;
+      blockedMttrMs: number | null;
+    };
+    try {
+      trustMetrics = computeTrustMetrics(projectRoot);
+    } catch {
+      trustMetrics = { reopenRate: 0, totalCompleted: 0, reopenCount: 0, blockedMttrMs: null };
+    }
+
+    return {
+      feature: {
+        name: featureName,
+        status: featureData.status,
+        ticket: featureData.ticket || null,
+        createdAt: featureData.createdAt,
+      },
+      plan: {
+        exists: !!plan,
+        status: planStatus,
+        approved: planStatus === 'approved' || planStatus === 'locked',
+      },
+      tasks: {
+        total: tasks.length,
+        pending: pendingTasks.length,
+        inProgress: inProgressTasks.length,
+        done: doneTasks.length,
+        list: tasksSummary,
+        blockedFeature,
+        runnable,
+        blockedBy,
+        triage: triageByTask,
+        triageGlobal: globalTriage,
+        triageHealth,
+        analytics: {
+          provider: analyticsProvider,
+          generatedAt: new Date().toISOString(),
+          health: triageHealth,
+          global: globalTriageDetails
+            ? {
+                summary: globalTriageDetails.summary,
+                payload: globalTriageDetails.payload,
+                dataHash: globalTriageDetails.dataHash ?? null,
+                analysisConfig: globalTriageDetails.analysisConfig ?? null,
+                metricStatus: globalTriageDetails.metricStatus ?? null,
+                asOf: globalTriageDetails.asOf ?? null,
+                asOfCommit: globalTriageDetails.asOfCommit ?? null,
+              }
+            : null,
+          blockedTaskInsights: triageDetailsByTask,
+        },
+      },
+      context: {
+        fileCount: contextFiles.length,
+        files: contextSummary,
+      },
+      worktreeHygiene: staleWarning,
+      staleDispatches,
+      health: {
+        reopenRate: trustMetrics.reopenRate,
+        totalCompleted: trustMetrics.totalCompleted,
+        reopenCount: trustMetrics.reopenCount,
+        blockedMttrMs: trustMetrics.blockedMttrMs,
+      },
+      nextAction: getNextAction(planStatus, tasksSummary, runnable),
+    };
+  }
+
   /**
    * Write a context file for the feature. Context files store persistent notes, decisions, and reference material.
    */
@@ -129,7 +437,7 @@ export class ContextTools {
         const feature = resolution.feature;
 
         const filePath = contextService.write(feature, name, content);
-        return toolSuccess({ message: `Context file written: ${filePath}` });
+        return toolSuccess({ message: `Context file written:\n${filePath}` });
       },
     });
   }
@@ -167,234 +475,10 @@ export class ContextTools {
         }
 
         const featureName = featureData.name;
-
-        const plan = planService.read(featureName);
-        const tasks = taskService.list(featureName);
         const blockedResult = checkBlocked(featureName);
-        const blockedFeature = blockedResult.blocked
-          ? await ContextTools.buildBlockedFeatureDetail(deps, featureName, blockedResult, tasks)
-          : null;
-        const contextFiles = contextService.list(featureName);
+        const statusData = await ContextTools.buildStatusResponseData(deps, featureData, blockedResult);
 
-        const tasksSummary = await Promise.all(
-          tasks.map((task: { folder: string; name: string; status: string; origin?: string }) =>
-            ContextTools.buildTaskSummary(deps, featureName, task),
-          ),
-        );
-
-        const contextSummary = contextFiles.map((c: { name: string; content: string; updatedAt?: string }) => ({
-          name: c.name,
-          chars: c.content.length,
-          updatedAt: c.updatedAt,
-        }));
-
-        const pendingTasks = tasksSummary.filter((t: { status: string }) => t.status === 'pending');
-        const inProgressTasks = tasksSummary.filter(
-          (t: { status: string }) => t.status === 'in_progress' || t.status === 'dispatch_prepared',
-        );
-        const doneTasks = tasksSummary.filter((t: { status: string }) => t.status === 'done');
-
-        // Detect stale worktrees for hygiene warnings
-        const allWorktrees = await worktreeService.listAll(featureName);
-        const staleWorktrees = allWorktrees.filter((wt: StaleWorktreeInfo) => wt.isStale);
-        const staleWarning =
-          staleWorktrees.length > 0
-            ? (() => {
-                const worktreesWithAge = staleWorktrees.map((wt: StaleWorktreeInfo) => {
-                  const entry: { feature: string; step: string; path: string; ageInDays?: number } = {
-                    feature: wt.feature,
-                    step: wt.step,
-                    path: wt.path,
-                  };
-                  if (wt.lastCommitAge != null && Number.isFinite(wt.lastCommitAge)) {
-                    entry.ageInDays = Math.floor(wt.lastCommitAge / 86_400_000);
-                  }
-                  return entry;
-                });
-                const ages = worktreesWithAge.map((w) => w.ageInDays).filter((a): a is number => a != null);
-                const oldestAge = ages.length > 0 ? Math.max(...ages) : null;
-                const agePart = oldestAge != null ? ` (oldest: ${oldestAge} day${oldestAge === 1 ? '' : 's'})` : '';
-                const message =
-                  `${staleWorktrees.length} stale worktree(s) detected${agePart}. ` +
-                  'Run warcraft_worktree_prune to review and clean up, ' +
-                  'or use warcraft_merge with cleanup: true to merge and remove.';
-                return {
-                  count: staleWorktrees.length,
-                  message,
-                  worktrees: worktreesWithAge,
-                };
-              })()
-            : null;
-
-        // Detect tasks stuck in dispatch_prepared for >60 seconds
-        const STALE_DISPATCH_THRESHOLD_MS = 60_000;
-        const now = Date.now();
-        const staleDispatchEntries = tasksSummary
-          .filter((t: { status: string; folder: string }) => t.status === 'dispatch_prepared')
-          .map((t: { folder: string; name: string }) => {
-            const raw = taskService.getRawStatus(featureName, t.folder);
-            const preparedAt = raw?.preparedAt;
-            if (!preparedAt) return null;
-            const elapsed = now - new Date(preparedAt).getTime();
-            if (elapsed <= STALE_DISPATCH_THRESHOLD_MS) return null;
-            return {
-              folder: t.folder,
-              name: t.name,
-              preparedAt,
-              staleForSeconds: Math.floor(elapsed / 1_000),
-              hint:
-                `Task ${t.folder} has been in dispatch_prepared for >60s. ` +
-                'Worker may have failed to start. Consider: retry dispatch or reset to pending.',
-            };
-          })
-          .filter((e: unknown): e is NonNullable<typeof e> => e != null);
-        const staleDispatches = staleDispatchEntries.length > 0 ? staleDispatchEntries : null;
-
-        const { runnable, blocked: blockedBy } = taskService.computeRunnableStatus(featureName);
-        const triageByTask: Record<string, { summary: string; source: string }> = {};
-        const triageDetailsByTask: Record<
-          string,
-          {
-            source: string;
-            summary: string;
-            topBlockers: string[];
-            blockerChain: unknown | null;
-            causality: unknown | null;
-          }
-        > = {};
-        for (const taskFolder of Object.keys(blockedBy)) {
-          const raw = taskService.getRawStatus(feature, taskFolder);
-          if (!raw?.beadId) {
-            continue;
-          }
-          const triage = bvTriageService.getBlockerTriageDetails(raw.beadId);
-          if (triage !== null) {
-            triageByTask[taskFolder] = {
-              source: 'bv',
-              summary: triage.summary,
-            };
-            triageDetailsByTask[taskFolder] = {
-              source: 'bv',
-              summary: triage.summary,
-              topBlockers: triage.topBlockers,
-              blockerChain: triage.blockerChain,
-              causality: triage.causality,
-            };
-          }
-        }
-        const globalTriageDetails = bvTriageService.getGlobalTriageDetails();
-        const globalTriage = globalTriageDetails ? { summary: globalTriageDetails.summary } : null;
-        const triageHealth = bvTriageService.getHealth();
-        const analyticsProvider = triageHealth.enabled ? (triageHealth.available ? 'bv' : 'unavailable') : 'disabled';
-
-        const getNextAction = (
-          planStatus: string | null,
-          tasks: Array<{ status: string; folder: string }>,
-          runnableTasks: string[],
-        ): string => {
-          if (!planStatus || planStatus === 'draft') {
-            return 'Write or revise plan with warcraft_plan_write, then get approval';
-          }
-          if (planStatus === 'review') {
-            return 'Await plan approval or revise the plan';
-          }
-          if (tasks.length === 0) {
-            return 'Generate tasks from plan with warcraft_tasks_sync';
-          }
-          const inProgress = tasks.find((t) => t.status === 'in_progress' || t.status === 'dispatch_prepared');
-          if (inProgress) {
-            return `Continue work on task: ${inProgress.folder}`;
-          }
-          if (runnableTasks.length > 1) {
-            return `${runnableTasks.length} tasks are ready to start in parallel: ${runnableTasks.join(', ')}`;
-          }
-          if (runnableTasks.length === 1) {
-            return `Start next task with warcraft_worktree_create: ${runnableTasks[0]}`;
-          }
-          const pending = tasks.find((t) => t.status === 'pending');
-          if (pending) {
-            return `Pending tasks exist but are blocked by dependencies. Check blockedBy for details.`;
-          }
-          return 'All tasks complete. Review and merge or complete feature.';
-        };
-
-        const planStatus =
-          featureData.status === 'planning'
-            ? 'draft'
-            : featureData.status === 'approved'
-              ? 'approved'
-              : featureData.status === 'executing'
-                ? 'locked'
-                : 'none';
-
-        let trustMetrics: {
-          reopenRate: number;
-          totalCompleted: number;
-          reopenCount: number;
-          blockedMttrMs: number | null;
-        };
-        try {
-          trustMetrics = computeTrustMetrics(projectRoot);
-        } catch {
-          trustMetrics = { reopenRate: 0, totalCompleted: 0, reopenCount: 0, blockedMttrMs: null };
-        }
-
-        return toolSuccess({
-          feature: {
-            name: featureName,
-            status: featureData.status,
-            ticket: featureData.ticket || null,
-            createdAt: featureData.createdAt,
-          },
-          plan: {
-            exists: !!plan,
-            status: planStatus,
-            approved: planStatus === 'approved' || planStatus === 'locked',
-          },
-          tasks: {
-            total: tasks.length,
-            pending: pendingTasks.length,
-            inProgress: inProgressTasks.length,
-            done: doneTasks.length,
-            list: tasksSummary,
-            blockedFeature,
-            runnable,
-            blockedBy,
-            triage: triageByTask,
-            triageGlobal: globalTriage,
-            triageHealth,
-            analytics: {
-              provider: analyticsProvider,
-              generatedAt: new Date().toISOString(),
-              health: triageHealth,
-              global: globalTriageDetails
-                ? {
-                    summary: globalTriageDetails.summary,
-                    payload: globalTriageDetails.payload,
-                    dataHash: globalTriageDetails.dataHash ?? null,
-                    analysisConfig: globalTriageDetails.analysisConfig ?? null,
-                    metricStatus: globalTriageDetails.metricStatus ?? null,
-                    asOf: globalTriageDetails.asOf ?? null,
-                    asOfCommit: globalTriageDetails.asOfCommit ?? null,
-                  }
-                : null,
-              blockedTaskInsights: triageDetailsByTask,
-            },
-          },
-          context: {
-            fileCount: contextFiles.length,
-            files: contextSummary,
-          },
-          worktreeHygiene: staleWarning,
-          staleDispatches,
-          health: {
-            reopenRate: trustMetrics.reopenRate,
-            totalCompleted: trustMetrics.totalCompleted,
-            reopenCount: trustMetrics.reopenCount,
-            blockedMttrMs: trustMetrics.blockedMttrMs,
-          },
-          nextAction: getNextAction(planStatus, tasksSummary, runnable),
-        });
+        return toolSuccess(statusData);
       },
     });
   }

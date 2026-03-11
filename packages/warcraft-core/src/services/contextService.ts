@@ -6,6 +6,8 @@ import { getContextPath, sanitizeName } from '../utils/paths.js';
 export type { ContextFile };
 
 export class ContextService {
+  private static readonly WARNING_THRESHOLD_CHARS = 20_000;
+
   constructor(
     private readonly projectRoot: string,
     private readonly beadsModeProvider: BeadsModeProvider,
@@ -18,10 +20,9 @@ export class ContextService {
     const filePath = path.join(contextPath, this.normalizeFileName(fileName));
     writeText(filePath, content);
 
-    // Check total size and warn if exceeding 20,000 chars
     const totalChars = this.list(featureName).reduce((sum, c) => sum + c.content.length, 0);
-    if (totalChars > 20000) {
-      return `${filePath}\n\n⚠️ Context total: ${totalChars} chars (exceeds 20,000). Consider archiving older contexts with contextService.archive().`;
+    if (totalChars > ContextService.WARNING_THRESHOLD_CHARS) {
+      return `${filePath}\n\n⚠️ Context total: ${totalChars} chars (exceeds ${ContextService.WARNING_THRESHOLD_CHARS.toLocaleString()} char budget). Consider moving older notes into a smaller context file or deleting stale context files before writing more.`;
     }
 
     return filePath;

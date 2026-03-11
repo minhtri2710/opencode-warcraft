@@ -375,6 +375,62 @@ describe('ContextTools', () => {
     });
   });
 
+  describe('warcraft_context_write', () => {
+    it('returns the resolved file path in the success message', async () => {
+      const contextService = {
+        write: () => '/repo/.beads/artifacts/test-feature/context/notes.md',
+        list: () => [],
+      } as unknown as ContextService;
+
+      const tool = new ContextTools(createMockDeps({ contextService })).writeContextTool(() => 'test-feature');
+      const result = JSON.parse(await tool.execute({ name: 'notes', content: 'hello', feature: 'test-feature' }));
+
+      expect(result).toEqual({
+        success: true,
+        data: {
+          message: 'Context file written:\n/repo/.beads/artifacts/test-feature/context/notes.md',
+        },
+      });
+    });
+
+    it('preserves warning text in the success message when the context budget is exceeded', async () => {
+      const contextService = {
+        write: () =>
+          '/repo/.beads/artifacts/test-feature/context/notes.md\n\n⚠️ Context total: 21000 chars (exceeds 20,000 char budget). Consider moving older notes into a smaller context file or deleting stale context files before writing more.',
+        list: () => [],
+      } as unknown as ContextService;
+
+      const tool = new ContextTools(createMockDeps({ contextService })).writeContextTool(() => 'test-feature');
+      const result = JSON.parse(await tool.execute({ name: 'notes', content: 'hello', feature: 'test-feature' }));
+
+      expect(result.success).toBe(true);
+      expect(result.data.message).toContain('/repo/.beads/artifacts/test-feature/context/notes.md');
+      expect(result.data.message).toContain('⚠️ Context total: 21000 chars');
+      expect(result.data.message).toContain('smaller context file');
+      expect(result.data.message).not.toContain('contextService.archive()');
+    });
+
+    it('returns a standard error response when feature resolution fails', async () => {
+      let writeCalled = false;
+      const contextService = {
+        write: () => {
+          writeCalled = true;
+          return '/repo/should-not-write.md';
+        },
+        list: () => [],
+      } as unknown as ContextService;
+
+      const tool = new ContextTools(createMockDeps({ contextService })).writeContextTool(() => null);
+      const result = JSON.parse(await tool.execute({ name: 'notes', content: 'hello' }));
+
+      expect(result).toEqual({
+        success: false,
+        error: 'No feature specified. Create a feature or provide feature param.',
+      });
+      expect(writeCalled).toBe(false);
+    });
+  });
+
   describe('warcraft_status task workspace summaries', () => {
     it('returns blocked feature details instead of failing the tool when the feature is blocked', async () => {
       const taskService = {
@@ -426,6 +482,73 @@ describe('ContextTools', () => {
           },
         ],
       });
+    });
+
+    it('returns a successful status payload for blocked features while preserving blocked-task parity fields', async () => {
+      const taskService = {
+        list: () => [
+          { folder: '01-blocked', name: 'Blocked Task', status: 'blocked' as const, origin: 'plan' as const },
+          { folder: '02-pending', name: 'Pending Task', status: 'pending' as const, origin: 'plan' as const },
+        ],
+        getRawStatus: (_feature: string, folder: string) =>
+          folder === '01-blocked'
+            ? {
+                dependsOn: ['00-prereq'],
+                workerSession: { workspaceMode: 'direct' as const, workspacePath: '/repo/blocked-workspace' },
+              }
+            : null,
+        computeRunnableStatus: () => ({ runnable: [], blocked: { '02-pending': ['01-blocked'] } }),
+      } as unknown as TaskService;
+
+      const result = await getStatusHealth({
+        taskService,
+        checkBlocked: () => ({
+          blocked: true,
+          reason: 'Awaiting operator decision',
+          message: 'Feature is blocked',
+          blockedPath: '/repo/docs/test-feature/BLOCKED',
+        }),
+      });
+
+      expect(result.success).toBe(true);
+      expect(result).not.toHaveProperty('error');
+      expect(result.data.tasks.blockedFeature).toEqual({
+        feature: 'test-feature',
+        reason: 'Awaiting operator decision',
+        blockedPath: '/repo/docs/test-feature/BLOCKED',
+        tasks: [
+          {
+            folder: '01-blocked',
+            name: 'Blocked Task',
+            status: 'blocked',
+            origin: 'plan',
+            dependsOn: ['00-prereq'],
+            workspace: { mode: 'direct', path: '/repo/blocked-workspace', hasChanges: null },
+          },
+        ],
+      });
+      expect(result.data.tasks.blockedBy).toEqual({ '02-pending': ['01-blocked'] });
+      expect(result.data.tasks.list).toEqual([
+        {
+          folder: '01-blocked',
+          name: 'Blocked Task',
+          status: 'blocked',
+          origin: 'plan',
+          dependsOn: ['00-prereq'],
+          workspace: { mode: 'direct', path: '/repo/blocked-workspace', hasChanges: null },
+        },
+        {
+          folder: '02-pending',
+          name: 'Pending Task',
+          status: 'pending',
+          origin: 'plan',
+          dependsOn: null,
+          workspace: null,
+        },
+      ]);
+      expect(result.data.nextAction).toBe(
+        'Pending tasks exist but are blocked by dependencies. Check blockedBy for details.',
+      );
     });
 
     it('keeps blocked tasks visible with their persisted workspace details', async () => {

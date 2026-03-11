@@ -163,8 +163,10 @@ describe('ContextService', () => {
       // Should contain warning
       expect(result).toContain('⚠️');
       expect(result).toContain('21000');
-      expect(result).toContain('exceeds 20,000');
-      expect(result).toContain('archive');
+      expect(result).toContain('exceeds 20,000 char budget');
+      expect(result).toContain('moving older notes into a smaller context file');
+      expect(result).toContain('deleting stale context files');
+      expect(result).not.toContain('contextService.archive()');
     });
 
     it('does not return warning when context total is under 20,000 chars', () => {
