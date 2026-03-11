@@ -19,20 +19,21 @@ const WARCRAFT_SYSTEM_PROMPT = `
 
 Plan-first development: Write plan → User reviews → Approve → Execute tasks
 
-### Tools (17 total)
+### Tools (19 total)
 
 | Domain | Tools |
 |--------|-------|
 | Feature | warcraft_feature_create, warcraft_feature_complete |
 | Plan | warcraft_plan_write, warcraft_plan_read, warcraft_plan_approve |
 | Task | warcraft_tasks_sync, warcraft_task_create, warcraft_task_update |
-| Worktree | warcraft_worktree_create, warcraft_worktree_commit, warcraft_worktree_discard |
+| Worktree | warcraft_worktree_create, warcraft_worktree_commit, warcraft_worktree_discard, warcraft_worktree_prune |
 | Merge | warcraft_merge |
 | Batch | warcraft_batch_execute |
 | Context | warcraft_context_write |
 | AGENTS.md | warcraft_agents_md |
 | Status | warcraft_status |
 | Skill | warcraft_skill |
+| Diagnostics | warcraft_doctor |
 
 ### Workflow
 

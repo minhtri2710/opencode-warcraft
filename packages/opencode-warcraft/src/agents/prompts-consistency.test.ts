@@ -155,6 +155,68 @@ describe('Prompt consistency (contradiction detection)', () => {
   });
 
   // -------------------------------------------------------------------------
+  // Tool inventory: static prompt must match runtime registration
+  // -------------------------------------------------------------------------
+  describe('tool inventory consistency', () => {
+    /**
+     * Extract the `tool: { ... }` block from index.ts and pull out all warcraft_* keys.
+     * These are the tools actually registered at runtime.
+     */
+    function extractRuntimeTools(source: string): string[] {
+      // Match the `tool: {` block — scan for `warcraft_\w+` keys (before the colon)
+      const toolBlockMatch = source.match(/\btool:\s*\{([\s\S]*?)\n\s{4}\}/);
+      if (!toolBlockMatch) return [];
+      const block = toolBlockMatch[1];
+      const tools: string[] = [];
+      for (const m of block.matchAll(/\b(warcraft_\w+)\s*:/g)) {
+        tools.push(m[1]);
+      }
+      return tools.sort();
+    }
+
+    /**
+     * Extract all warcraft_* tool names mentioned in the system prompt table.
+     */
+    function extractPromptTools(prompt: string): string[] {
+      const tools: string[] = [];
+      for (const m of prompt.matchAll(/\b(warcraft_\w+)\b/g)) {
+        tools.push(m[1]);
+      }
+      // Deduplicate (tools may appear in both table and workflow sections)
+      return [...new Set(tools)].sort();
+    }
+
+    const runtimeTools = extractRuntimeTools(indexSource);
+    const promptTableSection = extractSection(systemPrompt, 'Tools');
+    const promptTools = extractPromptTools(promptTableSection);
+
+    it('runtime registers exactly 19 tools', () => {
+      expect(runtimeTools).toHaveLength(19);
+    });
+
+    it('static prompt documents exactly 19 tools in the table', () => {
+      expect(promptTools).toHaveLength(19);
+    });
+
+    it('every runtime tool appears in the static prompt table', () => {
+      const missing = runtimeTools.filter((t) => !promptTools.includes(t));
+      expect(missing).toEqual([]);
+    });
+
+    it('no stale tools in prompt that are not registered at runtime', () => {
+      const stale = promptTools.filter((t) => !runtimeTools.includes(t));
+      expect(stale).toEqual([]);
+    });
+
+    it('static prompt header count matches actual tool count', () => {
+      const headerMatch = systemPrompt.match(/###\s+Tools\s+\((\d+)\s+total\)/);
+      expect(headerMatch).toBeTruthy();
+      const headerCount = Number(headerMatch![1]);
+      expect(headerCount).toBe(runtimeTools.length);
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // Plan modification: only orchestrator should modify plans
   // -------------------------------------------------------------------------
   describe('plan modification consistency', () => {
