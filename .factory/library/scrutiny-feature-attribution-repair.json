@@ -44,8 +44,8 @@
       "invalidCommit": "7c85a43",
       "repairedAttribution": {
         "type": "verification-only-record",
-        "behaviorCommits": ["504c261", "7c9d267", "20a6a1b"],
-        "reason": "The assigned session was verification-only because the timeout regression had already been removed on HEAD before that worker ran. Follow-up tracing narrowed the smoke-timeout behavior to the smallest auditable implementation trail on the exercised code path: commit `504c261` introduced the shared dispatch coordinator and moved worktree-create onto that path, `7c9d267` tightened production-facing transition semantics used during dispatch preparation, and the later feature-scoped repair commits `0f9d9a0`, `168ce46`, and `97ab903` explicitly replaced the rejected broad-commit attribution with this narrower evidence trail. Together those commits provide a feature-scoped verification record without borrowing the unrelated broad lane reorganization in `0c72ab7`.",
+        "behaviorCommits": ["504c261", "7c9d267", "0f9d9a0", "168ce46", "97ab903"],
+        "reason": "The assigned session was verification-only because the timeout regression had already been removed on HEAD before that worker ran. Follow-up tracing narrowed the smoke-timeout behavior to the smallest auditable implementation trail on the exercised code path: commit `504c261` introduced the shared dispatch coordinator and moved worktree-create onto that path, `7c9d267` tightened production-facing transition semantics used during dispatch preparation, and the later feature-scoped repair commits `0f9d9a0`, `168ce46`, and `97ab903` explicitly replaced the rejected broad-commit attribution with this narrower evidence trail. Together those scoped runtime and attribution-repair commits provide the auditable smoke-timeout record without relying on the unrelated broad lane reorganization in `0c72ab7` or the unrelated foundation refactor in `20a6a1b`.",
         "evidence": [
           "handoff 2026-03-11T05-45-31-737Z__worktree-create-smoke-timeout-fix__20249953-ddc4-4bb9-bfab-7adfaead6b47.json",
           "progress_log.jsonl dismissal at 2026-03-11T05:30:27.753Z recording the original smoke-timeout blocker from resume-and-completion-contracts",
@@ -65,7 +65,8 @@
             "7c85a43 was rejected because it only changed worktree completion fail-closed behavior, not smoke timeout handling",
             "0c72ab7 was rejected because it touched 14 E2E files as a lane reorganization rather than a feature-scoped smoke-timeout repair",
             "File-history tracing for `integration-smoke.test.ts`, `task-dispatch.test.ts`, `dispatch-coordinator.ts`, and `worktree-tools.test.ts` narrows the runtime changes relevant to the smoke path to commits 504c261 and 7c9d267 rather than the broader lane-reorg commit",
-            "Feature-scoped attribution-repair commits 0f9d9a0, 168ce46, and 97ab903 then record and tighten that narrowed evidence trail so follow-up scrutiny can audit the smoke-timeout fix without relying on either rejected broad commit"
+            "Feature-scoped attribution-repair commits 0f9d9a0, 168ce46, and 97ab903 then record and tighten that narrowed evidence trail so follow-up scrutiny can audit the smoke-timeout fix without relying on either rejected broad commit",
+            "Commit 20a6a1b was removed from the attribution trail because it is a broad foundation refactor spanning many unrelated files rather than a feature-scoped smoke-timeout artifact"
           ]
         }
       }
