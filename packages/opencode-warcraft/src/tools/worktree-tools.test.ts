@@ -882,6 +882,7 @@ describe('createWorktreeTool lifecycle parity', () => {
 
   it('promotes dispatch_prepared tasks to in_progress after successful worker handoff', async () => {
     const transitionCalls: Array<{ toStatus: string; extras?: Record<string, unknown> }> = [];
+    const patchCalls: Array<Record<string, unknown>> = [];
 
     const deps = {
       featureService: {
@@ -892,23 +893,31 @@ describe('createWorktreeTool lifecycle parity', () => {
       },
       taskService: {
         get: () => ({ folder: '01-task', name: 'Task', status: 'pending', origin: 'plan' as const }),
-        getRawStatus: () => ({
-          status: 'in_progress' as const,
-          origin: 'plan' as const,
-          preparedAt: '2026-01-01T00:00:00Z',
-          workerSession: {
-            sessionId: 'sess-1',
-            attempt: 1,
-            workspaceMode: 'worktree' as const,
-            workspacePath: '/tmp/wt',
-            workspaceBranch: 'warcraft/test-feature/01-task',
-          },
-        }),
+        getRawStatus: (() => {
+          let callCount = 0;
+          return () => {
+            callCount += 1;
+            return {
+              status: 'in_progress' as const,
+              origin: 'plan' as const,
+              preparedAt: '2026-01-01T00:00:00Z',
+              workerSession: {
+                sessionId: 'sess-1',
+                attempt: callCount === 1 ? 1 : 2,
+                workspaceMode: 'worktree' as const,
+                workspacePath: '/tmp/wt',
+                workspaceBranch: 'warcraft/test-feature/01-task',
+              },
+            };
+          };
+        })(),
         transition: (_feature: string, _task: string, toStatus: string, extras?: Record<string, unknown>) => {
           transitionCalls.push({ toStatus, extras });
           return { folder: '01-task', name: 'Task', status: toStatus, origin: 'plan' as const };
         },
-        patchBackgroundFields: () => {},
+        patchBackgroundFields: (_feature: string, _task: string, patch: Record<string, unknown>) => {
+          patchCalls.push(patch);
+        },
         writeSpec: () => 'spec-path',
         writeWorkerPrompt: () => {},
         buildSpecData: () => ({
@@ -956,6 +965,116 @@ describe('createWorktreeTool lifecycle parity', () => {
     expect(data.taskToolCall).toBeDefined();
     expect(transitionCalls.map((call) => call.toStatus)).toEqual(['dispatch_prepared', 'in_progress']);
     expect(transitionCalls[0]?.extras?.preparedAt).toBeDefined();
+    expect(patchCalls[0]).toEqual({
+      workerSession: {
+        sessionId: 'sess-1',
+        agent: 'mekkatorque',
+        mode: 'delegate',
+        attempt: 2,
+        workspaceMode: 'worktree',
+        workspacePath: '/tmp/wt',
+        workspaceBranch: 'warcraft/test-feature/01-task',
+      },
+    });
+    expect(patchCalls[1]).toEqual({
+      idempotencyKey: 'warcraft-test-feature-01-task-2',
+    });
+  });
+
+  it('reuses the persisted dispatch attempt in the idempotency key for resumed work', async () => {
+    const patchCalls: Array<Record<string, unknown>> = [];
+
+    const deps = {
+      featureService: {
+        getSession: () => 'sess-1',
+      },
+      planService: {
+        read: () => ({ content: '# Plan\n\n### 1. Task\n\nDo it.', status: 'approved', comments: [] }),
+      },
+      taskService: {
+        get: () => ({ folder: '01-task', name: 'Task', status: 'blocked', origin: 'plan' as const, summary: 'Wait' }),
+        getRawStatus: (() => {
+          let callCount = 0;
+          return () => {
+            callCount += 1;
+            return {
+              status: 'in_progress' as const,
+              origin: 'plan' as const,
+              preparedAt: '2026-01-01T00:00:00Z',
+              workerSession: {
+                sessionId: 'sess-1',
+                attempt: callCount === 1 ? 2 : 3,
+                workspaceMode: 'worktree' as const,
+                workspacePath: '/tmp/wt',
+                workspaceBranch: 'warcraft/test-feature/01-task',
+              },
+            };
+          };
+        })(),
+        transition: () => ({ folder: '01-task', name: 'Task', status: 'in_progress', origin: 'plan' as const }),
+        patchBackgroundFields: (_feature: string, _task: string, patch: Record<string, unknown>) => {
+          patchCalls.push(patch);
+        },
+        writeSpec: () => 'spec-path',
+        writeWorkerPrompt: () => {},
+        buildSpecData: () => ({
+          featureName: 'test-feature',
+          task: { folder: '01-task', name: 'Task', order: 1 },
+          dependsOn: [],
+          allTasks: [{ folder: '01-task', name: 'Task', order: 1 }],
+          planSection: '### 1. Task\n\nDo it.',
+          contextFiles: [],
+          completedTasks: [],
+        }),
+        list: () => [{ folder: '01-task', name: 'Task', status: 'blocked', origin: 'plan' as const }],
+      },
+      worktreeService: {
+        create: async () => ({
+          mode: 'worktree' as const,
+          path: '/tmp/wt',
+          branch: 'warcraft/test-feature/01-task',
+          commit: 'base123',
+          feature: 'test-feature',
+          step: '01-task',
+        }),
+        get: async () => ({ mode: 'worktree' as const, path: '/tmp/wt', branch: 'warcraft/test-feature/01-task' }),
+        remove: async () => {},
+      },
+      contextService: { list: () => [] },
+      validateTaskStatus: ((s: string) => s) as never,
+      checkBlocked: () => ({ blocked: false }),
+      checkDependencies: () => ({ allowed: true }),
+      hasCompletionGateEvidence: () => true,
+      completionGates: ['build', 'test', 'lint'] as const,
+      verificationModel: 'best-effort' as const,
+      workflowGatesMode: 'warn' as const,
+      eventLogger: { emit: () => {}, getLatestTraceContext: () => undefined },
+    } satisfies Partial<WorktreeToolsDependencies> as WorktreeToolsDependencies;
+
+    const tools = new WorktreeTools(deps);
+    const createTool = tools.createWorktreeTool(resolveFeature);
+
+    const result = await createTool.execute(
+      { task: '01-task', feature: 'test-feature', continueFrom: 'blocked', decision: 'Proceed' },
+      { sessionID: 'sess-1' } as never,
+    );
+
+    const data = parseToolResult(result);
+    expect(data.taskToolCall).toBeDefined();
+    expect(patchCalls[0]).toEqual({
+      workerSession: {
+        sessionId: 'sess-1',
+        agent: 'mekkatorque',
+        mode: 'delegate',
+        attempt: 3,
+        workspaceMode: 'worktree',
+        workspacePath: '/tmp/wt',
+        workspaceBranch: 'warcraft/test-feature/01-task',
+      },
+    });
+    expect(patchCalls[1]).toEqual({
+      idempotencyKey: 'warcraft-test-feature-01-task-3',
+    });
   });
 });
 

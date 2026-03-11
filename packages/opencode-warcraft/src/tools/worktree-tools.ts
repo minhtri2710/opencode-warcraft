@@ -151,7 +151,7 @@ export class WorktreeTools {
         } = prep;
 
         const rawStatus = taskService.getRawStatus(feature, task);
-        const attempt = (rawStatus?.workerSession?.attempt || 0) + 1;
+        const attempt = rawStatus?.workerSession?.attempt ?? 1;
         const idempotencyKey = `warcraft-${feature}-${task}-${attempt}`;
 
         try {
