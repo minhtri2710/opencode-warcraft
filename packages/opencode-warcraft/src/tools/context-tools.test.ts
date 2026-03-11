@@ -454,6 +454,61 @@ describe('ContextTools', () => {
       expect(getCalled).toBe(false);
       expect(hasChangesCalled).toBe(false);
     });
+
+    it('counts dispatch_prepared tasks as active work and recommends continuing them first', async () => {
+      const taskService = {
+        list: () => [
+          { folder: '01-task', name: 'Task', status: 'dispatch_prepared' as const, origin: 'plan' as const },
+        ],
+        getRawStatus: () => ({
+          workerSession: { workspaceMode: 'direct' as const, workspacePath: '/repo/root' },
+        }),
+        computeRunnableStatus: () => ({ runnable: [], blocked: {} }),
+      } as unknown as TaskService;
+
+      const result = await getStatusHealth({ taskService });
+      const tasks = result.data.tasks as {
+        total: number;
+        pending: number;
+        inProgress: number;
+        done: number;
+        list: Array<{ folder: string; status: string }>;
+      };
+
+      expect(tasks.total).toBe(1);
+      expect(tasks.pending).toBe(0);
+      expect(tasks.inProgress).toBe(1);
+      expect(tasks.done).toBe(0);
+      expect(tasks.list[0]).toMatchObject({
+        folder: '01-task',
+        status: 'dispatch_prepared',
+      });
+      expect(result.data.nextAction).toBe('Continue work on task: 01-task');
+    });
+
+    it('treats dispatch_prepared tasks as active before suggesting runnable pending work', async () => {
+      const taskService = {
+        list: () => [
+          { folder: '01-task', name: 'Prepared Task', status: 'dispatch_prepared' as const, origin: 'plan' as const },
+          { folder: '02-task', name: 'Pending Task', status: 'pending' as const, origin: 'plan' as const },
+        ],
+        getRawStatus: (_feature: string, folder: string) => ({
+          workerSession:
+            folder === '01-task' ? { workspaceMode: 'direct' as const, workspacePath: '/repo/root' } : undefined,
+        }),
+        computeRunnableStatus: () => ({ runnable: ['02-task'], blocked: {} }),
+      } as unknown as TaskService;
+
+      const result = await getStatusHealth({ taskService });
+      const tasks = result.data.tasks as {
+        pending: number;
+        inProgress: number;
+      };
+
+      expect(tasks.pending).toBe(1);
+      expect(tasks.inProgress).toBe(1);
+      expect(result.data.nextAction).toBe('Continue work on task: 01-task');
+    });
   });
 
   describe('stale worktree age context', () => {

@@ -133,7 +133,9 @@ export class ContextTools {
         }));
 
         const pendingTasks = tasksSummary.filter((t: { status: string }) => t.status === 'pending');
-        const inProgressTasks = tasksSummary.filter((t: { status: string }) => t.status === 'in_progress');
+        const inProgressTasks = tasksSummary.filter(
+          (t: { status: string }) => t.status === 'in_progress' || t.status === 'dispatch_prepared',
+        );
         const doneTasks = tasksSummary.filter((t: { status: string }) => t.status === 'done');
 
         // Detect stale worktrees for hygiene warnings
@@ -243,7 +245,7 @@ export class ContextTools {
           if (tasks.length === 0) {
             return 'Generate tasks from plan with warcraft_tasks_sync';
           }
-          const inProgress = tasks.find((t) => t.status === 'in_progress');
+          const inProgress = tasks.find((t) => t.status === 'in_progress' || t.status === 'dispatch_prepared');
           if (inProgress) {
             return `Continue work on task: ${inProgress.folder}`;
           }
@@ -269,7 +271,17 @@ export class ContextTools {
                 ? 'locked'
                 : 'none';
 
-        const trustMetrics = computeTrustMetrics(projectRoot);
+        let trustMetrics: {
+          reopenRate: number;
+          totalCompleted: number;
+          reopenCount: number;
+          blockedMttrMs: number | null;
+        };
+        try {
+          trustMetrics = computeTrustMetrics(projectRoot);
+        } catch {
+          trustMetrics = { reopenRate: 0, totalCompleted: 0, reopenCount: 0, blockedMttrMs: null };
+        }
 
         return toolSuccess({
           feature: {
