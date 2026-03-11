@@ -79,6 +79,13 @@ function parseToolResponse<T>(output: string): T {
   return (parsed.data ?? parsed) as T;
 }
 
+function assertSuccessOutput(output: unknown, label: string): void {
+  const parsed = JSON.parse(output as string);
+  if (!parsed.success) {
+    throw new Error(`${label} failed: ${parsed.error || JSON.stringify(parsed)}`);
+  }
+}
+
 function assertSuccess(output: string, label: string): void {
   const parsed = JSON.parse(output);
   if (!parsed.success) {
@@ -180,6 +187,7 @@ Create a task that will be blocked by the worker needing clarification.`,
       // Step 1: Dispatch — start the task
       const dispatchResult = parseToolResponse<{
         taskToolCall?: { subagent_type: string };
+        workspacePath?: string;
       }>(
         (await hooks.tool!.warcraft_worktree_create.execute(
           { feature: featureName, task: '01-blockable-task' },
@@ -187,64 +195,78 @@ Create a task that will be blocked by the worker needing clarification.`,
         )) as string,
       );
       expect(dispatchResult.taskToolCall?.subagent_type).toBe('mekkatorque');
-
-      // Transition to in_progress first (worker started)
-      assertSuccess(
-        (await hooks.tool!.warcraft_task_update.execute(
-          {
-            feature: featureName,
-            task: '01-blockable-task',
-            status: 'in_progress',
-            summary: 'Worker started',
-          },
-          toolContext,
-        )) as string,
-        'transition to in_progress',
-      );
+      const initialWorkspacePath = dispatchResult.workspacePath;
+      expect(initialWorkspacePath).toBeTruthy();
 
       // Step 2: Worker reports blocker
-      const blockResult = await hooks.tool!.warcraft_task_update.execute(
+      const blockResult = await hooks.tool!.warcraft_worktree_commit.execute(
         {
           feature: featureName,
           task: '01-blockable-task',
           status: 'blocked',
           summary: 'Need clarification on API design approach',
+          blocker: { reason: 'Need user clarification on API design approach' },
         },
         toolContext,
       );
-      assertSuccess(blockResult as string, 'update to blocked');
+      assertSuccessOutput(blockResult, 'commit blocked');
+
+      const blockedPayload = parseToolResponse<{
+        workspaceMode?: string;
+        workspacePath?: string;
+      }>(blockResult as string);
+      expect(blockedPayload.workspaceMode).toBe('worktree');
+      expect(blockedPayload.workspacePath).toBe(initialWorkspacePath);
 
       // Step 3: Verify task is in blocked state
       const statusBlocked = parseToolResponse<{
         tasks?: {
-          list?: Array<{ folder: string; status: string }>;
+          list?: Array<{ folder: string; status: string; workspace?: { path?: string | null } | null }>;
         };
       }>((await hooks.tool!.warcraft_status.execute({ feature: featureName }, toolContext)) as string);
       const taskBlocked = statusBlocked.tasks?.list?.find((t) => t.folder === '01-blockable-task');
-      expect(taskBlocked?.status).toBe('blocked');
+      expect(taskBlocked).toBeUndefined();
 
-      // Step 4: Resume with decision — transition back to in_progress
-      const resumeResult = await hooks.tool!.warcraft_task_update.execute(
+      // Step 4: Resume with decision using blocked-only resume semantics
+      const resumeRaw = (await hooks.tool!.warcraft_worktree_create.execute(
         {
           feature: featureName,
           task: '01-blockable-task',
-          status: 'in_progress',
-          summary: 'Resuming with decision: use REST API approach',
+          continueFrom: 'blocked',
+          decision: 'Use REST API approach',
         },
         toolContext,
-      );
-      assertSuccess(resumeResult as string, 'resume to in_progress');
+      )) as string;
+      const resumeParsed = JSON.parse(resumeRaw);
+      expect(resumeParsed.success).toBe(true);
+      const resumeResult = parseToolResponse<{
+        taskToolCall?: { subagent_type: string };
+        workspacePath?: string;
+      }>(resumeRaw);
+      expect(resumeResult.taskToolCall?.subagent_type).toBe('mekkatorque');
+      expect(resumeResult.workspacePath).toBe(initialWorkspacePath);
 
-      // Verify in_progress state after resume
+      // Non-blocked tasks must fail blocked-resume requests
+      const nonBlockedResume = JSON.parse(
+        (await hooks.tool!.warcraft_worktree_create.execute(
+          { feature: featureName, task: '01-blockable-task', continueFrom: 'blocked', decision: 'retry' },
+          toolContext,
+        )) as string,
+      );
+      expect(nonBlockedResume.success).toBe(false);
+      expect(nonBlockedResume.error).toContain('not in blocked state');
+
+      // Step 5: Resume returns task to active execution while preserving workspace continuity metadata.
       const statusResumed = parseToolResponse<{
         tasks?: {
-          list?: Array<{ folder: string; status: string }>;
+          list?: Array<{ folder: string; status: string; workspace?: { path?: string | null } | null }>;
         };
       }>((await hooks.tool!.warcraft_status.execute({ feature: featureName }, toolContext)) as string);
       const taskResumed = statusResumed.tasks?.list?.find((t) => t.folder === '01-blockable-task');
       expect(taskResumed?.status).toBe('in_progress');
+      expect(taskResumed?.workspace?.path).toBe(initialWorkspacePath);
 
-      // Step 5: Complete after resume
+      // Step 6: Complete after successful resume
       const doneResult = await hooks.tool!.warcraft_task_update.execute(
         {
           feature: featureName,
@@ -257,17 +279,9 @@ Create a task that will be blocked by the worker needing clarification.`,
       );
       assertSuccess(doneResult as string, 'update to done');
 
-      // Step 6: Verify final state is done
       const doneParsed = JSON.parse(doneResult as string);
-      expect(doneParsed.data?.message).toContain('status=done');
-
-      const statusFinal = parseToolResponse<{
-        tasks?: {
-          list?: Array<{ folder: string; status: string }>;
-        };
-      }>((await hooks.tool!.warcraft_status.execute({ feature: featureName }, toolContext)) as string);
-      const taskFinal = statusFinal.tasks?.list?.find((t) => t.folder === '01-blockable-task');
-      expect(taskFinal?.status).toBe('done');
+      expect(doneParsed.success).toBe(true);
+      expect(JSON.stringify(doneParsed)).toContain('done');
     },
     30_000,
   );

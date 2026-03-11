@@ -132,6 +132,34 @@ describe('fetchSharedDispatchData learnings', () => {
     expect(data.rawPreviousTasks).toHaveLength(0);
   });
 
+  it('excludes summaries from blocked tasks even when learnings exist', () => {
+    const services = createMockServices([
+      {
+        folder: '01-blocked',
+        name: 'Blocked Task',
+        status: 'blocked',
+        summary: 'Blocked summary should not flow downstream.',
+        learnings: ['Should not appear downstream'],
+      },
+      {
+        folder: '02-done',
+        name: 'Done Task',
+        status: 'done',
+        summary: 'Completed summary should remain available.',
+        learnings: ['Only completed learnings should appear'],
+      },
+    ]);
+
+    const data = fetchSharedDispatchData('test-feature', services);
+
+    expect(data.rawPreviousTasks).toHaveLength(1);
+    expect(data.rawPreviousTasks[0].name).toBe('02-done');
+    expect(data.rawPreviousTasks[0].summary).toContain('Completed summary should remain available.');
+    expect(data.rawPreviousTasks[0].summary).toContain('Only completed learnings should appear');
+    expect(data.rawPreviousTasks[0].summary).not.toContain('Blocked summary should not flow downstream.');
+    expect(data.rawPreviousTasks[0].summary).not.toContain('Should not appear downstream');
+  });
+
   it('handles done tasks with empty learnings array', () => {
     const services = createMockServices([
       {

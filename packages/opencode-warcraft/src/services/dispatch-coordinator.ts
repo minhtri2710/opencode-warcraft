@@ -339,11 +339,15 @@ export class DispatchCoordinator {
         },
       });
 
-      const transitionExtras: Record<string, unknown> = { preparedAt: new Date().toISOString() };
-      if (continueFrom !== 'blocked' && workspace.mode === 'worktree' && workspace.commit) {
-        transitionExtras.baseCommit = workspace.commit;
+      if (continueFrom === 'blocked') {
+        this.deps.taskService.transition(feature, task, 'in_progress');
+      } else {
+        const transitionExtras: Record<string, unknown> = { preparedAt: new Date().toISOString() };
+        if (workspace.mode === 'worktree' && workspace.commit) {
+          transitionExtras.baseCommit = workspace.commit;
+        }
+        this.deps.taskService.transition(feature, task, 'dispatch_prepared', transitionExtras);
       }
-      this.deps.taskService.transition(feature, task, 'dispatch_prepared', transitionExtras);
 
       return {
         task,

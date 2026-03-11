@@ -485,7 +485,7 @@ describe('DispatchCoordinator', () => {
       ]);
     });
 
-    it('does NOT include baseCommit when continuing from blocked', async () => {
+    it('resumes blocked tasks directly into in_progress without baseCommit', async () => {
       const tracker = createTransitionTracker();
       const deps = createMockDeps({
         taskService: {
@@ -504,9 +504,10 @@ describe('DispatchCoordinator', () => {
       const coordinator = new DispatchCoordinator(deps);
       await coordinator.dispatch(createRequest({ continueFrom: 'blocked', decision: 'yes' }));
 
-      const dispatchPreparedTransition = tracker.calls.find((c) => c.toStatus === 'dispatch_prepared');
-      expect(dispatchPreparedTransition).toBeDefined();
-      expect(dispatchPreparedTransition!.extras?.baseCommit).toBeUndefined();
+      const inProgressTransition = tracker.calls.find((c) => c.toStatus === 'in_progress');
+      expect(inProgressTransition).toBeDefined();
+      expect(inProgressTransition!.extras).toBeUndefined();
+      expect(tracker.calls.some((c) => c.toStatus === 'dispatch_prepared')).toBe(false);
     });
   });
 
