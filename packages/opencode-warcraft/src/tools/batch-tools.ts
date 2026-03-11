@@ -190,12 +190,18 @@ export class BatchTools {
           validateTaskInput(task);
         }
 
-        // Validate all selected tasks are actually runnable
+        // Validate all selected tasks are actually runnable using the same guard
+        // semantics as single-task dispatch, but fail the entire request before
+        // dispatching any work when the selection is mixed.
         const notRunnable: string[] = [];
         for (const task of selectedTasks) {
           const taskInfo = taskService.get(feature, task);
           if (!taskInfo) {
             notRunnable.push(`${task} (not found)`);
+            continue;
+          }
+          if (taskInfo.status === 'blocked') {
+            notRunnable.push(`${task} (blocked)`);
             continue;
           }
           if (taskInfo.status === 'done') {
@@ -206,9 +212,13 @@ export class BatchTools {
             notRunnable.push(`${task} (already in progress)`);
             continue;
           }
+          if (taskInfo.status === 'dispatch_prepared') {
+            notRunnable.push(`${task} (already being dispatched)`);
+            continue;
+          }
           const depCheck = checkDependencies(feature, task);
           if (!depCheck.allowed) {
-            notRunnable.push(`${task} (dependencies not met)`);
+            notRunnable.push(`${task} (${depCheck.error || 'dependencies not met'})`);
           }
         }
 

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import * as fs from 'fs';
-import { mapWithConcurrencyLimit, resolveParallelPolicy } from './batch-tools.js';
+import { BatchTools, mapWithConcurrencyLimit, resolveParallelPolicy } from './batch-tools.js';
 import {
   type DispatchOneTaskInput,
   type DispatchOneTaskServices,
@@ -98,8 +98,33 @@ function createMockServices(overrides: Partial<DispatchOneTaskServices> = {}): D
   };
 }
 
+function createBatchToolTaskService(overrides: Record<string, unknown> = {}): {
+  get: DispatchOneTaskServices['taskService']['get'];
+  update: DispatchOneTaskServices['taskService']['update'];
+  transition: DispatchOneTaskServices['taskService']['transition'];
+  getRawStatus: DispatchOneTaskServices['taskService']['getRawStatus'];
+  writeSpec: DispatchOneTaskServices['taskService']['writeSpec'];
+  writeWorkerPrompt: DispatchOneTaskServices['taskService']['writeWorkerPrompt'];
+  buildSpecData: DispatchOneTaskServices['taskService']['buildSpecData'];
+  list: DispatchOneTaskServices['taskService']['list'];
+  patchBackgroundFields: DispatchOneTaskServices['taskService']['patchBackgroundFields'];
+  computeRunnableStatus: (feature: string) => { runnable: string[]; blocked: Record<string, string[]> };
+} {
+  const base = createMockServices().taskService;
+  return {
+    ...base,
+    computeRunnableStatus: () => ({ runnable: ['01-test-task'], blocked: {} }),
+    ...overrides,
+  };
+}
+
 function createInput(task = '01-test-task'): DispatchOneTaskInput {
   return { feature: 'test-feature', task, sessionId: 'sess-1' };
+}
+
+function parseToolResult(result: unknown): Record<string, unknown> {
+  const json = JSON.parse(result as string);
+  return json.data ?? json;
 }
 
 // ============================================================================
@@ -262,5 +287,143 @@ describe('batch-single dispatch parity', () => {
     expect(successes.length).toBe(1);
     expect(failures.length).toBe(1);
     expect(failures[0].error).toContain('already being dispatched');
+  });
+});
+
+describe('BatchTools execute guard parity', () => {
+  const resolveFeature = () => 'test-feature';
+
+  beforeEach(() => {
+    cleanup();
+    fs.mkdirSync(TEST_DIR, { recursive: true });
+    releaseAllDispatchLocks();
+  });
+
+  afterEach(() => {
+    releaseAllDispatchLocks();
+    cleanup();
+  });
+
+  test('falls back to stored feature session when tool context has no session', async () => {
+    const batchTools = new BatchTools({
+      featureService: {
+        get: () => ({ name: 'test-feature', status: 'executing' }),
+        getSession: () => 'stored-session',
+      } as never,
+      planService: createMockServices().planService as never,
+      taskService: createBatchToolTaskService({
+        list: () => [
+          {
+            folder: '01-test-task',
+            name: 'Test Task',
+            status: 'pending' as const,
+            origin: 'plan' as const,
+            planTitle: 'Test Task',
+          },
+        ],
+      }) as never,
+      worktreeService: createMockServices().worktreeService as never,
+      contextService: createMockServices().contextService,
+      checkBlocked: () => ({ blocked: false }),
+      checkDependencies: () => ({ allowed: true }),
+      verificationModel: 'tdd',
+      lockDir: TEST_DIR,
+    });
+
+    const tool = batchTools.batchExecuteTool(resolveFeature);
+    const result = await tool.execute(
+      { mode: 'execute', feature: 'test-feature', tasks: ['01-test-task'] },
+      {} as never,
+    );
+
+    const data = parseToolResult(result);
+    const taskToolCalls = data.taskToolCalls as Array<Record<string, unknown>>;
+    expect(taskToolCalls).toHaveLength(1);
+    expect(String(taskToolCalls[0].prompt)).toContain('Task | 01-test-task');
+  });
+
+  test('rejects blocked and dispatch_prepared tasks before dispatching any worker tasks', async () => {
+    const patchCalls: unknown[] = [];
+    const batchTools = new BatchTools({
+      featureService: {
+        get: () => ({ name: 'test-feature', status: 'executing' }),
+        getSession: () => 'stored-session',
+      } as never,
+      planService: createMockServices().planService as never,
+      taskService: createBatchToolTaskService({
+        get: (_feature: string, task: string) => {
+          if (task === '01-blocked-task') {
+            return {
+              folder: task,
+              name: 'Blocked Task',
+              status: 'blocked' as const,
+              origin: 'plan' as const,
+              planTitle: 'Blocked Task',
+            };
+          }
+          return {
+            folder: task,
+            name: 'Prepared Task',
+            status: 'dispatch_prepared' as const,
+            origin: 'plan' as const,
+            planTitle: 'Prepared Task',
+          };
+        },
+        patchBackgroundFields: (...args: unknown[]) => {
+          patchCalls.push(args);
+        },
+      }) as never,
+      worktreeService: createMockServices().worktreeService as never,
+      contextService: createMockServices().contextService,
+      checkBlocked: () => ({ blocked: false }),
+      checkDependencies: () => ({ allowed: true }),
+      verificationModel: 'tdd',
+      lockDir: TEST_DIR,
+    });
+
+    const tool = batchTools.batchExecuteTool(resolveFeature);
+    const result = await tool.execute(
+      { mode: 'execute', feature: 'test-feature', tasks: ['01-blocked-task', '02-prepared-task'] },
+      {} as never,
+    );
+
+    const parsed = JSON.parse(result as string) as { success: boolean; error?: string };
+    expect(parsed.success).toBe(false);
+    expect(parsed.error).toContain('01-blocked-task (blocked)');
+    expect(parsed.error).toContain('02-prepared-task (already being dispatched)');
+    expect(patchCalls).toHaveLength(0);
+  });
+
+  test('surfaces dependency guard details before dispatching any worker tasks', async () => {
+    const patchCalls: unknown[] = [];
+    const batchTools = new BatchTools({
+      featureService: {
+        get: () => ({ name: 'test-feature', status: 'executing' }),
+        getSession: () => 'stored-session',
+      } as never,
+      planService: createMockServices().planService as never,
+      taskService: createBatchToolTaskService({
+        patchBackgroundFields: (...args: unknown[]) => {
+          patchCalls.push(args);
+        },
+      }) as never,
+      worktreeService: createMockServices().worktreeService as never,
+      contextService: createMockServices().contextService,
+      checkBlocked: () => ({ blocked: false }),
+      checkDependencies: () => ({ allowed: false, error: 'waiting on 00-setup' }),
+      verificationModel: 'tdd',
+      lockDir: TEST_DIR,
+    });
+
+    const tool = batchTools.batchExecuteTool(resolveFeature);
+    const result = await tool.execute(
+      { mode: 'execute', feature: 'test-feature', tasks: ['01-test-task'] },
+      {} as never,
+    );
+
+    const parsed = JSON.parse(result as string) as { success: boolean; error?: string };
+    expect(parsed.success).toBe(false);
+    expect(parsed.error).toContain('01-test-task (waiting on 00-setup)');
+    expect(patchCalls).toHaveLength(0);
   });
 });
