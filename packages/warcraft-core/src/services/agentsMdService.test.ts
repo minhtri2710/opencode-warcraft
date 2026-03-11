@@ -191,6 +191,30 @@ describe('AgentsMdService', () => {
       expect(result.proposals).toHaveLength(1);
       expect(result.proposals[0]).toContain('We use Zustand');
     });
+
+    test('returns only novel actionable findings when AGENTS.md already contains duplicates and the contexts repeat them', async () => {
+      fs.writeFileSync(
+        path.join(testDir, 'AGENTS.md'),
+        '# Agent Guidelines\n\nPrefer async/await over .then()\nWe use Zustand\n',
+      );
+
+      contextService.write(
+        'test-feature',
+        'notes',
+        [
+          'Prefer async/await over .then()',
+          'Prefer async/await over .then();',
+          'We use Zustand',
+          'We use TypeScript strict mode',
+          'We use TypeScript strict mode.',
+        ].join('\n'),
+      );
+
+      const result = await service.sync('test-feature');
+
+      expect(result.proposals).toEqual(['We use TypeScript strict mode']);
+      expect(result.diff).toBe('+ We use TypeScript strict mode');
+    });
   });
 
   describe('apply()', () => {
@@ -234,6 +258,18 @@ describe('AgentsMdService', () => {
       expect(result.isNew).toBe(true);
       expect(result.path).toBe(path.join(testDir, 'AGENTS.md'));
       expect(result.chars).toBe(content.length);
+    });
+
+    test('trims surrounding whitespace before writing applied content', () => {
+      const result = service.apply('\n# Trimmed content\n\n');
+
+      expect(result.chars).toBe('# Trimmed content'.length);
+      expect(fs.readFileSync(path.join(testDir, 'AGENTS.md'), 'utf-8')).toBe('# Trimmed content');
+    });
+
+    test('rejects blank content', () => {
+      expect(() => service.apply('   \n\t')).toThrow('content required to apply AGENTS.md');
+      expect(fs.existsSync(path.join(testDir, 'AGENTS.md'))).toBe(false);
     });
   });
 });

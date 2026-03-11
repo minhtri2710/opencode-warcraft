@@ -20,6 +20,15 @@ export interface ApplyResult {
   isNew: boolean;
 }
 
+const FINDING_PATTERNS = [
+  /we\s+use\s+[^.\n]+/gi,
+  /prefer\s+[^.\n]+\s+over\s+[^.\n]+/gi,
+  /don't\s+use\s+[^.\n]+/gi,
+  /do\s+not\s+use\s+[^.\n]+/gi,
+  /(?:build|test|dev)\s+command:\s*[^.\n]+/gi,
+  /[a-zA-Z]+\s+lives?\s+in\s+\/[^\s.\n]+/gi,
+];
+
 export class AgentsMdService {
   constructor(
     private readonly rootDir: string,
@@ -59,27 +68,18 @@ export class AgentsMdService {
   }
 
   apply(content: string): ApplyResult {
+    const trimmedContent = content.trim();
+    if (!trimmedContent) {
+      throw new Error('content required to apply AGENTS.md');
+    }
     const agentsMdPath = path.join(this.rootDir, 'AGENTS.md');
     const isNew = !fileExists(agentsMdPath);
-    writeText(agentsMdPath, content);
-    return { path: agentsMdPath, chars: content.length, isNew };
+    writeText(agentsMdPath, trimmedContent);
+    return { path: agentsMdPath, chars: trimmedContent.length, isNew };
   }
 
   private extractFindings(contexts: ContextFile[]): string[] {
     const findings = new Map<string, string>();
-
-    // Regex patterns for actionable findings
-    const patterns = [
-      // "we use X" / "prefer X over Y" / "don't use X"
-      /we\s+use\s+[^.\n]+/gi,
-      /prefer\s+[^.\n]+\s+over\s+[^.\n]+/gi,
-      /don't\s+use\s+[^.\n]+/gi,
-      /do\s+not\s+use\s+[^.\n]+/gi,
-      // Build/test commands
-      /(?:build|test|dev)\s+command:\s*[^.\n]+/gi,
-      // File path conventions
-      /[a-zA-Z]+\s+lives?\s+in\s+\/[^\s.\n]+/gi,
-    ];
 
     for (const context of contexts) {
       const lines = context.content.split('\n');
@@ -87,7 +87,7 @@ export class AgentsMdService {
         const trimmed = line.trim();
         if (!trimmed || trimmed.startsWith('#')) continue;
 
-        for (const pattern of patterns) {
+        for (const pattern of FINDING_PATTERNS) {
           const matches = trimmed.match(pattern);
           if (matches) {
             for (const match of matches) {
