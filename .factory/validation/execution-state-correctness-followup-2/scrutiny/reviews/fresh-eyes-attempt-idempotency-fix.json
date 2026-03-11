@@ -1,0 +1,21 @@
+{
+  "featureId": "fresh-eyes-attempt-idempotency-fix",
+  "reviewedAt": "2026-03-11T09:44:31.579714Z",
+  "commitId": "bcfacba803a5bd75a195ffd53fd91cb7e9c39577",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The fix correctly reuses the persisted dispatch attempt when composing the worktree-create idempotency key, and the added regression tests cover both fresh dispatch and blocked-resume parity without changing dispatch semantics.",
+    "issues": []
+  },
+  "sharedStateObservations": [
+    {
+      "area": "skills",
+      "observation": "The audit-fix-worker skill still treats repo-wide lint as a mandatory finishing gate, but this feature transcript shows a legitimate pre-existing `.factory` formatting failure that the worker had to document and work around rather than fix in scope.",
+      "evidence": "Transcript for worker session 5dd53232-4b7b-495a-8173-9e70c2cd9d41 and handoff 2026-03-11T09-13-29-056Z__fresh-eyes-attempt-idempotency-fix__5dd53232-4b7b-495a-8173-9e70c2cd9d41.json record `bun run lint` failing only on `.factory/validation/execution-state-correctness-followup/scrutiny/synthesis.json`, while mission AGENTS.md forbids touching unrelated dirty hunks."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Pass. The reviewed commit narrows the runtime change to a one-line idempotency fix in `worktree-tools.ts` and backs it with focused parity tests showing fresh dispatch and blocked resume now use the same persisted attempt value written by `DispatchCoordinator.dispatch()`."
+}
