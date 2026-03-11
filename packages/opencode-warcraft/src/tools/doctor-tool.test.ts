@@ -241,6 +241,96 @@ describe('DoctorTools', () => {
       expect(blockedCheck?.status).toBe('warning');
     });
 
+    it('reports blocked features separately from active-task diagnostics without hiding blocked task state', async () => {
+      const result = await runDoctor({
+        taskService: {
+          list: () => [{ folder: '03-blocked', name: 'Blocked', status: 'blocked', origin: 'plan' }],
+          getRawStatus: () => ({
+            status: 'blocked',
+            origin: 'plan',
+            workerSession: {
+              workspaceMode: 'direct',
+              workspacePath: '/repo/blocked',
+            },
+          }),
+        },
+        checkBlocked: () => ({ blocked: true, reason: 'Awaiting operator decision', message: 'Feature is blocked' }),
+      });
+
+      const blockedCheck = result.data.checks.find((c) => c.name === 'check_blocked_failures');
+      const directCheck = result.data.checks.find((c) => c.name === 'direct_mode_degradation');
+      const inProgressCheck = result.data.checks.find((c) => c.name === 'stuck_in_progress');
+      const preparedCheck = result.data.checks.find((c) => c.name === 'stuck_dispatch_prepared');
+
+      expect(blockedCheck?.status).toBe('warning');
+      expect(blockedCheck?.details).toEqual([
+        {
+          feature: 'test-feature',
+          reason: 'Awaiting operator decision',
+          tasks: [
+            {
+              folder: '03-blocked',
+              name: 'Blocked',
+              dependsOn: null,
+              workspace: {
+                mode: 'direct',
+                path: '/repo/blocked',
+              },
+            },
+          ],
+        },
+      ]);
+      expect(directCheck?.status).toBe('ok');
+      expect(inProgressCheck?.status).toBe('ok');
+      expect(preparedCheck?.status).toBe('ok');
+    });
+
+    it('reports blocked task workspace details alongside the blocked feature warning for status parity', async () => {
+      const result = await runDoctor({
+        taskService: {
+          list: () => [{ folder: '03-blocked', name: 'Blocked', status: 'blocked', origin: 'plan' }],
+          getRawStatus: () => ({
+            status: 'blocked',
+            origin: 'plan',
+            dependsOn: ['01-prereq'],
+            workerSession: {
+              workspaceMode: 'direct',
+              workspacePath: '/repo/blocked',
+            },
+          }),
+        },
+        checkBlocked: () => ({
+          blocked: true,
+          reason: 'Awaiting operator decision',
+          message: 'Feature is blocked',
+          blockedPath: '/repo/docs/test-feature/BLOCKED',
+        }),
+      });
+
+      const blockedCheck = result.data.checks.find((c) => c.name === 'check_blocked_failures');
+
+      expect(blockedCheck?.status).toBe('warning');
+      expect(blockedCheck?.message).toContain('blocked');
+      expect(blockedCheck?.details).toEqual([
+        {
+          feature: 'test-feature',
+          reason: 'Awaiting operator decision',
+          blockedPath: '/repo/docs/test-feature/BLOCKED',
+          tasks: [
+            {
+              folder: '03-blocked',
+              name: 'Blocked',
+              dependsOn: ['01-prereq'],
+              workspace: {
+                mode: 'direct',
+                path: '/repo/blocked',
+              },
+            },
+          ],
+        },
+      ]);
+    });
+
     it('detects stale worktrees', async () => {
       const result = await runDoctor({
         worktreeService: {

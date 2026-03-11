@@ -17,6 +17,23 @@ interface DiagnosticCheck {
   details?: unknown;
 }
 
+interface BlockedTaskDiagnostic {
+  folder: string;
+  name: string;
+  dependsOn: string[] | null;
+  workspace: {
+    mode: 'direct' | 'worktree';
+    path: string | null;
+  } | null;
+}
+
+interface BlockedFeatureDiagnostic {
+  feature: string;
+  reason: string | undefined;
+  blockedPath?: string;
+  tasks: BlockedTaskDiagnostic[];
+}
+
 /** Threshold in ms for dispatch_prepared to be considered stuck (60s). */
 const DISPATCH_PREPARED_STALE_MS = 60_000;
 
@@ -62,10 +79,7 @@ export class DoctorTools {
           name: string;
           workspacePath: string | undefined;
         }> = [];
-        const blockedFeatures: Array<{
-          feature: string;
-          reason: string | undefined;
-        }> = [];
+        const blockedFeatures: BlockedFeatureDiagnostic[] = [];
         const allStaleWorktrees: Array<{
           feature: string;
           step: string;
@@ -84,16 +98,28 @@ export class DoctorTools {
         for (const featureName of features) {
           // Check blocked status
           const blockedResult = checkBlocked(featureName);
-          if (blockedResult.blocked) {
-            blockedFeatures.push({ feature: featureName, reason: blockedResult.reason });
-          }
 
           const tasks = taskService.list(featureName);
           const taskStatusMap = new Map<string, string>();
+          const blockedTaskDetails: BlockedTaskDiagnostic[] = [];
 
           for (const task of tasks) {
             taskStatusMap.set(task.folder, task.status);
             const rawStatus = taskService.getRawStatus(featureName, task.folder) as TaskStatus | null;
+
+            if (task.status === 'blocked') {
+              blockedTaskDetails.push({
+                folder: task.folder,
+                name: task.name,
+                dependsOn: rawStatus?.dependsOn ?? null,
+                workspace: rawStatus?.workerSession
+                  ? {
+                      mode: rawStatus.workerSession.workspaceMode ?? 'worktree',
+                      path: rawStatus.workerSession.workspacePath ?? null,
+                    }
+                  : null,
+              });
+            }
 
             // Check stuck dispatch_prepared
             if (task.status === 'dispatch_prepared' && rawStatus) {
@@ -135,6 +161,15 @@ export class DoctorTools {
                 workspacePath: rawStatus.workerSession.workspacePath,
               });
             }
+          }
+
+          if (blockedResult.blocked) {
+            blockedFeatures.push({
+              feature: featureName,
+              reason: blockedResult.reason,
+              blockedPath: blockedResult.blockedPath,
+              tasks: blockedTaskDetails,
+            });
           }
 
           // Check worktrees
@@ -202,7 +237,7 @@ export class DoctorTools {
             ? {
                 name: 'check_blocked_failures',
                 status: 'warning',
-                message: `${blockedFeatures.length} feature(s) currently blocked. Fail-closed: may indicate BLOCKED file or read errors.`,
+                message: `${blockedFeatures.length} feature(s) currently blocked. Fail-closed: may indicate BLOCKED file or read errors. Blocked task workspace and dependency details are included for status parity.`,
                 details: blockedFeatures,
               }
             : {
