@@ -197,6 +197,50 @@ describe('DoctorTools', () => {
       expect(check!.message).toContain('direct');
     });
 
+    it('reports prepared, stale in-progress, blocked, and direct-mode states without contradiction', async () => {
+      const now = Date.now();
+      const preparedAt = new Date(now - 120_000).toISOString();
+      const startedAt = new Date(now - 90 * 60 * 1000).toISOString();
+
+      const result = await runDoctor({
+        taskService: {
+          list: () => [
+            { folder: '01-prepared', name: 'Prepared', status: 'dispatch_prepared', origin: 'plan' },
+            { folder: '02-direct', name: 'Direct', status: 'in_progress', origin: 'plan' },
+            { folder: '03-blocked', name: 'Blocked', status: 'blocked', origin: 'plan' },
+          ],
+          getRawStatus: (_feature: string, folder: string) => {
+            if (folder === '01-prepared') {
+              return { status: 'dispatch_prepared', origin: 'plan', preparedAt };
+            }
+            if (folder === '02-direct') {
+              return {
+                status: 'in_progress',
+                origin: 'plan',
+                startedAt,
+                workerSession: {
+                  workspaceMode: 'direct',
+                  workspacePath: '/repo/root',
+                },
+              };
+            }
+            return { status: 'blocked', origin: 'plan' };
+          },
+        },
+        checkBlocked: () => ({ blocked: true, reason: 'Awaiting operator decision', message: 'Feature is blocked' }),
+      });
+
+      const preparedCheck = result.data.checks.find((c) => c.name === 'stuck_dispatch_prepared');
+      const inProgressCheck = result.data.checks.find((c) => c.name === 'stuck_in_progress');
+      const directCheck = result.data.checks.find((c) => c.name === 'direct_mode_degradation');
+      const blockedCheck = result.data.checks.find((c) => c.name === 'check_blocked_failures');
+
+      expect(preparedCheck?.status).toBe('warning');
+      expect(inProgressCheck?.status).toBe('warning');
+      expect(directCheck?.status).toBe('warning');
+      expect(blockedCheck?.status).toBe('warning');
+    });
+
     it('detects stale worktrees', async () => {
       const result = await runDoctor({
         worktreeService: {

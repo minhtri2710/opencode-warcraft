@@ -877,6 +877,88 @@ describe('direct workspace mode', () => {
   });
 });
 
+describe('createWorktreeTool lifecycle parity', () => {
+  const resolveFeature = () => 'test-feature';
+
+  it('promotes dispatch_prepared tasks to in_progress after successful worker handoff', async () => {
+    const transitionCalls: Array<{ toStatus: string; extras?: Record<string, unknown> }> = [];
+
+    const deps = {
+      featureService: {
+        getSession: () => 'sess-1',
+      },
+      planService: {
+        read: () => ({ content: '# Plan\n\n### 1. Task\n\nDo it.', status: 'approved', comments: [] }),
+      },
+      taskService: {
+        get: () => ({ folder: '01-task', name: 'Task', status: 'pending', origin: 'plan' as const }),
+        getRawStatus: () => ({
+          status: 'in_progress' as const,
+          origin: 'plan' as const,
+          preparedAt: '2026-01-01T00:00:00Z',
+          workerSession: {
+            sessionId: 'sess-1',
+            attempt: 1,
+            workspaceMode: 'worktree' as const,
+            workspacePath: '/tmp/wt',
+            workspaceBranch: 'warcraft/test-feature/01-task',
+          },
+        }),
+        transition: (_feature: string, _task: string, toStatus: string, extras?: Record<string, unknown>) => {
+          transitionCalls.push({ toStatus, extras });
+          return { folder: '01-task', name: 'Task', status: toStatus, origin: 'plan' as const };
+        },
+        patchBackgroundFields: () => {},
+        writeSpec: () => 'spec-path',
+        writeWorkerPrompt: () => {},
+        buildSpecData: () => ({
+          featureName: 'test-feature',
+          task: { folder: '01-task', name: 'Task', order: 1 },
+          dependsOn: [],
+          allTasks: [{ folder: '01-task', name: 'Task', order: 1 }],
+          planSection: '### 1. Task\n\nDo it.',
+          contextFiles: [],
+          completedTasks: [],
+        }),
+        list: () => [{ folder: '01-task', name: 'Task', status: 'pending', origin: 'plan' as const }],
+      },
+      worktreeService: {
+        create: async () => ({
+          mode: 'worktree' as const,
+          path: '/tmp/wt',
+          branch: 'warcraft/test-feature/01-task',
+          commit: 'base123',
+          feature: 'test-feature',
+          step: '01-task',
+        }),
+        get: async () => ({ mode: 'worktree' as const, path: '/tmp/wt', branch: 'warcraft/test-feature/01-task' }),
+        remove: async () => {},
+      },
+      contextService: { list: () => [] },
+      validateTaskStatus: ((s: string) => s) as never,
+      checkBlocked: () => ({ blocked: false }),
+      checkDependencies: () => ({ allowed: true }),
+      hasCompletionGateEvidence: () => true,
+      completionGates: ['build', 'test', 'lint'] as const,
+      verificationModel: 'best-effort' as const,
+      workflowGatesMode: 'warn' as const,
+      eventLogger: { emit: () => {}, getLatestTraceContext: () => undefined },
+    } satisfies Partial<WorktreeToolsDependencies> as WorktreeToolsDependencies;
+
+    const tools = new WorktreeTools(deps);
+    const createTool = tools.createWorktreeTool(resolveFeature);
+
+    const result = await createTool.execute({ task: '01-task', feature: 'test-feature' }, {
+      sessionID: 'sess-1',
+    } as never);
+
+    const data = parseToolResult(result);
+    expect(data.taskToolCall).toBeDefined();
+    expect(transitionCalls.map((call) => call.toStatus)).toEqual(['dispatch_prepared', 'in_progress']);
+    expect(transitionCalls[0]?.extras?.preparedAt).toBeDefined();
+  });
+});
+
 /** Parse tool result JSON string into data object */
 function parseCommitResult(result: unknown): Record<string, unknown> {
   const json = JSON.parse(result as string);

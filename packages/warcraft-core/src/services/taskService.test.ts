@@ -2035,6 +2035,43 @@ Align documentation wording.
 
       listSpy.mockRestore();
     });
+
+    it('treats dispatch_prepared as active work in both filesystem and beads modes', () => {
+      const featureName = 'test-feature';
+      setupFeature(featureName);
+      setupTask(featureName, '01-prepared', { status: 'dispatch_prepared', beadId: 'bd-1' });
+
+      const offStores = createStores(PROJECT_ROOT, 'off', createRepository('off'));
+      const offModeService = new TaskService(PROJECT_ROOT, offStores.taskStore, 'off');
+      const offResult = offModeService.getRunnableTasks(featureName);
+
+      expect(offResult.source).toBe('filesystem');
+      expect(offResult.runnable).toHaveLength(0);
+      expect(offResult.inProgress).toHaveLength(1);
+      expect(offResult.inProgress[0].folder).toBe('01-prepared');
+
+      const onRepo = createRepository('on');
+      const onStores = createStores(PROJECT_ROOT, 'on', onRepo);
+      const onModeService = new TaskService(PROJECT_ROOT, onStores.taskStore, 'on');
+      spyOn(onRepo, 'getRobotPlan').mockImplementation(() => ({
+        summary: { total_tracks: 1, total_tasks: 1 },
+        tracks: [{ track_id: 1, tasks: ['bd-1'] }],
+      }));
+
+      const listSpy = spyOn(onRepo, 'listTaskBeadsForEpic').mockReturnValue({
+        success: true,
+        value: [{ id: 'bd-1', title: 'Prepared Task', status: 'in_progress' }],
+      });
+
+      const onResult = onModeService.getRunnableTasks(featureName);
+
+      expect(onResult.source).toBe('beads');
+      expect(onResult.runnable).toHaveLength(0);
+      expect(onResult.inProgress).toHaveLength(1);
+      expect(onResult.inProgress[0].beadId).toBe('bd-1');
+
+      listSpy.mockRestore();
+    });
   });
 
   describe('sync() - diagnostics on degraded paths', () => {
@@ -2696,6 +2733,25 @@ Second task description.
       const result = offModeService.transition(featureName, '01-test-task', 'in_progress');
       const after = new Date().toISOString();
 
+      expect(result.startedAt).toBeDefined();
+      expect(result.startedAt! >= before).toBe(true);
+      expect(result.startedAt! <= after).toBe(true);
+    });
+
+    it('preserves preparedAt and stamps startedAt when dispatch_prepared transitions to in_progress', () => {
+      const featureName = 'test-feature';
+      setupFeature(featureName);
+      setupTask(featureName, '01-test-task', {
+        status: 'dispatch_prepared',
+        beadId: 'bd-task-1',
+        preparedAt: '2026-01-01T00:00:00Z',
+      });
+
+      const before = new Date().toISOString();
+      const result = offModeService.transition(featureName, '01-test-task', 'in_progress');
+      const after = new Date().toISOString();
+
+      expect(result.preparedAt).toBe('2026-01-01T00:00:00Z');
       expect(result.startedAt).toBeDefined();
       expect(result.startedAt! >= before).toBe(true);
       expect(result.startedAt! <= after).toBe(true);

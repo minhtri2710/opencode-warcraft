@@ -460,6 +460,7 @@ export class BeadsTaskStore implements TaskStore {
             case 'done':
               completed.push(runnableTask);
               break;
+            case 'dispatch_prepared':
             case 'in_progress':
               inProgress.push(runnableTask);
               break;
@@ -506,6 +507,7 @@ export class BeadsTaskStore implements TaskStore {
                 completed.push(runnableTask);
               }
               break;
+            case 'dispatch_prepared':
             case 'in_progress':
               if (!inProgress.find((t) => t.folder === task.folder)) {
                 inProgress.push(runnableTask);

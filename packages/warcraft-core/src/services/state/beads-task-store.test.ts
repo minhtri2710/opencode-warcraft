@@ -689,6 +689,33 @@ describe('BeadsTaskStore caching layer', () => {
     expect(listCallCount).toBe(1);
   });
 
+  it('classifies dispatch_prepared tasks as inProgress in beads mode', () => {
+    const repository = {
+      getEpicByFeatureName: () => ({ success: true as const, value: 'epic-1' }),
+      listTaskBeadsForEpic: () => ({
+        success: true as const,
+        value: [{ id: 'task-1', title: 'Task 1', status: 'in_progress' }],
+      }),
+      getTaskState: () => ({
+        success: true as const,
+        value: { folder: '01-task-1', status: 'dispatch_prepared', origin: 'plan', planTitle: 'Task 1' },
+      }),
+      getRobotPlan: () => ({
+        tracks: [{ name: 'track-1', tasks: ['task-1'] }],
+      }),
+    };
+
+    const store = new BeadsTaskStore('/tmp/project', repository as any);
+
+    const result = store.getRunnableTasks('test-feature');
+
+    expect(result?.source).toBe('beads');
+    expect(result?.runnable).toEqual([]);
+    expect(result?.inProgress).toHaveLength(1);
+    expect(result?.inProgress[0]?.folder).toBe('01-task-1');
+    expect(result?.inProgress[0]?.status).toBe('dispatch_prepared');
+  });
+
   it('cache is isolated per feature', () => {
     let listCallCount = 0;
     const repository = {
