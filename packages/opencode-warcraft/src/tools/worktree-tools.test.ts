@@ -1303,7 +1303,7 @@ describe('formatSpecContent', () => {
 
     expect(result).toContain('## Context');
     expect(result).toContain('## notes.md');
-    expect(result).toContain('# Notes');
+    expect(result).toContain('Important notes.');
     expect(result).toContain('## config.json');
     expect(result).toContain('{"key": "value"}');
     expect(result).toContain('---'); // Separator between context files

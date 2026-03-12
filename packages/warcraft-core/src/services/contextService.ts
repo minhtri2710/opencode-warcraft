@@ -19,8 +19,7 @@ export class ContextService {
     ensureDir(contextPath);
 
     const filePath = path.join(contextPath, this.normalizeFileName(fileName));
-    const nextContent =
-      mode === 'append' ? appendContextContent(readText(filePath), content) : content;
+    const nextContent = mode === 'append' ? appendContextContent(readText(filePath), content) : content;
     writeText(filePath, nextContent);
 
     const totalChars = this.list(featureName).reduce((sum, c) => sum + c.content.length, 0);

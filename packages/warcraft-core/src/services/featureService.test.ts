@@ -373,7 +373,7 @@ describe('FeatureService.syncCompletionFromTasks', () => {
   it('completes the feature and closes the epic when all child tasks are done', () => {
     const closeCalls: string[] = [];
     const reopenCalls: string[] = [];
-    let tasks: TaskInfo[] = [
+    const tasks: TaskInfo[] = [
       { folder: '01-first', name: 'First task', status: 'done', origin: 'plan' },
       { folder: '02-second', name: 'Second task', status: 'done', origin: 'plan' },
     ];

@@ -1438,7 +1438,7 @@ describe('ContextTools', () => {
           { folder: '02-core', name: 'Core', status: 'dispatch_prepared', origin: 'plan' },
           { folder: '03-done', name: 'Done', status: 'done', origin: 'plan' },
         ],
-        getRawStatus: (feature: string, folder: string) => {
+        getRawStatus: (_feature: string, folder: string) => {
           if (folder === '01-setup') {
             return {
               status: 'dispatch_prepared',

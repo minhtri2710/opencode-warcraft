@@ -158,7 +158,7 @@ export class ContextTools {
       workspace:
         workspaceMode === 'direct'
           ? { mode: 'direct', path: directWorkspacePath || null, hasChanges: null }
-          : worktree && worktree.branch
+          : worktree?.branch
             ? { mode: 'worktree', path: worktree.path, branch: worktree.branch, hasChanges }
             : null,
     };
@@ -451,16 +451,7 @@ export class ContextTools {
    */
   getStatusTool(resolveFeature: (name?: string) => string | null): ToolDefinition {
     // Capture deps in closure to avoid 'this' binding issues
-    const {
-      featureService,
-      planService,
-      taskService,
-      contextService,
-      worktreeService,
-      checkBlocked,
-      bvTriageService,
-      projectRoot,
-    } = this.deps;
+    const { featureService, checkBlocked } = this.deps;
     const deps = this.deps;
     return tool({
       description:

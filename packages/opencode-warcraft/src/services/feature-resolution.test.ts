@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, spyOn } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
 import { createResolveFeature } from './feature-resolution.js';
 
 // ============================================================================

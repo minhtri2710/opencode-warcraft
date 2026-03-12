@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { isUsable } from './outcomes.js';
 import { PlanService } from './planService';
 import { createStores } from './state/index.js';
 

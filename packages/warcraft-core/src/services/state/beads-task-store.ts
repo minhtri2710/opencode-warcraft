@@ -821,7 +821,7 @@ export class BeadsTaskStore implements TaskStore {
     return result.value;
   }
 
-  private invalidateCacheEntry(featureName: string, folder: string): void {
+  private invalidateCacheEntry(featureName: string, _folder: string): void {
     // Delete the entire feature from both indexes to force list() to re-read from br.
     // Deleting only the folder entry leaves a non-null Map that list() treats as a valid cache hit,
     // causing findTaskByFolder to miss the invalidated entry.

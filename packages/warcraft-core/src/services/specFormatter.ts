@@ -1,5 +1,5 @@
-import { renderContextSections } from './context-markdown.js';
 import type { SpecData } from '../types.js';
+import { renderContextSections } from './context-markdown.js';
 
 /**
  * Infer the task type from the plan section content and task name.

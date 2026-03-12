@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { isUsable, type ConfigService } from 'warcraft-core';
+import { type ConfigService, isUsable } from 'warcraft-core';
 import { createWarcraftContainer } from './container.js';
 
 let testRoot = '';
