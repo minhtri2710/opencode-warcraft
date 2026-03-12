@@ -51,6 +51,12 @@ class MockBeadGateway {
     }
   }
 
+  reopenBead(_beadId: string): void {
+    if (this.throwOn === 'reopenBead') {
+      throw new Error('Failed to reopen bead');
+    }
+  }
+
   flushArtifacts(): void {
     if (this.throwOn === 'flushArtifacts') {
       throw new Error('Failed to flush');
@@ -262,6 +268,24 @@ describe('BeadsRepository', () => {
       expect(result.success).toBe(false);
       if (result.success === false) {
         expect(result.error.code).toBe('sync_failed');
+      }
+    });
+  });
+
+  describe('Bead lifecycle', () => {
+    it('should reopen a bead successfully', () => {
+      const result = repository.reopenBead('epic-123');
+
+      expect(result.success).toBe(true);
+    });
+
+    it('should normalize reopen failures', () => {
+      mockGateway.throwOn = 'reopenBead';
+      const result = repository.reopenBead('epic-123');
+
+      expect(result.success).toBe(false);
+      if (result.success === false) {
+        expect(result.error.code).toBe('gateway_error');
       }
     });
   });

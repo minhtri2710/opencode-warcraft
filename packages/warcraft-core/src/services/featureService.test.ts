@@ -3,7 +3,7 @@ import * as childProcess from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import type { FeatureJson } from '../types.js';
+import type { FeatureJson, TaskInfo } from '../types.js';
 import type { BeadsRepository } from './beads/BeadsRepository.js';
 import { FeatureService } from './featureService';
 import type { OperationOutcome } from './outcomes.js';
@@ -30,10 +30,12 @@ function createMockRepository(overrides: Partial<BeadsRepository> = {}): BeadsRe
   const defaultRepo: BeadsRepository = {
     createEpic: () => ({ success: true, value: 'bd-epic-1' }),
     closeBead: () => ({ success: true, value: undefined }),
+    reopenBead: () => ({ success: true, value: undefined }),
     getGateway: () =>
       ({
         createEpic: () => 'bd-epic-1',
         closeBead: () => {},
+        reopenBead: () => {},
         flushArtifacts: () => {},
         readArtifact: () => null,
         upsertArtifact: () => {},
@@ -88,6 +90,7 @@ function createFeatureStoreStub(initialFeature: FeatureJson, overrides: Partial<
     list: () => [initialFeature.name],
     save: () => {},
     complete: () => {},
+    reopen: () => {},
     ...overrides,
   };
 }
@@ -363,6 +366,86 @@ describe('FeatureService.complete', () => {
     service.complete('my-feature');
 
     expect(closeCalls).toHaveLength(0);
+  });
+});
+
+describe('FeatureService.syncCompletionFromTasks', () => {
+  it('completes the feature and closes the epic when all child tasks are done', () => {
+    const closeCalls: string[] = [];
+    const reopenCalls: string[] = [];
+    let tasks: TaskInfo[] = [
+      { folder: '01-first', name: 'First task', status: 'done', origin: 'plan' },
+      { folder: '02-second', name: 'Second task', status: 'done', origin: 'plan' },
+    ];
+    const mockRepository = createMockRepository({
+      createEpic: (_name: string, _priority: number) => ({ success: true, value: 'bd-epic-1' }),
+      closeBead: (beadId: string) => {
+        closeCalls.push(beadId);
+        return { success: true, value: undefined };
+      },
+      reopenBead: (beadId: string) => {
+        reopenCalls.push(beadId);
+        return { success: true, value: undefined };
+      },
+    });
+
+    const stores = createStores(testRoot, 'on', mockRepository);
+    const service = new FeatureService(testRoot, stores.featureStore, 'on', {
+      list: () => tasks,
+    });
+    const createOutcome = service.create('my-feature');
+    if (!isUsable(createOutcome)) throw new Error('create failed');
+    service.updateStatus('my-feature', 'approved');
+
+    const updated = service.syncCompletionFromTasks('my-feature');
+
+    expect(updated?.status).toBe('completed');
+    expect(updated?.completedAt).toBeDefined();
+    expect(closeCalls).toEqual(['bd-epic-1']);
+    expect(reopenCalls).toEqual([]);
+  });
+
+  it('reopens a completed feature to executing when any child task is no longer done', () => {
+    const closeCalls: string[] = [];
+    const reopenCalls: string[] = [];
+    let tasks: TaskInfo[] = [
+      { folder: '01-first', name: 'First task', status: 'done', origin: 'plan' },
+      { folder: '02-second', name: 'Second task', status: 'done', origin: 'plan' },
+    ];
+    const mockRepository = createMockRepository({
+      createEpic: (_name: string, _priority: number) => ({ success: true, value: 'bd-epic-1' }),
+      closeBead: (beadId: string) => {
+        closeCalls.push(beadId);
+        return { success: true, value: undefined };
+      },
+      reopenBead: (beadId: string) => {
+        reopenCalls.push(beadId);
+        return { success: true, value: undefined };
+      },
+    });
+
+    const stores = createStores(testRoot, 'on', mockRepository);
+    const service = new FeatureService(testRoot, stores.featureStore, 'on', {
+      list: () => tasks,
+    });
+    const createOutcome = service.create('my-feature');
+    if (!isUsable(createOutcome)) throw new Error('create failed');
+    service.updateStatus('my-feature', 'approved');
+    const completed = service.syncCompletionFromTasks('my-feature');
+
+    tasks = [
+      { folder: '01-first', name: 'First task', status: 'in_progress', origin: 'plan' },
+      { folder: '02-second', name: 'Second task', status: 'done', origin: 'plan' },
+    ];
+
+    const reopened = service.syncCompletionFromTasks('my-feature');
+
+    expect(completed?.status).toBe('completed');
+    expect(reopened?.status).toBe('executing');
+    expect(reopened?.completedAt).toBeUndefined();
+    expect(reopened?.approvedAt).toBeDefined();
+    expect(closeCalls).toEqual(['bd-epic-1']);
+    expect(reopenCalls).toEqual(['bd-epic-1']);
   });
 });
 

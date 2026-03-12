@@ -3,6 +3,7 @@ import * as path from 'path';
 import type { BeadsModeProvider, ContextFile } from '../types.js';
 import { ensureDir, fileExists, readText, writeText } from '../utils/fs.js';
 import { getContextPath, sanitizeName } from '../utils/paths.js';
+import { appendContextContent, renderContextSections } from './context-markdown.js';
 export type { ContextFile };
 
 export class ContextService {
@@ -13,12 +14,14 @@ export class ContextService {
     private readonly beadsModeProvider: BeadsModeProvider,
   ) {}
 
-  write(featureName: string, fileName: string, content: string): string {
+  write(featureName: string, fileName: string, content: string, mode: 'replace' | 'append' = 'replace'): string {
     const contextPath = getContextPath(this.projectRoot, featureName, this.beadsModeProvider.getBeadsMode());
     ensureDir(contextPath);
 
     const filePath = path.join(contextPath, this.normalizeFileName(fileName));
-    writeText(filePath, content);
+    const nextContent =
+      mode === 'append' ? appendContextContent(readText(filePath), content) : content;
+    writeText(filePath, nextContent);
 
     const totalChars = this.list(featureName).reduce((sum, c) => sum + c.content.length, 0);
     if (totalChars > ContextService.WARNING_THRESHOLD_CHARS) {
@@ -70,8 +73,7 @@ export class ContextService {
     const files = this.list(featureName);
     if (files.length === 0) return '';
 
-    const sections = files.map((f) => `## ${f.name}\n\n${f.content}`);
-    return sections.join('\n\n---\n\n');
+    return renderContextSections(files);
   }
 
   archive(featureName: string): { archived: string[]; archivePath: string } {

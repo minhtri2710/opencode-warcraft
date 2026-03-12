@@ -605,6 +605,25 @@ describe('BeadGateway', () => {
 
     execSpy.mockRestore();
   });
+  it('reopens a bead by setting status open', () => {
+    const execSpy = spyOn(childProcess, 'execFileSync')
+      .mockReturnValueOnce('beads_rust 1.2.3')
+      .mockReturnValueOnce('Initialized')
+      .mockReturnValueOnce('');
+
+    const gateway = new BeadGateway('/repo');
+    gateway.reopenBead('bd-1');
+
+    expect(execSpy).toHaveBeenNthCalledWith(3, 'br', ['update', 'bd-1', '--status', 'open'], {
+      cwd: '/repo',
+      encoding: 'utf-8',
+      timeout: 15_000,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    execSpy.mockRestore();
+  });
+
   it('upserts spec as description-only and reads from description', () => {
     const execSpy = spyOn(childProcess, 'execFileSync')
       .mockReturnValueOnce('beads_rust 1.2.3')

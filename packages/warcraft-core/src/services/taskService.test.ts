@@ -236,6 +236,62 @@ describe('TaskService', () => {
     });
   });
 
+  describe('status change callbacks', () => {
+    it('invokes the callback when a task status actually changes', () => {
+      const featureName = 'test-feature';
+      setupFeature(featureName);
+      setupTask(featureName, '01-test-task', { status: 'pending' });
+
+      const callbackCalls: Array<{
+        featureName: string;
+        taskFolder: string;
+        previousStatus: string;
+        nextStatus: string;
+      }> = [];
+      const stores = createStores(PROJECT_ROOT, 'off', createRepository('off'));
+      const serviceWithCallback = new TaskService(PROJECT_ROOT, stores.taskStore, 'off', {
+        onTaskStatusChanged: (callbackFeatureName, callbackTaskFolder, previousStatus, nextStatus) => {
+          callbackCalls.push({
+            featureName: callbackFeatureName,
+            taskFolder: callbackTaskFolder,
+            previousStatus,
+            nextStatus,
+          });
+        },
+      });
+
+      serviceWithCallback.update(featureName, '01-test-task', { status: 'in_progress' });
+
+      expect(callbackCalls).toEqual([
+        {
+          featureName,
+          taskFolder: '01-test-task',
+          previousStatus: 'pending',
+          nextStatus: 'in_progress',
+        },
+      ]);
+    });
+
+    it('does not invoke the callback for summary-only or no-op status updates', () => {
+      const featureName = 'test-feature';
+      setupFeature(featureName);
+      setupTask(featureName, '01-test-task', { status: 'in_progress' });
+
+      const callbackCalls: Array<{ previousStatus: string; nextStatus: string }> = [];
+      const stores = createStores(PROJECT_ROOT, 'off', createRepository('off'));
+      const serviceWithCallback = new TaskService(PROJECT_ROOT, stores.taskStore, 'off', {
+        onTaskStatusChanged: (_featureName, _taskFolder, previousStatus, nextStatus) => {
+          callbackCalls.push({ previousStatus, nextStatus });
+        },
+      });
+
+      serviceWithCallback.update(featureName, '01-test-task', { summary: 'Still working' });
+      serviceWithCallback.update(featureName, '01-test-task', { status: 'in_progress' });
+
+      expect(callbackCalls).toEqual([]);
+    });
+  });
+
   describe('patchBackgroundFields', () => {
     it('patches only background-owned fields', () => {
       const featureName = 'test-feature';

@@ -9,7 +9,7 @@ export const TASK_DEPENDENCY_CHECK = `### Task Dependencies (Always Check)
 Use \`warcraft_status()\` to see **runnable** tasks (dependencies satisfied) and **blockedBy** info.
 - Only start tasks from the runnable list
 - When 2+ tasks are runnable: ask operator via \`question()\` before parallelizing
-- Record execution decisions with \`warcraft_context_write({ name: "execution-decisions", ... })\``;
+- Record execution decisions with \`warcraft_context_write({ name: "execution-decisions", mode: "append", content: "### YYYY-MM-DD\\n- Decision: ...\\n- Rationale: ..." })\`
 
 export const AFTER_DELEGATION_PROTOCOL = `### After Delegation
 

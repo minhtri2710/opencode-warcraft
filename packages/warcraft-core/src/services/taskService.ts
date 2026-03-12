@@ -90,6 +90,13 @@ interface SyncDelta {
 export interface TaskServiceOptions {
   /** When true, enforce the state machine - reject invalid transitions. Default: false (compat mode). */
   strictTaskTransitions?: boolean;
+  /** Invoked after a task status actually changes and the new status is persisted. */
+  onTaskStatusChanged?: (
+    featureName: string,
+    taskFolder: string,
+    previousStatus: TaskStatusType,
+    nextStatus: TaskStatusType,
+  ) => void;
 }
 
 function isLogger(value: unknown): value is Logger {
@@ -120,6 +127,7 @@ export class TaskService {
     this.logger = logger ?? createNoopLogger();
     this.options = {
       strictTaskTransitions: options?.strictTaskTransitions ?? false,
+      onTaskStatusChanged: options?.onTaskStatusChanged ?? (() => {}),
     };
   }
 
@@ -531,7 +539,12 @@ export class TaskService {
       updated.completedAt = new Date().toISOString();
     }
 
+    const statusChanged = updates.status !== undefined && updates.status !== current.status;
     this.store.save(featureName, taskFolder, updated, { syncBeadStatus: updates.status !== undefined });
+
+    if (statusChanged) {
+      this.options.onTaskStatusChanged(featureName, taskFolder, current.status, updated.status);
+    }
 
     return updated;
   }

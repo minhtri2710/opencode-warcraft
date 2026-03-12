@@ -260,6 +260,24 @@ export class BeadsRepository {
   }
 
   /**
+   * Reopen a closed bead.
+   *
+   * @param beadId - Bead ID to reopen
+   */
+  reopenBead(beadId: string): Result<void> {
+    try {
+      this.gateway.reopenBead(beadId);
+      this.afterWrite();
+      return { success: true, value: undefined };
+    } catch (error) {
+      return {
+        success: false,
+        error: this.normalizeError(error),
+      };
+    }
+  }
+
+  /**
    * Create a new task bead under an epic.
    *
    * @param title - Task title

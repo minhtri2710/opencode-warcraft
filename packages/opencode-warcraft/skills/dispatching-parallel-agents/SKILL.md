@@ -21,7 +21,7 @@ Only `done` satisfies dependencies (not `blocked`, `failed`, `partial`, `cancell
 
 **Ask the operator first:**
 - Use `question()`: "These tasks are runnable and independent: [list]. Execute in parallel?"
-- Record the decision with `warcraft_context_write({ name: "execution-decisions", content: "..." })`
+- Record the decision with `warcraft_context_write({ name: "execution-decisions", mode: "append", content: "### YYYY-MM-DD\n- Decision: parallelize [list]\n- Rationale: ..." })`
 - Proceed only after operator approval
 
 ## When to Use

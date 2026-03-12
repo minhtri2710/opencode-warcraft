@@ -67,18 +67,7 @@ export class FeatureService {
     const feature = this.get(name);
     if (!feature) throw new Error(`Feature '${name}' not found`);
 
-    const updated: FeatureJson = {
-      ...feature,
-      status,
-    };
-
-    if (status === 'approved' && !updated.approvedAt) {
-      updated.approvedAt = new Date().toISOString();
-    }
-    if (status === 'completed' && !updated.completedAt) {
-      updated.completedAt = new Date().toISOString();
-    }
-
+    const updated = this.buildUpdatedFeature(feature, status);
     this.store.save(updated);
     return updated;
   }
@@ -108,9 +97,36 @@ export class FeatureService {
       return fatal([diagnostic('feature_already_completed', `Feature '${name}' is already completed`, 'fatal')]);
     }
 
-    const updated = this.updateStatus(name, 'completed');
+    const updated = this.buildUpdatedFeature(feature, 'completed');
     this.store.complete(updated);
     return ok(updated);
+  }
+
+  syncCompletionFromTasks(name: string): FeatureJson | null {
+    const feature = this.get(name);
+    if (!feature) return null;
+
+    const tasks = this.taskLister?.list(name) ?? [];
+    if (tasks.length === 0) return feature;
+
+    const allTasksDone = tasks.every((task) => task.status === 'done');
+    if (allTasksDone) {
+      if (feature.status === 'completed') {
+        return feature;
+      }
+
+      const completed = this.buildUpdatedFeature(feature, 'completed');
+      this.store.complete(completed);
+      return completed;
+    }
+
+    if (feature.status === 'completed') {
+      const reopened = this.buildUpdatedFeature(feature, 'executing', { clearCompletedAt: true });
+      this.store.reopen(reopened);
+      return reopened;
+    }
+
+    return feature;
   }
 
   setSession(name: string, sessionId: string): void {
@@ -126,6 +142,29 @@ export class FeatureService {
   getSession(name: string): string | undefined {
     const feature = this.get(name);
     return feature?.sessionId;
+  }
+
+  private buildUpdatedFeature(
+    feature: FeatureJson,
+    status: FeatureStatusType,
+    options: { clearCompletedAt?: boolean } = {},
+  ): FeatureJson {
+    const updated: FeatureJson = {
+      ...feature,
+      status,
+    };
+
+    if (status === 'approved' && !updated.approvedAt) {
+      updated.approvedAt = new Date().toISOString();
+    }
+    if (status === 'completed' && !updated.completedAt) {
+      updated.completedAt = new Date().toISOString();
+    }
+    if (options.clearCompletedAt) {
+      delete updated.completedAt;
+    }
+
+    return updated;
   }
 
   patchMetadata(name: string, patch: Partial<FeatureJson>): FeatureJson {

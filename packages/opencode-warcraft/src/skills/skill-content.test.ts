@@ -16,6 +16,16 @@ describe('skill content', () => {
     expect(skill).toBeDefined();
     expect(skill!.template).toContain('task({');
     expect(skill!.template).toContain('Parallelize by issuing multiple task() calls in the same assistant message.');
+    expect(skill!.template).toContain('mode: "append"');
+    expect(skill!.template).toContain('execution-decisions');
+  });
+
+  it('includes append-mode execution decision guidance for executing-plans', () => {
+    const skill = BUILTIN_SKILLS.find((entry) => entry.name === 'executing-plans');
+
+    expect(skill).toBeDefined();
+    expect(skill!.template).toContain('mode: "append"');
+    expect(skill!.template).toContain('execution-decisions');
   });
 
   it('includes br skill with critical operational guardrails', () => {
@@ -25,6 +35,9 @@ describe('skill content', () => {
     expect(skill!.template).toContain('**ALWAYS use `--json`**');
     expect(skill!.template).toContain('**NEVER run bare `bv`**');
     expect(skill!.template).toContain('br sync --flush-only');
+    expect(skill!.template).toContain('br config --list');
+    expect(skill!.template).toContain('br config --get id.prefix');
+    expect(skill!.template).toContain('br config --set defaults.priority=1');
   });
 
   it('includes finishing workflow option set and destructive confirmation', () => {

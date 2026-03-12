@@ -414,6 +414,10 @@ export class BeadGateway {
     this.runBr(['close', beadId], `close bead '${beadId}'`);
   }
 
+  reopenBead(beadId: string): void {
+    this.updateStatus(beadId, 'open');
+  }
+
   flushArtifacts(): void {
     this.ensurePreflight();
     this.runBr(['sync', '--flush-only'], 'flush bead artifacts to disk');

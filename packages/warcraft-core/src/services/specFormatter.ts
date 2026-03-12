@@ -1,3 +1,4 @@
+import { renderContextSections } from './context-markdown.js';
 import type { SpecData } from '../types.js';
 
 /**
@@ -72,7 +73,7 @@ export function formatSpecContent(data: SpecData): string {
   }
 
   if (contextFiles.length > 0) {
-    const contextCompiled = contextFiles.map((f) => `## ${f.name}\n\n${f.content}`).join('\n\n---\n\n');
+    const contextCompiled = renderContextSections(contextFiles);
     specLines.push('## Context', '', contextCompiled, '');
   }
 

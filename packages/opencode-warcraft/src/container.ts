@@ -82,10 +82,15 @@ export function createWarcraftContainer(directory: string, configService: Config
   const repository = new BeadsRepository(directory, {}, beadsMode);
   const stores = createStores(directory, beadsMode, repository);
   const planService = new PlanService(directory, stores.planStore, beadsMode);
+  let syncFeatureCompletionFromTasks: ((featureName: string) => void) | undefined;
   const taskService = new TaskService(directory, stores.taskStore, beadsMode, {
     strictTaskTransitions: true,
+    onTaskStatusChanged: (featureName) => syncFeatureCompletionFromTasks?.(featureName),
   });
   const featureService = new FeatureService(directory, stores.featureStore, beadsMode, taskService);
+  syncFeatureCompletionFromTasks = (featureName: string) => {
+    featureService.syncCompletionFromTasks(featureName);
+  };
   const contextService = new ContextService(directory, configService);
   const agentsMdService = new AgentsMdService(directory, contextService);
   const disabledMcps = configService.getDisabledMcps();

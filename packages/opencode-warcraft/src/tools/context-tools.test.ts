@@ -376,6 +376,29 @@ describe('ContextTools', () => {
   });
 
   describe('warcraft_context_write', () => {
+    function createAppendAwareContextService() {
+      const files = new Map<string, string>();
+      const normalizeEntry = (value: string): string =>
+        value.replace(/^(?:[ \t]*\n)+/, '').replace(/(?:\n[ \t]*)+$/, '');
+
+      const contextService = {
+        write: (_feature: string, name: string, content: string, mode: 'replace' | 'append' = 'replace') => {
+          const normalizedContent = normalizeEntry(content);
+          if (mode === 'append') {
+            const existing = files.get(name);
+            files.set(name, existing ? `${existing}\n\n${normalizedContent}` : normalizedContent);
+          } else {
+            files.set(name, content);
+          }
+
+          return `/repo/.beads/artifacts/test-feature/context/${name}.md`;
+        },
+        list: () => [],
+      } as unknown as ContextService;
+
+      return { contextService, files };
+    }
+
     it('returns the resolved file path in the success message', async () => {
       const contextService = {
         write: () => '/repo/.beads/artifacts/test-feature/context/notes.md',
@@ -391,6 +414,42 @@ describe('ContextTools', () => {
           message: 'Context file written:\n/repo/.beads/artifacts/test-feature/context/notes.md',
         },
       });
+    });
+
+    it('creates a missing file when append mode is requested', async () => {
+      const { contextService, files } = createAppendAwareContextService();
+      const tool = new ContextTools(createMockDeps({ contextService })).writeContextTool(() => 'test-feature');
+
+      await tool.execute({
+        name: 'execution-decisions',
+        content: '### 2026-03-12\n- Decision: proceed sequentially',
+        mode: 'append',
+        feature: 'test-feature',
+      });
+
+      expect(files.get('execution-decisions')).toBe('### 2026-03-12\n- Decision: proceed sequentially');
+    });
+
+    it('appends new entries with a single blank line separator', async () => {
+      const { contextService, files } = createAppendAwareContextService();
+      const tool = new ContextTools(createMockDeps({ contextService })).writeContextTool(() => 'test-feature');
+
+      await tool.execute({
+        name: 'execution-decisions',
+        content: '### 2026-03-12\n- Decision: proceed sequentially',
+        mode: 'append',
+        feature: 'test-feature',
+      });
+      await tool.execute({
+        name: 'execution-decisions',
+        content: '\n\n### 2026-03-13\n- Decision: parallelize review',
+        mode: 'append',
+        feature: 'test-feature',
+      });
+
+      expect(files.get('execution-decisions')).toBe(
+        '### 2026-03-12\n- Decision: proceed sequentially\n\n### 2026-03-13\n- Decision: parallelize review',
+      );
     });
 
     it('preserves warning text in the success message when the context budget is exceeded', async () => {

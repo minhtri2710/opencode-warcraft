@@ -110,6 +110,18 @@ describe('ContextService', () => {
       expect(service.delete(featureName, 'research')).toBe(true);
       expect(service.delete(featureName, 'research')).toBe(false);
     });
+
+    it('strips duplicate leading headings when compiling context sections', () => {
+      const featureName = 'dedupe-headings';
+      setupFeature(featureName);
+
+      service.write(featureName, 'execution-decisions', '## Execution Decisions\n\n- Parallelize task execution');
+
+      const compiled = service.compile(featureName);
+
+      expect(compiled).toContain('## execution-decisions\n\n- Parallelize task execution');
+      expect(compiled).not.toContain('## Execution Decisions');
+    });
   });
 
   describe('stats()', () => {
@@ -148,6 +160,29 @@ describe('ContextService', () => {
       expect(result.totalChars).toBe(0);
       expect(result.oldest).toBeUndefined();
       expect(result.newest).toBeUndefined();
+    });
+  });
+
+  describe('write() append mode', () => {
+    it('creates the file when append mode is used for a missing context file', () => {
+      const featureName = 'append-create';
+      setupFeature(featureName);
+
+      service.write(featureName, 'execution-decisions', '### 2026-03-12\n- Decision: proceed sequentially', 'append');
+
+      expect(service.read(featureName, 'execution-decisions')).toBe('### 2026-03-12\n- Decision: proceed sequentially');
+    });
+
+    it('appends new content with a single blank line separator', () => {
+      const featureName = 'append-existing';
+      setupFeature(featureName);
+
+      service.write(featureName, 'execution-decisions', '### 2026-03-12\n- Decision: proceed sequentially', 'append');
+      service.write(featureName, 'execution-decisions', '\n\n### 2026-03-13\n- Decision: parallelize task review', 'append');
+
+      expect(service.read(featureName, 'execution-decisions')).toBe(
+        '### 2026-03-12\n- Decision: proceed sequentially\n\n### 2026-03-13\n- Decision: parallelize task review',
+      );
     });
   });
 

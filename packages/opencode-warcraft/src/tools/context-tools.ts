@@ -429,14 +429,18 @@ export class ContextTools {
       args: {
         name: tool.schema.string().describe('Context file name (e.g., "decisions", "architecture", "notes")'),
         content: tool.schema.string().describe('Markdown content to write'),
+        mode: tool.schema
+          .enum(['replace', 'append'])
+          .optional()
+          .describe('Write mode: replace overwrites the file, append adds a new entry separated by a blank line'),
         feature: tool.schema.string().optional().describe('Feature name (defaults to active)'),
       },
-      async execute({ name, content, feature: explicitFeature }) {
+      async execute({ name, content, mode = 'replace', feature: explicitFeature }) {
         const resolution = resolveFeatureInput(resolveFeature, explicitFeature);
         if (!resolution.ok) return toolError(resolution.error);
         const feature = resolution.feature;
 
-        const filePath = contextService.write(feature, name, content);
+        const filePath = contextService.write(feature, name, content, mode);
         return toolSuccess({ message: `Context file written:\n${filePath}` });
       },
     });

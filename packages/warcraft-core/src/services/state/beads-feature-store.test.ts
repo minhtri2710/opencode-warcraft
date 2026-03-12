@@ -58,3 +58,34 @@ describe('BeadsFeatureStore fail-fast behavior', () => {
     expect(() => store.save(feature)).not.toThrow();
   });
 });
+
+describe('BeadsFeatureStore lifecycle', () => {
+  it('reopen() writes feature.json and reopens the epic bead', () => {
+    const projectRoot = createTempProjectRoot();
+    const reopenCalls: string[] = [];
+    const repository = {
+      reopenBead: (beadId: string) => {
+        reopenCalls.push(beadId);
+        return { success: true as const, value: undefined };
+      },
+    };
+
+    const store = new BeadsFeatureStore(projectRoot, repository as any);
+    const feature: FeatureJson = {
+      name: 'test-feature',
+      epicBeadId: 'epic-1',
+      status: 'executing',
+      createdAt: new Date().toISOString(),
+      approvedAt: '2026-03-01T00:00:00.000Z',
+    };
+
+    store.reopen(feature);
+
+    expect(reopenCalls).toEqual(['epic-1']);
+    const saved = JSON.parse(
+      fs.readFileSync(path.join(projectRoot, '.beads', 'artifacts', 'test-feature', 'feature.json'), 'utf-8'),
+    ) as FeatureJson;
+    expect(saved.status).toBe('executing');
+    expect(saved.approvedAt).toBe('2026-03-01T00:00:00.000Z');
+  });
+});

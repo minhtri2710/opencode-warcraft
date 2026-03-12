@@ -50,6 +50,9 @@ export interface FeatureStore {
 
   /** Complete a feature (save + close bead if applicable). */
   complete(feature: FeatureJson): void;
+
+  /** Reopen a completed feature (save + reopen bead if applicable). */
+  reopen(feature: FeatureJson): void;
 }
 
 // ============================================================================

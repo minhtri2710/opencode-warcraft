@@ -80,4 +80,8 @@ export class FilesystemFeatureStore implements FeatureStore {
   complete(feature: FeatureJson): void {
     this.save(feature);
   }
+
+  reopen(feature: FeatureJson): void {
+    this.save(feature);
+  }
 }

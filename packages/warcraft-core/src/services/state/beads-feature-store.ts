@@ -108,25 +108,38 @@ export class BeadsFeatureStore implements FeatureStore {
 
   complete(feature: FeatureJson): void {
     this.save(feature);
+    this.syncEpicLifecycle(feature, 'close', () => this.repository.closeBead(feature.epicBeadId));
+  }
+
+  reopen(feature: FeatureJson): void {
+    this.save(feature);
+    this.syncEpicLifecycle(feature, 'reopen', () => this.repository.reopenBead(feature.epicBeadId));
+  }
+
+  private syncEpicLifecycle(
+    feature: FeatureJson,
+    action: 'close' | 'reopen',
+    operation: () => ReturnType<BeadsRepository['closeBead']>,
+  ): void {
     try {
-      const closeResult = this.repository.closeBead(feature.epicBeadId);
-      if (closeResult.success === false) {
+      const result = operation();
+      if (result.success === false) {
         throwIfInitFailure(
-          closeResult.error,
-          `[warcraft] Failed to close epic bead '${feature.epicBeadId}' for feature '${feature.name}'`,
+          result.error,
+          `[warcraft] Failed to ${action} epic bead '${feature.epicBeadId}' for feature '${feature.name}'`,
         );
         console.warn(
-          `[warcraft] Failed to close epic bead '${feature.epicBeadId}' for feature '${feature.name}': ${closeResult.error.message}`,
+          `[warcraft] Failed to ${action} epic bead '${feature.epicBeadId}' for feature '${feature.name}': ${result.error.message}`,
         );
       }
     } catch (error) {
       throwIfInitFailure(
         error,
-        `[warcraft] Failed to close epic bead '${feature.epicBeadId}' for feature '${feature.name}'`,
+        `[warcraft] Failed to ${action} epic bead '${feature.epicBeadId}' for feature '${feature.name}'`,
       );
       const reason = error instanceof Error ? error.message : String(error);
       console.warn(
-        `[warcraft] Failed to close epic bead '${feature.epicBeadId}' for feature '${feature.name}': ${reason}`,
+        `[warcraft] Failed to ${action} epic bead '${feature.epicBeadId}' for feature '${feature.name}': ${reason}`,
       );
     }
   }
