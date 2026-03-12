@@ -744,8 +744,25 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
           return toolError(`Merge failed: ${result.error}`);
         }
 
+        const filesChangedCount = result.filesChanged?.length || 0;
+        const successMessage = (() => {
+          switch (result.outcome) {
+            case 'merged':
+              return `Task "${task}" merged into the current branch using ${result.strategy} strategy.\nCommit: ${result.sha}\nFiles changed: ${filesChangedCount}`;
+            case 'already-up-to-date':
+              return `Task "${task}" is already integrated into the current branch. No new merge commit was created.\nCurrent HEAD: ${result.sha}\nFiles changed: ${filesChangedCount}`;
+            case 'no-commits-to-apply':
+              return `Task "${task}" has no commits to apply using ${result.strategy} strategy.\nCurrent HEAD: ${result.sha}\nFiles changed: ${filesChangedCount}`;
+          }
+        })();
+
         const mergeResult: Record<string, unknown> = {
-          message: `Task "${task}" merged successfully using ${strategy} strategy.\nCommit: ${result.sha}\nFiles changed: ${result.filesChanged?.length || 0}`,
+          outcome: result.outcome,
+          strategy: result.strategy,
+          sha: result.sha,
+          filesChanged: result.filesChanged,
+          conflicts: result.conflicts,
+          message: successMessage,
         };
         const mergeTrace = createTaskTrace(eventLogger, feature, task);
 
@@ -755,9 +772,10 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
           task,
           ...mergeTrace,
           details: {
-            strategy,
+            outcome: result.outcome,
+            strategy: result.strategy,
             sha: result.sha,
-            filesChanged: result.filesChanged?.length || 0,
+            filesChanged: filesChangedCount,
           },
         });
 

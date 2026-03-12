@@ -39,7 +39,7 @@
 ### Merge (1 tool)
 | Tool | Purpose |
 |------|---------|
-| `warcraft_merge` | Merge task branch (strategies: merge/squash/rebase). Optional `verify` flag runs build+test post-merge. |
+| `warcraft_merge` | Integrate a task branch using `merge`/`squash`/`rebase`. Successful results may report a real merge, an already-integrated branch, or no commits to apply. Optional `verify` runs build+test afterward. |
 
 ### Batch (1 tool)
 | Tool | Purpose |
@@ -77,7 +77,8 @@
 | `feature` | string | (active) | Feature name |
 | `verify` | boolean | `false` | Run build and test commands after merge to verify integration |
 
-When `verify: true`, Warcraft runs the project's build and test commands after merge. The result includes `verification.passed` (boolean) and `verification.output` on failure.
+Successful `warcraft_merge` responses are truthful about what happened. The tool exposes `outcome` with one of `merged`, `already-up-to-date`, or `no-commits-to-apply` on success. Success responses also include the merge `strategy`, resulting `sha`, `filesChanged`, and an empty `conflicts` list.
+When `verify: true`, Warcraft runs the project's build and test commands after a successful merge attempt and adds a `verification` payload. `verification.passed: false` means the merge tool still succeeded, but post-merge verification reported degraded results; `verification.output` is included on verification failure. Failure responses remain `toolError` payloads: conflict errors enumerate files in the message, and generic failures return `Merge failed: ...`.
 
 ### warcraft_worktree_commit
 

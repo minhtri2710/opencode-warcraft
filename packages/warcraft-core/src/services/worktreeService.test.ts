@@ -422,94 +422,230 @@ describe('WorktreeService.get', () => {
 // ============================================================================
 
 describe('WorktreeService.merge', () => {
-  it('performs merge strategy and returns success result', async () => {
+  it('reports merged outcome and actual changed files for merge strategy', async () => {
     const service = createService('off');
+    const diffStatCalls: string[] = [];
+    const revparseValues = ['main-sha-000', 'merge-sha-111'];
 
     const mockGit = createMockGit({
       branch: async () => ({
         current: 'main',
         all: ['main', 'warcraft/feat/01-step'],
       }),
-      diff: async () => ' src/a.ts | 5 +++--\n 1 file changed\n',
+      log: async () => ({
+        all: [{ hash: 'commit-a' }],
+      }),
+      diffStat: async (refspec: string) => {
+        diffStatCalls.push(refspec);
+        if (refspec === 'main-sha-000..merge-sha-111') {
+          return ' src/actual.ts | 5 +++--\n 1 file changed\n';
+        }
+        return '';
+      },
       merge: async () => ({
         failed: false,
         conflicts: [],
+        result: 'success',
+        files: [],
       }),
-      revparse: async () => 'merge-sha-111',
+      revparse: async () => revparseValues.shift() ?? 'merge-sha-111',
     });
     (service as any).getGit = () => mockGit;
 
     const result = await service.merge('feat', '01-step', 'merge');
 
-    expect(result.success).toBe(true);
-    expect(result.merged).toBe(true);
-    expect(result.sha).toBe('merge-sha-111');
+    expect(result).toEqual({
+      success: true,
+      outcome: 'merged',
+      strategy: 'merge',
+      sha: 'merge-sha-111',
+      filesChanged: ['src/actual.ts'],
+      conflicts: [],
+    });
+    expect(diffStatCalls).toEqual(['main-sha-000..merge-sha-111']);
   });
 
-  it('performs squash merge strategy', async () => {
+  it('reports merged outcome for squash strategy', async () => {
     const service = createService('off');
     const rawCalls: string[][] = [];
+    const revparseValues = ['main-sha-000'];
 
     const mockGit = createMockGit({
       branch: async () => ({
         current: 'main',
         all: ['main', 'warcraft/feat/02-squash'],
       }),
-      diff: async () => ' src/b.ts | 3 +++\n 1 file changed\n',
+      log: async () => ({
+        all: [{ hash: 'commit-squash' }],
+      }),
+      diffStat: async (refspec: string) => {
+        expect(refspec).toBe('main-sha-000..squash-sha-222');
+        return ' src/b.ts | 3 +++\n 1 file changed\n';
+      },
       raw: async (...args: any[]) => {
         rawCalls.push(args.flat());
         return '';
       },
       commit: async () => ({ commit: 'squash-sha-222' }),
-      revparse: async () => 'squash-sha-222',
+      revparse: async () => revparseValues.shift() ?? 'squash-sha-222',
     });
     (service as any).getGit = () => mockGit;
 
     const result = await service.merge('feat', '02-squash', 'squash');
 
-    expect(result.success).toBe(true);
-    expect(result.merged).toBe(true);
-    expect(result.sha).toBe('squash-sha-222');
+    expect(result).toEqual({
+      success: true,
+      outcome: 'merged',
+      strategy: 'squash',
+      sha: 'squash-sha-222',
+      filesChanged: ['src/b.ts'],
+      conflicts: [],
+    });
 
     const squashCall = rawCalls.find((c) => c.includes('--squash'));
     expect(squashCall).toBeDefined();
   });
 
-  it('performs rebase strategy via cherry-pick', async () => {
+  it('reports merged outcome for rebase strategy via cherry-pick', async () => {
     const service = createService('off');
     const rawCalls: string[][] = [];
+    const revparseValues = ['main-sha-000', 'rebase-sha-333'];
 
     const mockGit = createMockGit({
       branch: async () => ({
         current: 'main',
         all: ['main', 'warcraft/feat/03-rebase'],
       }),
-      diff: async () => ' src/c.ts | 2 +-\n 1 file changed\n',
       log: async () => ({
         all: [{ hash: 'commit-a' }, { hash: 'commit-b' }],
       }),
+      diffStat: async (refspec: string) => {
+        expect(refspec).toBe('main-sha-000..rebase-sha-333');
+        return ' src/c.ts | 2 +-\n 1 file changed\n';
+      },
       raw: async (...args: any[]) => {
         rawCalls.push(args.flat());
         return '';
       },
-      revparse: async () => 'rebase-sha-333',
+      revparse: async () => revparseValues.shift() ?? 'rebase-sha-333',
     });
     (service as any).getGit = () => mockGit;
 
     const result = await service.merge('feat', '03-rebase', 'rebase');
 
-    expect(result.success).toBe(true);
-    expect(result.merged).toBe(true);
-    expect(result.sha).toBe('rebase-sha-333');
+    expect(result).toEqual({
+      success: true,
+      outcome: 'merged',
+      strategy: 'rebase',
+      sha: 'rebase-sha-333',
+      filesChanged: ['src/c.ts'],
+      conflicts: [],
+    });
 
-    // Should cherry-pick in reverse order (oldest first)
     const cherryPicks = rawCalls.filter((c) => c.includes('cherry-pick'));
     expect(cherryPicks.length).toBe(2);
     expect(cherryPicks[0]).toContain('commit-b');
     expect(cherryPicks[1]).toContain('commit-a');
   });
 
-  it('returns error when branch does not exist', async () => {
+  it('returns already-up-to-date when merge branch has no new commits', async () => {
+    const service = createService('off');
+    let mergeCalled = false;
+
+    const mockGit = createMockGit({
+      branch: async () => ({
+        current: 'main',
+        all: ['main', 'warcraft/feat/04-up-to-date'],
+      }),
+      log: async () => ({
+        all: [],
+      }),
+      merge: async () => {
+        mergeCalled = true;
+        return { failed: false, conflicts: [], result: 'success', files: [] };
+      },
+      revparse: async () => 'main-sha-000',
+    });
+    (service as any).getGit = () => mockGit;
+
+    const result = await service.merge('feat', '04-up-to-date', 'merge');
+
+    expect(result).toEqual({
+      success: true,
+      outcome: 'already-up-to-date',
+      strategy: 'merge',
+      sha: 'main-sha-000',
+      filesChanged: [],
+      conflicts: [],
+    });
+    expect(mergeCalled).toBe(false);
+  });
+
+  it('returns no-commits-to-apply when squash branch has no new commits', async () => {
+    const service = createService('off');
+    let mergeSquashCalled = false;
+
+    const mockGit = createMockGit({
+      branch: async () => ({
+        current: 'main',
+        all: ['main', 'warcraft/feat/05-no-squash'],
+      }),
+      log: async () => ({
+        all: [],
+      }),
+      mergeSquash: async () => {
+        mergeSquashCalled = true;
+      },
+      revparse: async () => 'main-sha-000',
+    });
+    (service as any).getGit = () => mockGit;
+
+    const result = await service.merge('feat', '05-no-squash', 'squash');
+
+    expect(result).toEqual({
+      success: true,
+      outcome: 'no-commits-to-apply',
+      strategy: 'squash',
+      sha: 'main-sha-000',
+      filesChanged: [],
+      conflicts: [],
+    });
+    expect(mergeSquashCalled).toBe(false);
+  });
+
+  it('returns no-commits-to-apply when rebase branch has no new commits', async () => {
+    const service = createService('off');
+    let cherryPickCalled = false;
+
+    const mockGit = createMockGit({
+      branch: async () => ({
+        current: 'main',
+        all: ['main', 'warcraft/feat/06-no-rebase'],
+      }),
+      log: async () => ({
+        all: [],
+      }),
+      cherryPick: async () => {
+        cherryPickCalled = true;
+      },
+      revparse: async () => 'main-sha-000',
+    });
+    (service as any).getGit = () => mockGit;
+
+    const result = await service.merge('feat', '06-no-rebase', 'rebase');
+
+    expect(result).toEqual({
+      success: true,
+      outcome: 'no-commits-to-apply',
+      strategy: 'rebase',
+      sha: 'main-sha-000',
+      filesChanged: [],
+      conflicts: [],
+    });
+    expect(cherryPickCalled).toBe(false);
+  });
+
+  it('returns failed outcome when branch does not exist', async () => {
     const service = createService('off');
 
     const mockGit = createMockGit({
@@ -522,57 +658,79 @@ describe('WorktreeService.merge', () => {
 
     const result = await service.merge('feat', 'nonexistent');
 
-    expect(result.success).toBe(false);
-    expect(result.merged).toBe(false);
-    expect(result.error).toContain('not found');
+    expect(result).toEqual({
+      success: false,
+      outcome: 'failed',
+      strategy: 'merge',
+      filesChanged: [],
+      conflicts: [],
+      error: 'Branch warcraft/feat/nonexistent not found',
+    });
   });
 
-  it('handles merge conflict by aborting and returning conflict info', async () => {
+  it('returns conflicted outcome when merge hits conflicts', async () => {
     const service = createService('off');
 
     const mockGit = createMockGit({
       branch: async () => ({
         current: 'main',
-        all: ['main', 'warcraft/feat/04-conflict'],
+        all: ['main', 'warcraft/feat/07-conflict'],
       }),
-      diff: async () => ' src/conflict.ts | 5 +++--\n 1 file changed\n',
+      log: async () => ({
+        all: [{ hash: 'commit-conflict' }],
+      }),
       merge: async () => {
         throw new Error(
           'CONFLICT (content): Merge conflict in src/conflict.ts\nAutomatic merge failed; fix conflicts and then commit the result.',
         );
       },
-      raw: async () => '', // For abort calls
+      raw: async () => '',
+      revparse: async () => 'main-sha-000',
     });
     (service as any).getGit = () => mockGit;
 
-    const result = await service.merge('feat', '04-conflict');
+    const result = await service.merge('feat', '07-conflict');
 
-    expect(result.success).toBe(false);
-    expect(result.merged).toBe(false);
-    expect(result.error).toContain('conflict');
-    expect(result.conflicts).toBeDefined();
-    expect(result.conflicts!).toContain('src/conflict.ts');
+    expect(result).toEqual({
+      success: false,
+      outcome: 'conflicted',
+      strategy: 'merge',
+      sha: 'main-sha-000',
+      filesChanged: [],
+      conflicts: ['src/conflict.ts'],
+      error: 'Merge conflicts detected',
+    });
   });
 
-  it('handles non-conflict merge errors gracefully', async () => {
+  it('returns failed outcome for non-conflict merge errors', async () => {
     const service = createService('off');
 
     const mockGit = createMockGit({
       branch: async () => ({
         current: 'main',
-        all: ['main', 'warcraft/feat/05-error'],
+        all: ['main', 'warcraft/feat/08-error'],
       }),
-      diff: async () => {
+      log: async () => ({
+        all: [{ hash: 'commit-error' }],
+      }),
+      merge: async () => {
         throw new Error('fatal: repository corrupted');
       },
+      revparse: async () => 'main-sha-000',
     });
     (service as any).getGit = () => mockGit;
 
-    const result = await service.merge('feat', '05-error');
+    const result = await service.merge('feat', '08-error');
 
-    expect(result.success).toBe(false);
-    expect(result.merged).toBe(false);
-    expect(result.error).toBeDefined();
+    expect(result).toEqual({
+      success: false,
+      outcome: 'failed',
+      strategy: 'merge',
+      sha: 'main-sha-000',
+      filesChanged: [],
+      conflicts: [],
+      error: 'fatal: repository corrupted',
+    });
   });
 });
 
@@ -1702,7 +1860,8 @@ describe('WorktreeService integration', () => {
     const mergeResult = await service.merge('int-test', '01-task', 'merge');
 
     expect(mergeResult.success).toBe(true);
-    expect(mergeResult.merged).toBe(true);
+    expect(mergeResult.outcome).toBe('merged');
+    expect(mergeResult.filesChanged).toContain('new-file.ts');
 
     // Step 6: Verify file exists on main branch
     const mainFile = path.join(testRoot, 'new-file.ts');
@@ -1746,7 +1905,8 @@ describe('WorktreeService integration', () => {
     const mergeResult = await service.merge('conflict-test', '01-conflict');
 
     expect(mergeResult.success).toBe(false);
-    expect(mergeResult.merged).toBe(false);
+    expect(mergeResult.outcome).toBe('conflicted');
+    expect(mergeResult.conflicts).toContain('shared.ts');
     expect(mergeResult.error).toBeDefined();
 
     // Clean up

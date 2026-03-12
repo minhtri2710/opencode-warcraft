@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import * as child_process from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import { formatSpecContent } from 'warcraft-core';
+import { formatSpecContent, type MergeResult } from 'warcraft-core';
 import type { WorktreeToolsDependencies } from './worktree-tools.js';
 import { WorktreeTools } from './worktree-tools.js';
 
@@ -53,6 +53,33 @@ function _setupTask(featureName: string, taskFolder: string, status: Record<stri
   fs.writeFileSync(path.join(taskPath, 'status.json'), JSON.stringify(taskStatus, null, 2));
 }
 
+type SuccessfulMergeResult = Extract<MergeResult, { success: true }>;
+type FailedMergeResult = Extract<MergeResult, { success: false }>;
+
+function mergeSuccess(overrides: Partial<SuccessfulMergeResult> = {}): SuccessfulMergeResult {
+  return {
+    success: true,
+    outcome: 'merged',
+    strategy: 'merge',
+    sha: 'abc123',
+    filesChanged: ['a.ts'],
+    conflicts: [],
+    ...overrides,
+  };
+}
+
+function mergeFailure(overrides: Partial<FailedMergeResult> = {}): FailedMergeResult {
+  return {
+    success: false,
+    outcome: 'failed',
+    strategy: 'merge',
+    filesChanged: [],
+    conflicts: [],
+    error: 'Merge failed',
+    ...overrides,
+  };
+}
+
 /**
  * Create minimal mock deps for WorktreeTools with configurable verificationModel.
  */
@@ -66,7 +93,7 @@ function createMergeDeps(overrides: Partial<WorktreeToolsDependencies> = {}): Wo
       ...((overrides as Record<string, unknown>).taskServiceOverrides ?? {}),
     } as unknown as WorktreeToolsDependencies['taskService'],
     worktreeService: {
-      merge: async () => ({ success: true, sha: 'abc123', filesChanged: ['a.ts'] }),
+      merge: async () => mergeSuccess(),
       ...((overrides as Record<string, unknown>).worktreeServiceOverrides ?? {}),
     } as unknown as WorktreeToolsDependencies['worktreeService'],
     contextService: { list: () => [] } as unknown as WorktreeToolsDependencies['contextService'],
@@ -143,6 +170,145 @@ function createMockExec(options: { shouldFail?: boolean; failOnCall?: number } =
   return { mockExec, getCalls: () => calls, getCallCount: () => callCount };
 }
 
+describe('mergeTaskTool outcome mapping', () => {
+  const resolveFeature = () => 'test-feature';
+
+  it('returns truthful merged metadata for a real merge', async () => {
+    const deps = createMergeDeps({
+      verificationModel: 'best-effort',
+      worktreeServiceOverrides: {
+        merge: async () =>
+          mergeSuccess({
+            outcome: 'merged',
+            strategy: 'merge',
+            sha: 'merge-sha-123',
+            filesChanged: ['src/a.ts', 'src/b.ts'],
+          }),
+      },
+    } as unknown as Partial<WorktreeToolsDependencies>);
+    const tools = new WorktreeTools(deps);
+    const mergeTool = tools.mergeTaskTool(resolveFeature);
+
+    const result = await mergeTool.execute(
+      { task: '01-task', strategy: 'merge', feature: 'test-feature' },
+      {} as never,
+    );
+
+    const data = parseToolResult(result);
+    expect(data.outcome).toBe('merged');
+    expect(data.strategy).toBe('merge');
+    expect(data.sha).toBe('merge-sha-123');
+    expect(data.filesChanged).toEqual(['src/a.ts', 'src/b.ts']);
+    expect(data.conflicts).toEqual([]);
+    expect(data.message).toContain('merged into the current branch');
+    expect(data.message).not.toContain('already integrated');
+  });
+
+  it('returns truthful metadata when the task is already integrated', async () => {
+    const deps = createMergeDeps({
+      verificationModel: 'best-effort',
+      worktreeServiceOverrides: {
+        merge: async () =>
+          mergeSuccess({
+            outcome: 'already-up-to-date',
+            strategy: 'merge',
+            sha: 'head-sha-001',
+            filesChanged: [],
+          }),
+      },
+    } as unknown as Partial<WorktreeToolsDependencies>);
+    const tools = new WorktreeTools(deps);
+    const mergeTool = tools.mergeTaskTool(resolveFeature);
+
+    const result = await mergeTool.execute(
+      { task: '01-task', strategy: 'merge', feature: 'test-feature' },
+      {} as never,
+    );
+
+    const data = parseToolResult(result);
+    expect(data.outcome).toBe('already-up-to-date');
+    expect(data.strategy).toBe('merge');
+    expect(data.sha).toBe('head-sha-001');
+    expect(data.filesChanged).toEqual([]);
+    expect(data.message).toContain('already integrated into the current branch');
+    expect(data.message).not.toContain('merged into the current branch');
+  });
+
+  it('returns truthful metadata when there are no commits to apply', async () => {
+    const deps = createMergeDeps({
+      verificationModel: 'best-effort',
+      worktreeServiceOverrides: {
+        merge: async () =>
+          mergeSuccess({
+            outcome: 'no-commits-to-apply',
+            strategy: 'squash',
+            sha: 'head-sha-002',
+            filesChanged: [],
+          }),
+      },
+    } as unknown as Partial<WorktreeToolsDependencies>);
+    const tools = new WorktreeTools(deps);
+    const mergeTool = tools.mergeTaskTool(resolveFeature);
+
+    const result = await mergeTool.execute(
+      { task: '01-task', strategy: 'squash', feature: 'test-feature' },
+      {} as never,
+    );
+
+    const data = parseToolResult(result);
+    expect(data.outcome).toBe('no-commits-to-apply');
+    expect(data.strategy).toBe('squash');
+    expect(data.sha).toBe('head-sha-002');
+    expect(data.filesChanged).toEqual([]);
+    expect(data.message).toContain('has no commits to apply');
+    expect(data.message).not.toContain('merged into the current branch');
+  });
+
+  it('returns toolError with conflicts for conflicted merges', async () => {
+    const deps = createMergeDeps({
+      verificationModel: 'best-effort',
+      worktreeServiceOverrides: {
+        merge: async () =>
+          mergeFailure({
+            outcome: 'conflicted',
+            conflicts: ['src/conflict.ts'],
+            error: 'Merge conflicted',
+          }),
+      },
+    } as unknown as Partial<WorktreeToolsDependencies>);
+    const tools = new WorktreeTools(deps);
+    const mergeTool = tools.mergeTaskTool(resolveFeature);
+
+    const result = await mergeTool.execute(
+      { task: '01-task', strategy: 'merge', feature: 'test-feature' },
+      {} as never,
+    );
+
+    const json = JSON.parse(result as string);
+    expect(json.error).toContain('src/conflict.ts');
+    expect(json.error).toContain('Resolve conflicts manually');
+  });
+
+  it('returns toolError for generic merge failures', async () => {
+    const deps = createMergeDeps({
+      verificationModel: 'best-effort',
+      worktreeServiceOverrides: {
+        merge: async () => mergeFailure({ error: 'git exploded' }),
+      },
+    } as unknown as Partial<WorktreeToolsDependencies>);
+    const tools = new WorktreeTools(deps);
+    const mergeTool = tools.mergeTaskTool(resolveFeature);
+
+    const result = await mergeTool.execute(
+      { task: '01-task', strategy: 'merge', feature: 'test-feature' },
+      {} as never,
+    );
+
+    const json = JSON.parse(result as string);
+    expect(json.error).toBe('Merge failed: git exploded');
+  });
+});
+
 describe('mergeTaskTool cleanup', () => {
   const resolveFeature = () => 'test-feature';
 
@@ -191,7 +357,7 @@ describe('mergeTaskTool cleanup', () => {
       verificationModel: 'best-effort',
       execAsync: mockExec,
       worktreeServiceOverrides: {
-        merge: async () => ({ success: true, sha: 'abc123', filesChanged: ['a.ts'] }),
+        merge: async () => mergeSuccess({ sha: 'abc123', filesChanged: ['a.ts'] }),
         remove: async (feature: string, step: string, deleteBranch: boolean) => {
           removeCalls.push({ feature, step, deleteBranch });
         },
@@ -223,7 +389,7 @@ describe('mergeTaskTool cleanup', () => {
       verificationModel: 'best-effort',
       execAsync: mockExec,
       worktreeServiceOverrides: {
-        merge: async () => ({ success: true, sha: 'abc123', filesChanged: ['a.ts'] }),
+        merge: async () => mergeSuccess({ sha: 'abc123', filesChanged: ['a.ts'] }),
         remove: async () => {
           throw new Error('Permission denied');
         },
@@ -239,7 +405,7 @@ describe('mergeTaskTool cleanup', () => {
 
     // Merge should still succeed (non-fatal cleanup error)
     const data = parseToolResult(result);
-    expect(data.message).toContain('merged successfully');
+    expect(data.message).toContain('merged into the current branch');
     const cleanup = data.cleanup as Record<string, unknown>;
     expect(cleanup.requested).toBe(true);
     expect(cleanup.removed).toBe(false);
@@ -253,7 +419,7 @@ describe('mergeTaskTool cleanup', () => {
       verificationModel: 'best-effort',
       execAsync: mockExec,
       worktreeServiceOverrides: {
-        merge: async () => ({ success: false, error: 'Merge conflict' }),
+        merge: async () => mergeFailure({ error: 'Merge conflict' }),
         remove: async () => {
           removeCalls.push('called');
         },
@@ -281,7 +447,7 @@ describe('mergeTaskTool cleanup', () => {
       verificationModel: 'tdd',
       execAsync: mockExec,
       worktreeServiceOverrides: {
-        merge: async () => ({ success: true, sha: 'abc123', filesChanged: ['a.ts'] }),
+        merge: async () => mergeSuccess({ sha: 'abc123', filesChanged: ['a.ts'] }),
         remove: async () => {
           removeCalls.push('called');
         },
@@ -316,7 +482,8 @@ describe('mergeTaskTool cleanup edge cases', () => {
       verificationModel: 'best-effort',
       execAsync: mockExec,
       worktreeServiceOverrides: {
-        merge: async () => ({ success: false, conflicts: ['src/a.ts', 'src/b.ts'] }),
+        merge: async () =>
+          mergeFailure({ outcome: 'conflicted', conflicts: ['src/a.ts', 'src/b.ts'], error: 'Merge conflicted' }),
         remove: async () => {
           removeCalls.push('called');
         },
@@ -345,7 +512,7 @@ describe('mergeTaskTool cleanup edge cases', () => {
       verificationModel: 'best-effort',
       execAsync: mockExec,
       worktreeServiceOverrides: {
-        merge: async () => ({ success: true, sha: 'def456', filesChanged: ['b.ts'] }),
+        merge: async () => mergeSuccess({ strategy: 'squash', sha: 'def456', filesChanged: ['b.ts'] }),
         remove: async (feature: string, step: string, deleteBranch: boolean) => {
           removeCalls.push({ feature, step, deleteBranch });
         },
@@ -374,7 +541,7 @@ describe('mergeTaskTool cleanup edge cases', () => {
       verificationModel: 'best-effort',
       execAsync: mockExec,
       worktreeServiceOverrides: {
-        merge: async () => ({ success: true, sha: 'abc123', filesChanged: ['a.ts'] }),
+        merge: async () => mergeSuccess({ sha: 'abc123', filesChanged: ['a.ts'] }),
         remove: async () => {
           throw { code: 'ENOENT' }; // Error object without message property
         },
@@ -389,7 +556,7 @@ describe('mergeTaskTool cleanup edge cases', () => {
     );
 
     const data = parseToolResult(result);
-    expect(data.message).toContain('merged successfully');
+    expect(data.message).toContain('merged into the current branch');
     const cleanup = data.cleanup as Record<string, unknown>;
     expect(cleanup.requested).toBe(true);
     expect(cleanup.removed).toBe(false);
@@ -402,7 +569,7 @@ describe('mergeTaskTool cleanup edge cases', () => {
       verificationModel: 'tdd',
       execAsync: mockExec,
       worktreeServiceOverrides: {
-        merge: async () => ({ success: true, sha: 'abc123', filesChanged: ['a.ts'] }),
+        merge: async () => mergeSuccess({ sha: 'abc123', filesChanged: ['a.ts'] }),
         remove: async () => {
           throw new Error('Stale lock file');
         },
@@ -438,7 +605,7 @@ describe('mergeTaskTool cleanup edge cases', () => {
         get: () => null, // Task not found
       },
       worktreeServiceOverrides: {
-        merge: async () => ({ success: true, sha: 'abc123', filesChanged: [] }),
+        merge: async () => mergeSuccess({ sha: 'abc123', filesChanged: [] }),
         remove: async () => {
           removeCalls.push('called');
         },
@@ -467,7 +634,7 @@ describe('mergeTaskTool cleanup edge cases', () => {
         get: () => ({ folder: '01-task', name: 'Task', status: 'in_progress', origin: 'plan' as const }),
       },
       worktreeServiceOverrides: {
-        merge: async () => ({ success: true, sha: 'abc123', filesChanged: [] }),
+        merge: async () => mergeSuccess({ sha: 'abc123', filesChanged: [] }),
         remove: async () => {
           removeCalls.push('called');
         },
@@ -493,7 +660,7 @@ describe('mergeTaskTool cleanup edge cases', () => {
       verificationModel: 'best-effort',
       execAsync: mockExec,
       worktreeServiceOverrides: {
-        merge: async () => ({ success: true, sha: 'ghi789', filesChanged: ['c.ts'] }),
+        merge: async () => mergeSuccess({ strategy: 'rebase', sha: 'ghi789', filesChanged: ['c.ts'] }),
         remove: async (feature: string, step: string, deleteBranch: boolean) => {
           removeCalls.push({ feature, step, deleteBranch });
         },
@@ -776,7 +943,7 @@ describe('direct workspace mode', () => {
       worktreeServiceOverrides: {
         merge: async () => {
           mergeCalled = true;
-          return { success: true, sha: 'abc123', filesChanged: ['a.ts'] };
+          return mergeSuccess({ sha: 'abc123', filesChanged: ['a.ts'] });
         },
       },
     } as unknown as Partial<WorktreeToolsDependencies>);

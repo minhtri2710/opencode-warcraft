@@ -1,6 +1,6 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import simpleGit from 'simple-git';
+import simpleGit, { type MergeResult as SimpleGitMergeResult } from 'simple-git';
 import type { BeadsMode } from '../types.js';
 import { acquireLock } from '../utils/json-lock.js';
 import { getTaskStatusPath, getWarcraftPath, sanitizeName } from '../utils/paths.js';
@@ -41,14 +41,29 @@ export interface CommitResult {
   message?: string;
 }
 
-export interface MergeResult {
-  success: boolean;
-  merged: boolean;
-  sha?: string;
-  filesChanged?: string[];
-  conflicts?: string[];
-  error?: string;
-}
+export type MergeStrategy = 'merge' | 'squash' | 'rebase';
+export type MergeSuccessOutcome = 'merged' | 'already-up-to-date' | 'no-commits-to-apply';
+export type MergeFailureOutcome = 'conflicted' | 'failed';
+export type MergeOutcome = MergeSuccessOutcome | MergeFailureOutcome;
+
+export type MergeResult =
+  | {
+      success: true;
+      outcome: MergeSuccessOutcome;
+      strategy: MergeStrategy;
+      sha: string;
+      filesChanged: string[];
+      conflicts: [];
+    }
+  | {
+      success: false;
+      outcome: MergeFailureOutcome;
+      strategy: MergeStrategy;
+      filesChanged: string[];
+      conflicts: string[];
+      error: string;
+      sha?: string;
+    };
 
 export interface WorktreeConfig {
   baseDir: string;
@@ -259,10 +274,7 @@ export class WorktreeService {
 
       const statLines = stat.split('\n').filter((l) => l.trim());
 
-      const filesChanged = statLines
-        .slice(0, -1)
-        .map((line) => line.split('|')[0].trim())
-        .filter(Boolean);
+      const filesChanged = this.parseFilesFromDiffStat(stat);
 
       const summaryLine = statLines[statLines.length - 1] || '';
       const insertMatch = summaryLine.match(/(\d+) insertion/);
@@ -352,6 +364,19 @@ export class WorktreeService {
         filesAffected: [],
       };
     }
+  }
+
+  private parseFilesFromDiffStat(diffStat: string): string[] {
+    return diffStat
+      .split('\n')
+      .filter((line) => line.trim() && line.includes('|'))
+      .map((line) => line.split('|')[0].trim())
+      .filter(Boolean);
+  }
+
+  private async listChangedFiles(git: GitClient, refspec: string, cwd?: string): Promise<string[]> {
+    const diffStat = await git.diffStat(refspec, cwd);
+    return this.parseFilesFromDiffStat(diffStat);
   }
 
   private parseFilesFromDiff(diffContent: string): string[] {
@@ -673,76 +698,127 @@ export class WorktreeService {
     }
   }
 
-  async merge(feature: string, step: string, strategy: 'merge' | 'squash' | 'rebase' = 'merge'): Promise<MergeResult> {
+  async merge(feature: string, step: string, strategy: MergeStrategy = 'merge'): Promise<MergeResult> {
     const branchName = this.getBranchName(feature, step);
     const git = this.getGit();
+    let beforeHead: string | undefined;
 
     try {
       const branches = await git.branch();
       if (!branches.all.includes(branchName)) {
-        return { success: false, merged: false, error: `Branch ${branchName} not found` };
+        return {
+          success: false,
+          outcome: 'failed',
+          strategy,
+          filesChanged: [],
+          conflicts: [],
+          error: `Branch ${branchName} not found`,
+        };
       }
 
       const currentBranch = branches.current;
+      beforeHead = await git.revparse(['HEAD']);
 
-      const diffStat = await git.diffStat(`${currentBranch}...${branchName}`);
-      const filesChanged = diffStat
-        .split('\n')
-        .filter((l) => l.trim() && l.includes('|'))
-        .map((l) => l.split('|')[0].trim());
+      const pendingCommits = await git.log(`${currentBranch}..${branchName}`);
+      if (pendingCommits.all.length === 0) {
+        return {
+          success: true,
+          outcome: strategy === 'merge' ? 'already-up-to-date' : 'no-commits-to-apply',
+          strategy,
+          sha: beforeHead,
+          filesChanged: [],
+          conflicts: [],
+        };
+      }
 
       if (strategy === 'squash') {
         await git.mergeSquash(branchName);
         const result = await git.commit(`warcraft: merge ${step} (squashed)`);
+        const filesChanged = await this.listChangedFiles(git, `${beforeHead}..${result.commit}`);
+
         return {
           success: true,
-          merged: true,
+          outcome: 'merged',
+          strategy,
           sha: result.commit,
           filesChanged,
+          conflicts: [],
         };
-      } else if (strategy === 'rebase') {
-        const commits = await git.log(`${currentBranch}..${branchName}`);
-        const commitsToApply = [...commits.all].reverse();
+      }
+
+      if (strategy === 'rebase') {
+        const commitsToApply = [...pendingCommits.all].reverse();
         for (const commit of commitsToApply) {
           await git.cherryPick(commit.hash);
         }
+
         const head = await git.revparse(['HEAD']);
+        const filesChanged = head === beforeHead ? [] : await this.listChangedFiles(git, `${beforeHead}..${head}`);
+
         return {
           success: true,
-          merged: true,
+          outcome: 'merged',
+          strategy,
           sha: head,
           filesChanged,
-        };
-      } else {
-        const result = await git.merge(branchName, { noFastForward: true, message: `warcraft: merge ${step}` });
-        const head = await git.revparse(['HEAD']);
-        return {
-          success: true,
-          merged: !result.failed,
-          sha: head,
-          filesChanged,
-          conflicts: result.conflicts?.map((c) => c.file || String(c)) || [],
+          conflicts: [],
         };
       }
-    } catch (error: unknown) {
-      const err = error as { message?: string };
 
-      if (err.message?.includes('CONFLICT') || err.message?.includes('conflict')) {
+      const result = await git.merge(branchName, { noFastForward: true, message: `warcraft: merge ${step}` });
+      const head = await git.revparse(['HEAD']);
+      const filesChanged = head === beforeHead ? [] : await this.listChangedFiles(git, `${beforeHead}..${head}`);
+      const conflicts = result.conflicts?.map((conflict) => conflict.file ?? conflict.reason) ?? [];
+
+      if (result.failed) {
+        return {
+          success: false,
+          outcome: conflicts.length > 0 ? 'conflicted' : 'failed',
+          strategy,
+          sha: head,
+          filesChanged,
+          conflicts,
+          error: conflicts.length > 0 ? 'Merge conflicts detected' : result.result || 'Merge failed',
+        };
+      }
+
+      return {
+        success: true,
+        outcome: 'merged',
+        strategy,
+        sha: head,
+        filesChanged,
+        conflicts: [],
+      };
+    } catch (error: unknown) {
+      const err = error as { message?: string; git?: SimpleGitMergeResult };
+      const gitConflicts = err.git?.conflicts?.map((conflict) => conflict.file ?? conflict.reason) ?? [];
+      const conflicts = gitConflicts.length > 0 ? gitConflicts : this.parseConflictsFromError(err.message || '');
+      const filesChanged = err.git?.files ?? [];
+
+      if (err.message?.includes('CONFLICT') || err.message?.includes('conflict') || conflicts.length > 0) {
         await git.mergeAbort().catch(() => {});
         await git.rebaseAbort().catch(() => {});
         await git.cherryPickAbort().catch(() => {});
 
         return {
           success: false,
-          merged: false,
+          outcome: 'conflicted',
+          strategy,
+          sha: beforeHead,
+          filesChanged,
+          conflicts,
           error: 'Merge conflicts detected',
-          conflicts: this.parseConflictsFromError(err.message || ''),
         };
       }
 
       return {
         success: false,
-        merged: false,
+        outcome: 'failed',
+        strategy,
+        sha: beforeHead,
+        filesChanged,
+        conflicts: [],
         error: err.message || 'Merge failed',
       };
     }
