@@ -154,10 +154,13 @@ Do it
         list?: Array<{
           folder: string;
         }>;
-        triage?: Record<string, {
-          summary: string;
-          source: string;
-        }>;
+        triage?: Record<
+          string,
+          {
+            summary: string;
+            source: string;
+          }
+        >;
         triageGlobal?: {
           summary?: string;
         } | null;

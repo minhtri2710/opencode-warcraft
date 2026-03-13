@@ -101,10 +101,7 @@ function main() {
   const scriptDir = path.dirname(fileURLToPath(import.meta.url));
   const rootDir = path.resolve(scriptDir, '../../..');
 
-  console.log('[generate-skills] Root directory:', rootDir);
-
   const skillFiles = discoverSkillFiles(rootDir);
-  console.log('[generate-skills] Found skill files:', skillFiles);
 
   const skills: SkillEntry[] = [];
   const seenNames = new Set<string>();
@@ -130,8 +127,6 @@ function main() {
       description: parsed.description,
       template: `${parsed.body}${referencesContent}`,
     });
-
-    console.log(`[generate-skills] Parsed skill: ${parsed.name}`);
   }
 
   // Sort by name for consistent output
@@ -174,9 +169,15 @@ ${skillsArray}
 `;
 
   fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+
+  const previousOutput = fs.existsSync(outputPath) ? fs.readFileSync(outputPath, 'utf-8') : null;
+  if (previousOutput === output) {
+    console.log(`[generate-skills] No changes (${skills.length} skills)`);
+    return;
+  }
+
   fs.writeFileSync(outputPath, output, 'utf-8');
-  console.log(`[generate-skills] Generated: ${outputPath}`);
-  console.log(`[generate-skills] Total skills: ${skills.length}`);
+  console.log(`[generate-skills] Generated ${path.relative(rootDir, outputPath)} (${skills.length} skills)`);
 }
 
 main();
