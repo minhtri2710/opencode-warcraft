@@ -288,7 +288,7 @@ Load `warcraft_skill("br")` before task execution to use the canonical `br` life
 
 ### Single Task Execution
 
-`warcraft_worktree_create` creates the worktree and returns delegation instructions with `delegationRequired: true` and a `taskToolCall` object:
+`warcraft_worktree_create` prepares the task workspace and returns delegation instructions with `delegationRequired: true` and a `taskToolCall` object:
 
 ```
 warcraft_worktree_create({ task: "01-task-name" })
@@ -394,7 +394,7 @@ If "Revise Plan":
 | Execute   | `warcraft_tasks_sync`                                      | Generate tasks                             |
 | Execute   | `warcraft_task_create`                                     | Create ad-hoc task                         |
 | Execute   | `warcraft_task_update`                                     | Update task status                         |
-| Execute   | `warcraft_worktree_create`                                 | Create worktree + delegation instructions  |
+| Execute   | `warcraft_worktree_create`                                 | Prepare task workspace + delegation instructions |
 | Execute   | `warcraft_worktree_commit`                                 | Finish task                                |
 | Execute   | `warcraft_worktree_discard`                                | Discard task                               |
 | Execute   | `warcraft_merge`                                           | Integrate task branch                      |

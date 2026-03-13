@@ -100,15 +100,24 @@ describe('skill content', () => {
   it('keeps remaining workspace wording aligned in warcraft and writing-plans skills', () => {
     const warcraftSkill = BUILTIN_SKILLS.find((entry) => entry.name === 'warcraft');
     const writingPlansSkill = BUILTIN_SKILLS.find((entry) => entry.name === 'writing-plans');
+    const subagentDrivenSkill = BUILTIN_SKILLS.find((entry) => entry.name === 'subagent-driven-development');
 
     expect(warcraftSkill).toBeDefined();
     expect(warcraftSkill!.template).not.toContain('[Mekkatorque implements in worktree]');
     expect(warcraftSkill!.template).toContain('[Mekkatorque implements in the assigned workspace]');
+    expect(warcraftSkill!.template).not.toContain('creates the worktree and returns delegation instructions');
+    expect(warcraftSkill!.template).toContain('prepares the task workspace and returns delegation instructions');
+    expect(warcraftSkill!.template).not.toContain('Create worktree + delegation instructions');
+    expect(warcraftSkill!.template).toContain('Prepare task workspace + delegation instructions');
 
     expect(writingPlansSkill).toBeDefined();
     expect(writingPlansSkill!.template).not.toContain('Guide them to open new session in worktree');
     expect(writingPlansSkill!.template).toContain(
       'Guide them to open a new execution session in the appropriate Warcraft-managed workspace',
     );
+
+    expect(subagentDrivenSkill).toBeDefined();
+    expect(subagentDrivenSkill!.template).not.toContain('Set up isolated workspace before starting');
+    expect(subagentDrivenSkill!.template).toContain('Set up the Warcraft-managed workspace before starting');
   });
 });

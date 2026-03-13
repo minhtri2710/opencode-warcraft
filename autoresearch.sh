@@ -29,6 +29,7 @@ bun test \
   ./eval/skill-workspace-contract.audit.test.ts \
   ./eval/skill-direct-mode-compat.audit.test.ts \
   ./eval/skill-remaining-workspace-contract.audit.test.ts \
+  ./eval/skill-final-workspace-wording.audit.test.ts \
   packages/opencode-warcraft/src/index.test.ts \
   >"$TMP_OUTPUT" 2>&1
 STATUS=$?
