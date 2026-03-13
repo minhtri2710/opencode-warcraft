@@ -1137,6 +1137,16 @@ describe('WorktreeService.getDiff', () => {
         deleted: [],
         created: [],
       }),
+      diff: async (args: string | string[]) => {
+        const values = Array.isArray(args) ? args : [args];
+        if (values.includes('abc123') && values.includes('--stat')) {
+          return ' src/staged.ts | 2 ++\n 1 file changed, 2 insertions(+)\n';
+        }
+        if (values.includes('abc123')) {
+          return 'diff --git a/src/staged.ts b/src/staged.ts\n+line 1\n+line 2\n';
+        }
+        return '';
+      },
     });
     (service as any).getGit = () => mockGit;
 
@@ -1144,8 +1154,10 @@ describe('WorktreeService.getDiff', () => {
 
     const result = await service.getDiff('feat', '07-step', 'abc123');
 
-    expect(result.hasDiff).toBe(false);
-    expect(result.error).toContain('requires base HEAD');
+    expect(result.hasDiff).toBe(true);
+    expect(result.error).toBeUndefined();
+    expect(result.filesChanged).toEqual(['src/staged.ts']);
+    expect(result.insertions).toBe(2);
   });
 });
 
@@ -1347,8 +1359,9 @@ describe('WorktreeService.checkConflicts', () => {
         deleted: [],
         created: [],
       }),
-      diff: async (args: string[]) => {
-        if (args.includes('--cached')) {
+      diff: async (args: string | string[]) => {
+        const values = Array.isArray(args) ? args : [args];
+        if (values.includes('HEAD')) {
           return 'diff --git a/src/conflict.ts b/src/conflict.ts\n+conflict\n';
         }
         return '';
@@ -1410,7 +1423,7 @@ describe('WorktreeService.exportPatch', () => {
       }),
       diff: async (args: string | string[]) => {
         const values = Array.isArray(args) ? args : [args];
-        const refArg = values.find((a: string) => a.includes('..HEAD'));
+        const refArg = values.find((a: string) => a === 'status-base-sha');
 
         if (refArg && values.includes('--stat')) {
           capturedRefspec = refArg;
@@ -1431,13 +1444,13 @@ describe('WorktreeService.exportPatch', () => {
 
     const patchPath = await service.exportPatch('feat', '01-step');
 
-    expect(capturedRefspec).toBe('status-base-sha..HEAD');
+    expect(capturedRefspec).toBe('status-base-sha');
     expect(patchPath).toContain('01-step.patch');
     expect(fs.existsSync(patchPath)).toBe(true);
     expect(fs.readFileSync(patchPath, 'utf-8')).toContain('added');
   });
 
-  it('throws instead of writing a misleading patch when getDiff returns an error', async () => {
+  it('writes a patch for dirty worktrees even when the provided base is not HEAD', async () => {
     const service = createService('off');
 
     const mockGit = createMockGit({
@@ -1448,14 +1461,25 @@ describe('WorktreeService.exportPatch', () => {
         deleted: [],
         created: [],
       }),
+      diff: async (args: string | string[]) => {
+        const values = Array.isArray(args) ? args : [args];
+        if (values.includes('abc123') && values.includes('--stat')) {
+          return ' src/staged.ts | 1 +\n 1 file changed, 1 insertion(+)\n';
+        }
+        if (values.includes('abc123')) {
+          return 'diff --git a/src/staged.ts b/src/staged.ts\n+line\n';
+        }
+        return '';
+      },
     });
     (service as any).getGit = () => mockGit;
 
     const worktreePath = setupWorktreeDir(service, 'feat', '02-step');
     const patchPath = path.join(worktreePath, '..', '02-step.patch');
 
-    await expect(service.exportPatch('feat', '02-step', 'abc123')).rejects.toThrow('requires base HEAD');
-    expect(fs.existsSync(patchPath)).toBe(false);
+    await expect(service.exportPatch('feat', '02-step', 'abc123')).resolves.toBe(patchPath);
+    expect(fs.existsSync(patchPath)).toBe(true);
+    expect(fs.readFileSync(patchPath, 'utf-8')).toContain('+line');
   });
 });
 
@@ -1476,11 +1500,12 @@ describe('WorktreeService.applyDiff', () => {
         deleted: [],
         created: [],
       }),
-      diff: async (args: string[]) => {
-        if (args.includes('--cached') && args.includes('--stat')) {
+      diff: async (args: string | string[]) => {
+        const values = Array.isArray(args) ? args : [args];
+        if (values.includes('HEAD') && values.includes('--stat')) {
           return ' src/a.ts | 1 +\n 1 file changed, 1 insertion(+)\n';
         }
-        if (args.includes('--cached')) {
+        if (values.includes('HEAD')) {
           return 'diff --git a/src/a.ts b/src/a.ts\n+line\n';
         }
         return '';
@@ -1537,11 +1562,12 @@ describe('WorktreeService.applyDiff', () => {
         deleted: [],
         created: [],
       }),
-      diff: async (args: string[]) => {
-        if (args.includes('--cached') && args.includes('--stat')) {
+      diff: async (args: string | string[]) => {
+        const values = Array.isArray(args) ? args : [args];
+        if (values.includes('HEAD') && values.includes('--stat')) {
           return ' src/a.ts | 1 +\n 1 file changed, 1 insertion(+)\n';
         }
-        if (args.includes('--cached')) {
+        if (values.includes('HEAD')) {
           return 'diff --git a/src/a.ts b/src/a.ts\n+line\n';
         }
         return '';
@@ -1912,6 +1938,36 @@ describe('WorktreeService integration', () => {
 
     // Clean up
     await service.remove('conflict-test', '01-conflict', true);
+  }, 30000);
+
+  it('getDiff includes unstaged tracked changes from a real worktree', async () => {
+    const { execSync } = await import('child_process');
+
+    execSync('git init', { cwd: testRoot, stdio: 'pipe' });
+    execSync('git config user.email "test@test.com"', { cwd: testRoot, stdio: 'pipe' });
+    execSync('git config user.name "Test"', { cwd: testRoot, stdio: 'pipe' });
+
+    fs.writeFileSync(path.join(testRoot, 'file.ts'), 'original\n');
+    execSync('git add .', { cwd: testRoot, stdio: 'pipe' });
+    execSync('git commit -m "init"', { cwd: testRoot, stdio: 'pipe' });
+    execSync('git branch -M main', { cwd: testRoot, stdio: 'pipe' });
+
+    const warcraftDir = path.join(testRoot, '.beads', 'artifacts');
+    fs.mkdirSync(warcraftDir, { recursive: true });
+
+    const service = createWorktreeService(testRoot);
+    const info = await service.create('dirty-diff', '01-task');
+    const baseCommit = execSync('git rev-parse main', { cwd: testRoot, encoding: 'utf-8' }).trim();
+
+    fs.writeFileSync(path.join(info.path, 'file.ts'), 'original\nchanged\n');
+
+    const diff = await service.getDiff('dirty-diff', '01-task', baseCommit);
+
+    expect(diff.hasDiff).toBe(true);
+    expect(diff.diffContent).toContain('+changed');
+    expect(diff.filesChanged).toContain('file.ts');
+
+    await service.remove('dirty-diff', '01-task', true);
   }, 30000);
 
   it('hasUncommittedChanges returns true for dirty worktree', async () => {
