@@ -352,7 +352,7 @@ export class ContextTools {
         return `${runnableTasks.length} tasks are ready to start in parallel: ${runnableTasks.join(', ')}`;
       }
       if (runnableTasks.length === 1) {
-        return `Start next task with warcraft_worktree_create: ${runnableTasks[0]}`;
+        return `Start next task with warcraft_worktree_create, then issue the returned task() call: ${runnableTasks[0]}`;
       }
       const pending = taskList.find((t) => t.status === 'pending');
       if (pending) {

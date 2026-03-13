@@ -666,6 +666,21 @@ describe('ContextTools', () => {
       expect((result.data.tasks as { blockedFeature: unknown }).blockedFeature).toBeNull();
     });
 
+    it('tells users to issue the returned task() call when exactly one task is runnable', async () => {
+      const taskService = {
+        list: () => [{ folder: '01-task', name: 'Task', status: 'pending' as const, origin: 'plan' as const }],
+        getRawStatus: () => null,
+        computeRunnableStatus: () => ({ runnable: ['01-task'], blocked: {} }),
+      } as unknown as TaskService;
+
+      const result = await getStatusHealth({ taskService });
+
+      expect(result.success).toBe(true);
+      expect(result.data.nextAction).toBe(
+        'Start next task with warcraft_worktree_create, then issue the returned task() call: 01-task',
+      );
+    });
+
     it('keeps blocked tasks visible while continuing to prioritize other active work', async () => {
       const taskService = {
         list: () => [
