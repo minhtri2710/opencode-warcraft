@@ -57,7 +57,7 @@ ${CANONICAL_DELEGATION_THRESHOLD}
 
 - Single-scout research → \`task({ subagent_type: "brann", prompt: "..." })\`
 - Parallel exploration → Load \`warcraft_skill("parallel-exploration")\` and follow the task mode delegation guidance.
-- Implementation → \`warcraft_worktree_create({ task: "01-task-name" })\` (creates worktree + Mekkatorque)
+- Implementation → \`warcraft_worktree_create({ task: "01-task-name" })\` (returns the \`task()\` payload needed to launch Mekkatorque)
 
 During Planning, use \`task({ subagent_type: "brann", ... })\` for exploration (BLOCKING — returns when done). For parallel exploration, issue multiple \`task()\` calls in the same message.
 
@@ -184,7 +184,8 @@ ${TASK_DEPENDENCY_CHECK}
 ### Worker Spawning
 
 \`\`\`
-warcraft_worktree_create({ task: "01-task-name" })  // Creates worktree + Mekkatorque
+warcraft_worktree_create({ task: "01-task-name" })  // Returns the task() payload for Mekkatorque
+// Issue the returned task() call to actually launch the worker.
 \`\`\`
 
 ${AFTER_DELEGATION_PROTOCOL}

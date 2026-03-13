@@ -71,6 +71,8 @@ During Planning, default to synchronous exploration. If async exploration would 
 
 \`\`\`
 warcraft_worktree_create({ task: "01-task-name" })
+// Returns the task() payload needed to launch Mekkatorque.
+// Issue the returned task() call.
 // If external system data is needed (parallel exploration):
 // Load warcraft_skill("parallel-exploration") for the full playbook, then:
 // In task mode, use task() for research fan-out.

@@ -676,8 +676,20 @@ describe('prompt snapshot invariants (lifecycle gates)', () => {
       expect(KHADGAR_PROMPT).toContain('BLOCKING');
     });
 
+    it('Khadgar documents worktree delegation as returning a task() payload', () => {
+      expect(KHADGAR_PROMPT).toContain('task() payload');
+      expect(KHADGAR_PROMPT).toMatch(/Issue the returned\s+task\(\) call/);
+      expect(KHADGAR_PROMPT).not.toContain('creates worktree + Mekkatorque');
+    });
+
     it('Saurfang explains worker spawning', () => {
       expect(SAURFANG_PROMPT).toContain('warcraft_worktree_create');
+    });
+
+    it('Saurfang documents worktree delegation as returning a task() payload', () => {
+      expect(SAURFANG_PROMPT).toContain('task() payload');
+      expect(SAURFANG_PROMPT).toMatch(/Issue the returned\s+task\(\) call/);
+      expect(SAURFANG_PROMPT).not.toContain('Creates worktree + Mekkatorque');
     });
 
     it('Mekkatorque must NOT delegate (worker isolation)', () => {

@@ -5,13 +5,13 @@ import { SAURFANG_PROMPT } from '../packages/opencode-warcraft/src/agents/saurfa
 describe('Agent worktree delegation audit', () => {
   it('documents Khadgar worktree delegation as requiring an explicit returned task() call', () => {
     expect(KHADGAR_PROMPT).toContain('task() payload');
-    expect(KHADGAR_PROMPT).toContain('Issue the returned `task()` call');
+    expect(KHADGAR_PROMPT).toMatch(/Issue the returned\s+`?task\(\)`? call/);
     expect(KHADGAR_PROMPT).not.toContain('creates worktree + Mekkatorque');
   });
 
   it('documents Saurfang worktree delegation as requiring an explicit returned task() call', () => {
     expect(SAURFANG_PROMPT).toContain('task() payload');
-    expect(SAURFANG_PROMPT).toContain('Issue the returned `task()` call');
+    expect(SAURFANG_PROMPT).toMatch(/Issue the returned\s+`?task\(\)`? call/);
     expect(SAURFANG_PROMPT).not.toContain('Creates worktree + Mekkatorque');
   });
 });
