@@ -25,6 +25,7 @@ bun test \
   ./eval/blocker-protocol.audit.test.ts \
   ./eval/system-workflow-delegation.audit.test.ts \
   ./eval/saurfang-description.audit.test.ts \
+  ./eval/mekkatorque-description.audit.test.ts \
   packages/opencode-warcraft/src/index.test.ts \
   >"$TMP_OUTPUT" 2>&1
 STATUS=$?
