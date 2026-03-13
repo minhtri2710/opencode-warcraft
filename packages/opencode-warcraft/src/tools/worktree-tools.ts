@@ -299,7 +299,7 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
   }
 
   /**
-   * Complete task: commit changes to branch, write report. Supports blocked/failed/partial status for worker communication.
+   * Complete task: finalize work, write report. Supports blocked/failed/partial status for worker communication.
    */
   commitWorktreeTool(resolveFeature: (name?: string) => string | null): ToolDefinition {
     // Capture deps in closure to avoid 'this' binding issues
@@ -316,7 +316,7 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
     } = this.deps;
     return tool({
       description:
-        'Complete task: commit changes to branch, write report. Supports blocked/failed/partial status for worker communication.',
+        'Complete task: finalize work, write report. Supports blocked/failed/partial status for worker communication.',
       args: {
         task: tool.schema.string().describe('Task folder name'),
         summary: tool.schema.string().describe('Summary of what was done'),
