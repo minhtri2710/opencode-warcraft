@@ -40,6 +40,7 @@ bun test \
   ./eval/batch-preview-next-action.audit.test.ts \
   ./eval/index-blocked-resume.audit.test.ts \
   ./eval/worker-prompt-blocker.audit.test.ts \
+  ./eval/batch-jsdoc-workspace.audit.test.ts \
   packages/opencode-warcraft/src/index.test.ts \
   >"$TMP_OUTPUT" 2>&1
 STATUS=$?

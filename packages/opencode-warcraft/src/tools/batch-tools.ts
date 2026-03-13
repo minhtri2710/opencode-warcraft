@@ -96,7 +96,7 @@ export class BatchTools {
   /**
    * Identify and dispatch runnable tasks in parallel. Two modes:
    * - preview (default): show which tasks are ready for parallel execution
-   * - execute: create worktrees and generate worker prompts for all specified tasks
+   * - execute: prepare workspaces and generate worker prompts for all specified tasks
    */
   batchExecuteTool(resolveFeature: (name?: string) => string | null): ToolDefinition {
     const {
