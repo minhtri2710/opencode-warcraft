@@ -59,7 +59,14 @@ export class DoctorTools {
       args: {},
       async execute() {
         const checks: DiagnosticCheck[] = [];
-        const features = featureService.list();
+        let features: string[] = [];
+        let featureInventoryFailure: string | null = null;
+
+        try {
+          features = featureService.list();
+        } catch (error) {
+          featureInventoryFailure = error instanceof Error ? error.message : String(error);
+        }
 
         const stuckDispatchPrepared: Array<{
           feature: string;
@@ -214,6 +221,20 @@ export class DoctorTools {
         }
 
         // Build check results
+        checks.push(
+          featureInventoryFailure
+            ? {
+                name: 'feature_inventory',
+                status: 'warning',
+                message: `Failed to enumerate features: ${featureInventoryFailure}`,
+              }
+            : {
+                name: 'feature_inventory',
+                status: 'ok',
+                message: 'Feature inventory loaded successfully.',
+              },
+        );
+
         checks.push(
           stuckDispatchPrepared.length > 0
             ? {

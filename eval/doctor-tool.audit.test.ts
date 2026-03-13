@@ -39,4 +39,36 @@ describe('DoctorTools audit', () => {
     expect(check?.message).toContain('Failed to inspect worktrees');
     expect(result.data.summary).toContain('1 issue');
   });
+
+  it('degrades gracefully when feature enumeration fails', async () => {
+    const tool = new DoctorTools({
+      featureService: {
+        list: () => {
+          throw new Error('feature index unavailable');
+        },
+        get: () => null,
+      } as unknown as FeatureService,
+      taskService: {
+        list: () => [],
+        getRawStatus: () => null,
+      } as unknown as TaskService,
+      worktreeService: {
+        listAll: () => Promise.resolve([]),
+      } as unknown as WorktreeService,
+      checkBlocked: () => ({ blocked: false }),
+    }).doctorTool();
+
+    const rawResult = await tool.execute({});
+    const result = JSON.parse(rawResult) as {
+      success: boolean;
+      data: { checks: Array<{ name: string; status: string; message: string }>; summary: string };
+    };
+
+    expect(result.success).toBe(true);
+    const check = result.data.checks.find((entry) => entry.name === 'feature_inventory');
+    expect(check).toBeDefined();
+    expect(check?.status).toBe('warning');
+    expect(check?.message).toContain('Failed to enumerate features');
+    expect(result.data.summary).toContain('1 issue');
+  });
 });

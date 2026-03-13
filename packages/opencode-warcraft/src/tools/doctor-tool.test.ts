@@ -441,6 +441,24 @@ describe('DoctorTools', () => {
       expect(result.data.checks.every((c) => c.status === 'ok')).toBe(true);
     });
 
+    it('degrades gracefully when feature enumeration fails', async () => {
+      const result = await runDoctor({
+        featureService: {
+          list: () => {
+            throw new Error('feature index unavailable');
+          },
+          get: () => null,
+        },
+      });
+
+      expect(result.success).toBe(true);
+      const check = result.data.checks.find((c) => c.name === 'feature_inventory');
+      expect(check).toBeDefined();
+      expect(check!.status).toBe('warning');
+      expect(check!.message).toContain('Failed to enumerate features');
+      expect(result.data.summary).toContain('1 issue');
+    });
+
     it('degrades gracefully when worktree inspection fails for a feature', async () => {
       const result = await runDoctor({
         worktreeService: {

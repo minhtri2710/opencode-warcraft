@@ -37,4 +37,7 @@ Systematically explore the repository, trace execution flows across related impo
 - Fixed `warcraft_merge` verify-argument behavior so omitted `verify` correctly falls back to the verification model instead of being forced to `false` by the schema layer.
 - Fixed `warcraft_feature_create` success messaging so it uses the canonical feature name returned by the service instead of the raw user input.
 - Added regression coverage for both fixes.
-- New audit target discovered: `FeatureTools.createFeatureTool()` still claims it "set[s] it as active", but feature creation does not actually establish active selection. This is a user-facing behavior mismatch worth fixing without changing broader feature-resolution semantics.
+- Fixed the misleading `FeatureTools.createFeatureTool()` claim that creation automatically makes the feature active. The tool metadata now describes the real behavior.
+- Built a benchmark-only fresh-eye audit harness under `eval/` so newly discovered issues can drive the experiment metric without breaking the package test suites before the implementation exists.
+- Fixed `DoctorTools` so per-feature worktree inspection failures degrade to a `stale_worktrees` warning instead of crashing the whole diagnostic tool.
+- Added permanent package-level regression coverage for the DoctorTools degraded path plus the benchmark-only eval that originally exposed it.
