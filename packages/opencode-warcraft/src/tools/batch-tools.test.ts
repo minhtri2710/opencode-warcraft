@@ -427,3 +427,15 @@ describe('BatchTools execute guard parity', () => {
     expect(patchCalls).toHaveLength(0);
   });
 });
+
+describe('BatchTools preview nextAction delegation contract', () => {
+  test('preview nextAction mentions task() calls when tasks are runnable', () => {
+    // Source-level check: the preview nextAction should include the full
+    // delegation contract (issue returned task() calls).
+    const { readFileSync } = require('node:fs');
+    const { join } = require('node:path');
+    const source = readFileSync(join(import.meta.dir, 'batch-tools.ts'), 'utf-8');
+    const nextActionBlock = source.slice(source.indexOf('nextAction:'), source.indexOf('nextAction:') + 400);
+    expect(nextActionBlock).toMatch(/task\(\)/);
+  });
+});

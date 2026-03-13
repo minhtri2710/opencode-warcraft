@@ -175,7 +175,7 @@ export class BatchTools {
                 : undefined,
             nextAction:
               runnable.length > 0
-                ? `Call warcraft_batch_execute with mode "execute" and tasks: [${runnable.map((f) => `"${f}"`).join(', ')}]`
+                ? `Call warcraft_batch_execute with mode "execute" and tasks: [${runnable.map((f) => `"${f}"`).join(', ')}], then issue all returned task() calls in the same assistant message.`
                 : inProgress.length > 0
                   ? 'Wait for in-progress tasks to complete, then check again.'
                   : 'All tasks complete or blocked by dependencies.',
