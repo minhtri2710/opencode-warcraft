@@ -220,6 +220,21 @@ describe('TaskTools', () => {
 
       expect(result).toContain('05-test-task');
     });
+
+    it('success message refers to assigned workspace, not worktree unconditionally', async () => {
+      const tool = taskTools.createTaskTool(resolveFeature);
+      const result = await tool.execute({
+        name: 'Test Task',
+        order: undefined,
+        feature: undefined,
+        priority: 3,
+      });
+
+      // Should not promise a worktree — direct mode is also supported
+      expect(result).not.toContain('to use its worktree');
+      // Should mention the returned task() call
+      expect(result).toContain('task()');
+    });
   });
   describe('syncTasksTool', () => {
     it('preview surfaces reconciliations', async () => {
@@ -354,6 +369,28 @@ describe('updateTaskTool transitions', () => {
     expect(parsed.error).toContain('done → in_progress is not allowed');
     // Should NOT have called transition
     expect(mockTaskService.transitionCalls).toHaveLength(0);
+  });
+
+  it('reopen-rejection message mentions the returned task() call', async () => {
+    const mockTaskService = new MockUpdateTaskService('done');
+    const taskTools = new TaskTools({
+      featureService: { get: () => ({ name: 'test-feature', status: 'executing' }) } as unknown as FeatureService,
+      planService: {} as unknown as PlanService,
+      taskService: mockTaskService as unknown as TaskService,
+      workflowGatesMode: 'warn',
+      validateTaskStatus,
+      eventLogger: createNoopEventLogger(),
+    });
+
+    const tool = taskTools.updateTaskTool(resolveFeature);
+    const result = await tool.execute(
+      { task: '01-task', status: 'in_progress', summary: undefined, feature: undefined },
+      {} as never,
+    );
+
+    const parsed = JSON.parse(result as string);
+    expect(parsed.success).toBe(false);
+    expect(parsed.error).toContain('task()');
   });
 
   it('catches InvalidTransitionError and returns tool error', async () => {

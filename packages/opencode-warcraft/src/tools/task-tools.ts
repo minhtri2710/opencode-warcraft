@@ -129,7 +129,7 @@ export class TaskTools {
         }
         const folder = taskService.create(feature, name, order, priorityValue);
         return toolSuccess({
-          message: `Manual task created: ${folder}\nReminder: start work with warcraft_worktree_create to use its worktree, and ensure any subagents work in that worktree too.`,
+          message: `Manual task created: ${folder}\nReminder: call warcraft_worktree_create to prepare the task workspace, then issue the returned task() call to start the worker in the assigned workspace.`,
         });
       },
     });
@@ -164,7 +164,7 @@ export class TaskTools {
           if (currentTask && currentTask.status === 'done' && validatedStatus === 'in_progress') {
             return toolError(
               `Cannot reopen completed task "${task}": done → in_progress is not allowed. ` +
-                'If the task needs rework, create a new task or use warcraft_worktree_create.',
+                'If the task needs rework, create a new task or use warcraft_worktree_create and issue the returned task() call.',
             );
           }
 
