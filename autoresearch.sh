@@ -18,6 +18,7 @@ bun test \
   ./eval/doctor-tool.audit.test.ts \
   ./eval/context-tools.audit.test.ts \
   ./eval/context-tools-workspace.audit.test.ts \
+  ./eval/worktree-delegation.audit.test.ts \
   packages/opencode-warcraft/src/index.test.ts \
   >"$TMP_OUTPUT" 2>&1
 STATUS=$?

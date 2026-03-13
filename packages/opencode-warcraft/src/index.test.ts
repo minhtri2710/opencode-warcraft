@@ -79,6 +79,16 @@ describe('Warcraft Plugin Tool Registration', () => {
     expect(tool.description).toContain('Create worktree');
   });
 
+  it('should document worktree delegation as returning a task() payload, not auto-spawning a worker', async () => {
+    const output = { system: [] as string[] };
+    await pluginInstance['experimental.chat.system.transform']?.({ agent: 'khadgar' }, output);
+    const joined = output.system.join('\n');
+
+    expect(joined).toContain('returns the `task()` payload needed to launch the worker');
+    expect(joined).toContain('Issue the returned `task()` call');
+    expect(joined).not.toContain('creates worktree and spawns worker automatically');
+  });
+
   it('should have context write tool with correct description', () => {
     const tool = pluginInstance.tool.warcraft_context_write;
     expect(tool.description).toContain('context file');

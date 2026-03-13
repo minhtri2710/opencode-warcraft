@@ -50,22 +50,24 @@ Use \`warcraft_merge\` to explicitly integrate changes. Worktrees persist until 
 
 ### Delegated Execution
 
-\`warcraft_worktree_create\` creates worktree and spawns worker automatically:
+\`warcraft_worktree_create\` prepares the workspace and returns the \`task()\` payload needed to launch the worker:
 
-1. \`warcraft_worktree_create(task)\` → Creates worktree + spawns Mekkatorque (Worker/Coder) worker
-2. Worker executes → calls \`warcraft_worktree_commit(status: "completed")\`
-3. Worker blocked → calls \`warcraft_worktree_commit(status: "blocked", blocker: {...})\`
+1. \`warcraft_worktree_create(task)\` → Creates/reuses the workspace and returns a Mekkatorque (Worker/Coder) \`task()\` call
+2. Issue the returned \`task()\` call
+3. Worker executes → calls \`warcraft_worktree_commit(status: "completed")\`
+4. Worker blocked → calls \`warcraft_worktree_commit(status: "blocked", blocker: {...})\`
 
 **Handling blocked workers:**
 1. Check blockers with \`warcraft_status()\`
 2. Read the blocker info (reason, options, recommendation, context)
 3. Ask user via \`question()\` tool - NEVER plain text
 4. Resume with \`warcraft_worktree_create(task, continueFrom: "blocked", decision: answer)\`
+5. Issue the newly returned \`task()\` call to relaunch the worker in the same workspace
 
-**CRITICAL**: When resuming, a NEW worker spawns in the SAME worktree.
+**CRITICAL**: When resuming, the returned \`task()\` call launches a NEW worker in the SAME worktree.
 The previous worker's progress is preserved. Include the user's decision in the \`decision\` parameter.
 
-**After task() Returns:**
+**After the returned task() call returns:**
 - task() is BLOCKING — when it returns, the worker is DONE
 - Call \`warcraft_status()\` immediately to check the new task state and find next runnable tasks
 - No notifications or polling needed — the result is already available
