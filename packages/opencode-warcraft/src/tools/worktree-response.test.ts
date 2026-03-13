@@ -266,6 +266,7 @@ describe('formatBlockedResponse', () => {
     expect(result.workspacePath).toBe('/tmp/wt/path');
     expect(result.branch).toBe('task-branch');
     expect(result.message).toContain('warcraft_worktree_create');
+    expect(result.message).toContain('task()');
   });
 
   it('formats blocked response for direct mode', () => {

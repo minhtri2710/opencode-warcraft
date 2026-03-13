@@ -305,7 +305,7 @@ export function formatBlockedResponse(input: {
     message:
       workspaceMode === 'direct'
         ? 'Task blocked in direct mode. Warcraft Master will ask user and resume against the project root workspace.'
-        : 'Task blocked. Warcraft Master will ask user and resume with warcraft_worktree_create(continueFrom: "blocked", decision: answer)',
+        : 'Task blocked. Warcraft Master will ask user and resume with warcraft_worktree_create(continueFrom: "blocked", decision: answer), then issue the returned task() call',
   };
 }
 
