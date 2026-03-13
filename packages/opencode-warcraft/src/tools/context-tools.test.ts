@@ -764,6 +764,41 @@ describe('ContextTools', () => {
       expect(hasChangesCalled).toBe(false);
     });
 
+    it('degrades gracefully when per-task worktree lookup fails', async () => {
+      const taskService = {
+        list: () => [{ folder: '01-task', name: 'Task', status: 'in_progress' as const, origin: 'plan' as const }],
+        getRawStatus: () => ({
+          workerSession: { workspaceMode: 'worktree' as const },
+        }),
+        computeRunnableStatus: () => ({ runnable: [], blocked: {} }),
+      } as unknown as TaskService;
+      const worktreeService = {
+        listAll: () => Promise.resolve([]),
+        get: () => Promise.reject(new Error('worktree lookup unavailable')),
+        hasUncommittedChanges: () => Promise.resolve(false),
+      } as unknown as WorktreeService;
+
+      const result = await getStatusHealth({ taskService, worktreeService });
+      const tasks = result.data.tasks as {
+        list: Array<{
+          folder: string;
+          workspace: unknown;
+        }>;
+      };
+
+      expect(result.success).toBe(true);
+      expect(tasks.list).toEqual([
+        {
+          folder: '01-task',
+          name: 'Task',
+          status: 'in_progress',
+          origin: 'plan',
+          dependsOn: null,
+          workspace: null,
+        },
+      ]);
+    });
+
     it('counts dispatch_prepared tasks as active work and recommends continuing them first', async () => {
       const taskService = {
         list: () => [

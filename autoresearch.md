@@ -42,3 +42,5 @@ Systematically explore the repository, trace execution flows across related impo
 - Fixed `DoctorTools` so per-feature worktree inspection failures degrade to a `stale_worktrees` warning instead of crashing the whole diagnostic tool.
 - Extended the same fail-soft approach to feature enumeration failures, which now surface as a `feature_inventory` warning instead of aborting diagnostics.
 - Added permanent package-level regression coverage for the DoctorTools degraded paths plus the benchmark-only evals that originally exposed them.
+- Fixed `ContextTools` so `warcraft_status` degrades gracefully when worktree inventory fails, surfacing a `worktreeHygiene` warning instead of crashing status rendering.
+- Added package and benchmark-only regression coverage for the ContextTools degraded worktree-inventory path.

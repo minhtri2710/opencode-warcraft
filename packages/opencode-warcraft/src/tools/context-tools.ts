@@ -143,11 +143,20 @@ export class ContextTools {
     const rawStatus = taskService.getRawStatus(featureName, task.folder);
     const workspaceMode = rawStatus?.workerSession?.workspaceMode ?? 'worktree';
     const directWorkspacePath = rawStatus?.workerSession?.workspacePath;
-    const worktree = workspaceMode === 'worktree' ? await worktreeService.get(featureName, task.folder) : null;
-    const hasChanges =
-      workspaceMode === 'worktree' && worktree
-        ? await worktreeService.hasUncommittedChanges(worktree.feature, worktree.step)
-        : null;
+    let worktree = null;
+    let hasChanges: boolean | null = null;
+
+    if (workspaceMode === 'worktree') {
+      try {
+        worktree = await worktreeService.get(featureName, task.folder);
+        if (worktree) {
+          hasChanges = await worktreeService.hasUncommittedChanges(worktree.feature, worktree.step);
+        }
+      } catch {
+        worktree = null;
+        hasChanges = null;
+      }
+    }
 
     return {
       folder: task.folder,
