@@ -139,7 +139,7 @@ function truncateWithMarker(str: string, maxLength: number): { result: string; t
   // Leave room for the marker
   const cutoff = maxLength - TRUNCATION_MARKER.length;
   if (cutoff <= 0) {
-    return { result: TRUNCATION_MARKER, truncated: true };
+    return { result: maxLength <= 0 ? '' : TRUNCATION_MARKER.slice(0, maxLength), truncated: true };
   }
 
   return {

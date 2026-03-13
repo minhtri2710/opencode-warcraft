@@ -643,13 +643,17 @@ describe('BeadGateway', () => {
       return '' as any;
     });
 
-    const gateway = new BeadGateway('/repo');
+    try {
+      const gateway = new BeadGateway('/repo');
 
-    expect(() => gateway.addComment('bd-1', 'hello')).toThrow(/comment write failed/);
-    const commentCalls = execSpy.mock.calls.filter((call) => Array.isArray(call[1]) && (call[1] as string[])[0] === 'comments');
-    expect(commentCalls).toHaveLength(1);
-
-    execSpy.mockRestore();
+      expect(() => gateway.addComment('bd-1', 'hello')).toThrow(/Failed to add comment to bead 'bd-1'/);
+      const commentCalls = execSpy.mock.calls.filter(
+        (call) => Array.isArray(call[1]) && (call[1] as string[])[0] === 'comments',
+      );
+      expect(commentCalls).toHaveLength(1);
+    } finally {
+      execSpy.mockRestore();
+    }
   });
   it('reopens a bead by setting status open', () => {
     const execSpy = spyOn(childProcess, 'execFileSync')

@@ -150,21 +150,34 @@ Do it
 
     const statusRaw = await hooks.tool!.warcraft_status.execute({ feature: 'bv-triage-feature' }, toolContext);
     const warcraftStatus = JSON.parse(statusRaw as string) as {
-      triage?: {
-        summary?: string;
-      };
       tasks?: {
         list?: Array<{
           folder: string;
-          triage?: {
-            summary?: string;
-          };
         }>;
+        triage?: Record<string, {
+          summary: string;
+          source: string;
+        }>;
+        triageGlobal?: {
+          summary?: string;
+        } | null;
+        triageHealth?: {
+          enabled?: boolean;
+          available?: boolean;
+        };
+      };
+      health?: {
+        reopenRate?: number;
       };
     };
 
-    // BV triage service should be initialized (may not have data without bv CLI)
-    expect(warcraftStatus).toBeDefined();
+    expect(Array.isArray(warcraftStatus.tasks?.list)).toBe(true);
+    expect(warcraftStatus.tasks?.triage).toBeDefined();
+    expect(warcraftStatus.tasks?.triageHealth).toBeDefined();
+    expect(
+      warcraftStatus.tasks?.triageGlobal === null || typeof warcraftStatus.tasks?.triageGlobal?.summary === 'string',
+    ).toBe(true);
+    expect(typeof warcraftStatus.health?.reopenRate).toBe('number');
   });
 
   runIfHostReady('warcraft_worktree_create returns task spec with proper structure', async () => {

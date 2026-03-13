@@ -45,8 +45,19 @@ describe('applyTaskBudget', () => {
 
     const result = applyTaskBudget(tasks, { maxSummaryChars: 100 });
 
-    expect(result.tasks[0].summary.length).toBeLessThanOrEqual(100 + 20); // Allow for truncation marker
+    expect(result.tasks[0].summary.length).toBe(100);
     expect(result.tasks[0].summary).toContain('...[truncated]');
+    expect(result.tasks[0].truncated).toBe(true);
+  });
+
+  it('never exceeds the requested max length for tiny task summary budgets', () => {
+    const longSummary = 'A'.repeat(500);
+    const tasks = [{ name: '01-task', summary: longSummary }];
+
+    const result = applyTaskBudget(tasks, { maxSummaryChars: 5 });
+
+    expect(result.tasks[0].summary).toBe('...[t');
+    expect(result.tasks[0].summary.length).toBe(5);
     expect(result.tasks[0].truncated).toBe(true);
   });
 
@@ -131,6 +142,17 @@ describe('applyContextBudget', () => {
     expect(result.files[0].content).toContain('...[truncated]');
     expect(result.files[0].truncated).toBe(true);
     expect(getInlinedContextChars(result)).toBe(1000);
+  });
+
+  it('never exceeds the requested max length for tiny context budgets', () => {
+    const longContent = 'B'.repeat(100);
+    const files = [{ name: 'decisions', content: longContent }];
+
+    const result = applyContextBudget(files, { maxContextChars: 5 });
+
+    expect(result.files[0].content).toBe('...[t');
+    expect(result.files[0].content.length).toBe(5);
+    expect(getInlinedContextChars(result)).toBe(5);
   });
 
   it('switches the overflowing file and all later files to name-only listing', () => {

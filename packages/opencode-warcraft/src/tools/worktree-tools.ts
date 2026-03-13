@@ -463,9 +463,10 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
             `warcraft(${task}): ${summary.slice(0, 50)}`,
           );
 
-          if (!commitResult.committed) {
+          const requiresCommit = status === 'completed';
+          if (!commitResult.committed && requiresCommit) {
             return toolError(
-              `Cannot mark task "${task}" completed because no commit was created (${commitResult.message}). Task status unchanged.`,
+              `Cannot mark task "${task}" ${status} because no commit was created (${commitResult.message}). Task status unchanged.`,
             );
           }
 
@@ -575,7 +576,9 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
           branch: workspaceMode === 'worktree' ? workspace?.branch : undefined,
           message:
             workspaceMode === 'worktree'
-              ? `Task "${task}" ${status}. Changes committed to branch ${workspace?.branch || 'unknown'}.\nUse warcraft_merge to integrate changes. Worktree preserved at ${workspace?.path || 'unknown'}.`
+              ? commitResult.committed
+                ? `Task "${task}" ${status}. Changes committed to branch ${workspace?.branch || 'unknown'}.\nUse warcraft_merge to integrate changes. Worktree preserved at ${workspace?.path || 'unknown'}.`
+                : `Task "${task}" ${status}. No git commit was created (${commitResult.message || 'no changes detected'}). Worktree preserved at ${workspace?.path || 'unknown'}.`
               : `Task "${task}" ${status} in direct mode. No git commit or merge step was created; changes remain in the project root at ${workspacePath || 'unknown'}.`,
         };
 

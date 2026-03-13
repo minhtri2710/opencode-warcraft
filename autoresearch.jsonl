@@ -1,2 +1,3 @@
 {"type":"config","name":"Optimize opencode-warcraft build+test time","metricName":"total_ms","metricUnit":"ms","bestDirection":"lower"}
 {"run":1,"commit":"5cc83b8","metric":6773,"metrics":{},"status":"keep","description":"Baseline: Build ~3048ms, Tests ~3725ms, Total ~6773ms. 978 tests pass.","timestamp":1773399542309,"segment":0}
+{"run":2,"commit":"8c7e3fe","metric":0,"metrics":{},"status":"crash","description":"Added --minify flag to both build scripts. Result: Test failures in BeadGateway (3 tests failed). Likely unrelated flaky tests or minification broke something. Reverting.","timestamp":1773399596995,"segment":0}

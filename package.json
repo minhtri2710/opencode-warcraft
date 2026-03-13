@@ -10,7 +10,7 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "bun run --filter warcraft-core build && bun run --filter opencode-warcraft build",
+    "build": "bun run --filter opencode-warcraft build",
     "test": "bun run --filter '*' test",
     "lint": "bun run --filter warcraft-core typecheck && bun run --filter opencode-warcraft typecheck && bunx biome check . --diagnostic-level=error",
     "format": "bunx biome check --write .",

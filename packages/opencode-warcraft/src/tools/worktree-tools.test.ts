@@ -1407,6 +1407,56 @@ describe('commitWorktreeTool learnings edge cases', () => {
     // Learnings should still be persisted in transition
     expect(failedTransition!.extras?.learnings).toEqual(['Found root cause: wrong config']);
   });
+
+  it('allows partial status without a git commit when no files changed', async () => {
+    const { deps, getTransitionCalls } = createCommitDeps({
+      worktreeServiceOverrides: {
+        commitChanges: async () => ({ committed: false, sha: '', message: 'no changes detected' }),
+      },
+    });
+    const tools = new WorktreeTools(deps);
+    const commitTool = tools.commitWorktreeTool(resolveFeature);
+
+    const result = await commitTool.execute(
+      {
+        task: '01-task',
+        summary: 'Partial progress made',
+        status: 'partial',
+      },
+      {} as never,
+    );
+
+    const data = parseCommitResult(result);
+    expect(data.ok).toBe(true);
+    expect(data.status).toBe('partial');
+    expect(data.message).toContain('No git commit was created');
+    expect(getTransitionCalls().some((t) => t.toStatus === 'partial')).toBe(true);
+  });
+
+  it('allows failed status without a git commit when no files changed', async () => {
+    const { deps, getTransitionCalls } = createCommitDeps({
+      worktreeServiceOverrides: {
+        commitChanges: async () => ({ committed: false, sha: '', message: 'no changes detected' }),
+      },
+    });
+    const tools = new WorktreeTools(deps);
+    const commitTool = tools.commitWorktreeTool(resolveFeature);
+
+    const result = await commitTool.execute(
+      {
+        task: '01-task',
+        summary: 'Everything broke',
+        status: 'failed',
+      },
+      {} as never,
+    );
+
+    const data = parseCommitResult(result);
+    expect(data.ok).toBe(true);
+    expect(data.status).toBe('failed');
+    expect(data.message).toContain('No git commit was created');
+    expect(getTransitionCalls().some((t) => t.toStatus === 'failed')).toBe(true);
+  });
 });
 
 describe('formatSpecContent', () => {
