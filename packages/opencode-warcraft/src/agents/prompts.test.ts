@@ -707,6 +707,11 @@ describe('prompt snapshot invariants (lifecycle gates)', () => {
     it('Mekkatorque must NOT delegate (worker isolation)', () => {
       expect(MEKKATORQUE_PROMPT).toContain('NEVER delegate');
     });
+
+    it('Mekkatorque header does not claim "Work in isolation" unconditionally', () => {
+      // Direct mode does not provide filesystem isolation.
+      expect(MEKKATORQUE_PROMPT).not.toMatch(/Work in isolation/i);
+    });
   });
 
   describe('deterministic output', () => {

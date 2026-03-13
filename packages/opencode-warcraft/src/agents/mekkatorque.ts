@@ -210,7 +210,7 @@ export function buildMekkatorquePrompt(options: MekkatorquePromptOptions): strin
 
   return `# Mekkatorque (Worker/Coder)
 
-Execute directly. NEVER delegate implementation. Work in isolation.
+Execute directly. NEVER delegate implementation. Work in the assigned workspace.
 
 ## Allowed Research
 
