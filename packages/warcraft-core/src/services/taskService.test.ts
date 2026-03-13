@@ -2345,6 +2345,34 @@ Second task.
       );
     });
 
+    it('create() throws when the requested order is already in use', () => {
+      const featureName = 'test-feature';
+      setupFeature(featureName);
+
+      const offStores = createStores(PROJECT_ROOT, 'off', createRepository('off'));
+      const offModeService = new TaskService(PROJECT_ROOT, offStores.taskStore, 'off');
+
+      offModeService.create(featureName, 'Setup API', 1, 3);
+
+      expect(() => offModeService.create(featureName, 'Build UI', 1, 3)).toThrow(
+        /Task order 1 is already in use by '01-setup-api'/,
+      );
+    });
+
+    it('create() throws when the exact task folder already exists', () => {
+      const featureName = 'test-feature';
+      setupFeature(featureName);
+
+      const offStores = createStores(PROJECT_ROOT, 'off', createRepository('off'));
+      const offModeService = new TaskService(PROJECT_ROOT, offStores.taskStore, 'off');
+
+      offModeService.create(featureName, 'Setup API', 1, 3);
+
+      expect(() => offModeService.create(featureName, 'Setup API', 1, 3)).toThrow(
+        /Task order 1 is already in use by '01-setup-api'/,
+      );
+    });
+
     it('create() does not throw when slug is unique', () => {
       const featureName = 'test-feature';
       setupFeature(featureName);

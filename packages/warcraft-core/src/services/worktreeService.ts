@@ -249,24 +249,21 @@ export class WorktreeService {
 
     try {
       const status = await worktreeGit.status(worktreePath);
-      const hasStaged = status.staged.length > 0;
+      const hasWorktreeChanges =
+        status.staged.length > 0 ||
+        status.modified.length > 0 ||
+        status.not_added.length > 0 ||
+        status.deleted.length > 0 ||
+        status.created.length > 0;
 
       let diffContent = '';
       let stat = '';
 
-      if (hasStaged) {
-        if (base !== 'HEAD') {
-          return {
-            hasDiff: false,
-            diffContent: '',
-            filesChanged: [],
-            insertions: 0,
-            deletions: 0,
-            error: `Staged diff for '${feature}/${step}' requires base HEAD; found base '${base}'`,
-          };
-        }
-        diffContent = await worktreeGit.diffCached(worktreePath);
-        stat = diffContent ? await worktreeGit.diffCachedStat(worktreePath) : '';
+      if (hasWorktreeChanges) {
+        // Compare the current worktree/index state directly to the base so uncommitted
+        // edits are not silently dropped from exported or conflict-checked patches.
+        diffContent = await worktreeGit.diff(base, worktreePath).catch(() => '');
+        stat = diffContent ? await worktreeGit.diffStat(base, worktreePath) : '';
       } else {
         diffContent = await worktreeGit.diff(`${base}..HEAD`, worktreePath).catch(() => '');
         stat = diffContent ? await worktreeGit.diffStat(`${base}..HEAD`, worktreePath) : '';

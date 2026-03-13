@@ -973,11 +973,12 @@ describe('WorktreeService.getDiff', () => {
         deleted: [],
         created: [],
       }),
-      diff: async (args: string[]) => {
-        if (args.includes('--cached') && args.includes('--stat')) {
+      diff: async (args: string | string[]) => {
+        const values = Array.isArray(args) ? args : [args];
+        if (values.includes('HEAD') && values.includes('--stat')) {
           return ' src/a.ts | 5 +++--\n 1 file changed, 3 insertions(+), 2 deletions(-)\n';
         }
-        if (args.includes('--cached')) {
+        if (values.includes('HEAD')) {
           return 'diff --git a/src/a.ts b/src/a.ts\n+added line\n';
         }
         return '';
@@ -1010,10 +1011,10 @@ describe('WorktreeService.getDiff', () => {
       }),
       diff: async (args: string | string[]) => {
         const values = Array.isArray(args) ? args : [args];
-        if (values.some((a: string) => a.includes('..HEAD')) && values.includes('--stat')) {
+        if (values.includes('abc123') && values.includes('--stat')) {
           return ' src/b.ts | 10 ++++++++++\n 1 file changed, 10 insertions(+)\n';
         }
-        if (values.some((a: string) => a.includes('..HEAD'))) {
+        if (values.includes('abc123')) {
           return 'diff --git a/src/b.ts b/src/b.ts\n+new content\n';
         }
         return '';
@@ -1125,7 +1126,7 @@ describe('WorktreeService.getDiff', () => {
     }
   });
 
-  it('returns explicit error when staged changes use non-HEAD base', async () => {
+  it('uses the provided non-HEAD base for dirty worktrees instead of rejecting staged changes', async () => {
     const service = createService('off');
 
     const mockGit = createMockGit({

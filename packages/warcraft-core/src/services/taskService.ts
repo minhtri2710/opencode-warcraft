@@ -473,8 +473,26 @@ export class TaskService {
     const folder = deriveTaskFolder(nextOrder, name);
     const slug = slugifyTaskName(name);
 
-    // Check for slug collision with existing tasks
     const existingTasks = this.store.list(featureName);
+
+    // Preserve one canonical task per numeric prefix so ordering/dependency semantics stay unambiguous.
+    const conflictingOrderTask = existingTasks.find((existing) => {
+      const existingOrder = parseInt(existing.folder.split('-')[0] ?? '', 10);
+      return existingOrder === nextOrder;
+    });
+    if (conflictingOrderTask) {
+      throw new Error(
+        `Task order ${nextOrder} is already in use by '${conflictingOrderTask.folder}'. ` +
+          'Choose a different order or omit the order to auto-assign the next slot.',
+      );
+    }
+
+    const conflictingFolderTask = existingTasks.find((existing) => existing.folder === folder);
+    if (conflictingFolderTask) {
+      throw new Error(`Task folder '${folder}' already exists. Please rename the task or choose a different order.`);
+    }
+
+    // Check for slug collision with existing tasks
     for (const existing of existingTasks) {
       // Extract slug portion from existing folder (strip "NN-" prefix)
       const existingSlug = existing.folder.replace(/^\d+-/, '');
