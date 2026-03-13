@@ -206,6 +206,11 @@ describe('Mekkatorque (Worker/Coder) prompt', () => {
     expect(MEKKATORQUE_PROMPT).toContain('Docker Sandbox');
   });
 
+  it('Docker Sandbox does not claim worktree is always mounted', () => {
+    // In direct mode the project root workspace is mounted, not a worktree.
+    expect(MEKKATORQUE_PROMPT).not.toMatch(/worktree is mounted/i);
+  });
+
   it('instructs to report as blocked instead of HOST: escape', () => {
     expect(MEKKATORQUE_PROMPT).toContain('report as blocked');
     expect(MEKKATORQUE_PROMPT).not.toContain('HOST:');

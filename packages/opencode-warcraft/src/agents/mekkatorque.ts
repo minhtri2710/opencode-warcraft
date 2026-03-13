@@ -263,7 +263,7 @@ After 3 consecutive failures:
 
 When sandbox mode is active, ALL bash commands automatically run inside a Docker container.
 - Your commands are transparently wrapped — you don't need to do anything special
-- File edits (Read, Write, Edit tools) still work on the host filesystem (worktree is mounted)
+- File edits (Read, Write, Edit tools) still work on the host filesystem (workspace is mounted)
 - If a command must run on the host (e.g., git operations), report as blocked and ask the user
 - If a command fails with "docker: command not found", report as blocked — the host needs Docker installed
 - For deeper Docker expertise, load \`warcraft_skill("docker-mastery")\`
