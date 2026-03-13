@@ -290,6 +290,6 @@ export const MEKKATORQUE_PROMPT = buildMekkatorquePrompt({ verificationModel: 't
 
 export const mekkatorqueAgent = {
   name: 'Mekkatorque (Worker/Coder)',
-  description: 'Lean worker. Executes directly, never delegates. Isolated worktree.',
+  description: 'Lean worker. Executes directly, never delegates. Assigned workspace.',
   prompt: MEKKATORQUE_PROMPT,
 };

@@ -26,7 +26,7 @@ export { buildSaurfangPrompt, SAURFANG_PROMPT, saurfangAgent } from './saurfang.
  * - mimiron: Discovery/planning (requirements, plan writing)
  * - saurfang: Orchestration (delegates, verifies, merges)
  * - brann: Research/collection (codebase + external docs/data)
- * - mekkatorque: Worker/coder (executes tasks in worktrees)
+ * - mekkatorque: Worker/coder (executes tasks in assigned workspace)
  * - algalon: Consultant/reviewer (plan quality)
  */
 export const warcraftAgents = {

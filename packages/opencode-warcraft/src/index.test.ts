@@ -7,6 +7,7 @@ import type { Plugin } from '@opencode-ai/plugin';
 import { readFileSync } from 'fs';
 import * as path from 'path';
 import { warcraftAgents } from './agents/index.js';
+import { mekkatorqueAgent } from './agents/mekkatorque.js';
 import { saurfangAgent } from './agents/saurfang.js';
 import { createTestOpencodeClient } from './e2e/helpers/opencode-client.js';
 import plugin from './index.js';
@@ -110,6 +111,9 @@ describe('Warcraft Plugin Tool Registration', () => {
   it('should keep Mekkatorque metadata aligned with direct-mode support', () => {
     expect(warcraftAgents.mekkatorque.description.toLowerCase()).not.toContain('isolated worktrees');
     expect(warcraftAgents.mekkatorque.description).toContain('assigned workspace');
+
+    // Exported mekkatorqueAgent from mekkatorque.ts must also not claim worktrees unconditionally
+    expect(mekkatorqueAgent.description.toLowerCase()).not.toContain('isolated worktree');
 
     const pluginConfigPath = path.resolve(import.meta.dir, 'plugin-config.ts');
     const pluginConfigSource = readFileSync(pluginConfigPath, 'utf-8').toLowerCase();
