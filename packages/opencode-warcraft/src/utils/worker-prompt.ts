@@ -46,7 +46,7 @@ export interface WorkerPromptParams {
  * Build a context-rich prompt for a worker agent.
  *
  * Includes:
- * - Assignment details (feature, task, worktree, branch)
+ * - Assignment details (feature, task, workspace, branch)
  * - Mission (spec) - contains plan section, context, and completed tasks
  * - Blocker protocol (NOT question tool)
  * - Completion protocol
