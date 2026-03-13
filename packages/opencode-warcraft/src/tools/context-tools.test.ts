@@ -666,6 +666,24 @@ describe('ContextTools', () => {
       expect((result.data.tasks as { blockedFeature: unknown }).blockedFeature).toBeNull();
     });
 
+    it('tells users to use batch preview/execute and returned task() calls when multiple tasks are runnable', async () => {
+      const taskService = {
+        list: () => [
+          { folder: '01-task', name: 'Task 1', status: 'pending' as const, origin: 'plan' as const },
+          { folder: '02-task', name: 'Task 2', status: 'pending' as const, origin: 'plan' as const },
+        ],
+        getRawStatus: () => null,
+        computeRunnableStatus: () => ({ runnable: ['01-task', '02-task'], blocked: {} }),
+      } as unknown as TaskService;
+
+      const result = await getStatusHealth({ taskService });
+
+      expect(result.success).toBe(true);
+      expect(result.data.nextAction).toBe(
+        '2 tasks are ready in parallel. Use warcraft_batch_execute preview/execute, then issue all returned task() calls in the same assistant message: 01-task, 02-task',
+      );
+    });
+
     it('tells users to issue the returned task() call when exactly one task is runnable', async () => {
       const taskService = {
         list: () => [{ folder: '01-task', name: 'Task', status: 'pending' as const, origin: 'plan' as const }],

@@ -349,7 +349,7 @@ export class ContextTools {
         return `Continue work on task: ${inProgress.folder}`;
       }
       if (runnableTasks.length > 1) {
-        return `${runnableTasks.length} tasks are ready to start in parallel: ${runnableTasks.join(', ')}`;
+        return `${runnableTasks.length} tasks are ready in parallel. Use warcraft_batch_execute preview/execute, then issue all returned task() calls in the same assistant message: ${runnableTasks.join(', ')}`;
       }
       if (runnableTasks.length === 1) {
         return `Start next task with warcraft_worktree_create, then issue the returned task() call: ${runnableTasks[0]}`;
