@@ -76,7 +76,8 @@ describe('Warcraft Plugin Tool Registration', () => {
 
   it('should have worktree create tool with correct description', () => {
     const tool = pluginInstance.tool.warcraft_worktree_create;
-    expect(tool.description).toContain('Create worktree');
+    expect(tool.description).toContain('task workspace');
+    expect(tool.description).toContain('task() payload');
   });
 
   it('should document worktree delegation as returning a task() payload, not auto-spawning a worker', async () => {

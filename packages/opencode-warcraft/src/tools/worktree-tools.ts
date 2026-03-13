@@ -70,7 +70,7 @@ export class WorktreeTools {
   constructor(private readonly deps: WorktreeToolsDependencies) {}
 
   /**
-   * Create worktree and begin work on task. Spawns Mekkatorque worker automatically.
+   * Create/reuse a task workspace and return the delegation payload needed to launch Mekkatorque.
    */
   createWorktreeTool(resolveFeature: (name?: string) => string | null): ToolDefinition {
     // Capture deps in closure to avoid 'this' binding issues
@@ -88,7 +88,7 @@ export class WorktreeTools {
       lockDir,
     } = this.deps;
     return tool({
-      description: 'Create worktree and begin work on task. Spawns Mekkatorque worker automatically.',
+      description: 'Create/reuse a task workspace and return the task() payload needed to launch Mekkatorque.',
       args: {
         task: tool.schema.string().describe('Task folder name'),
         feature: tool.schema.string().optional().describe('Feature name (defaults to detection or single feature)'),

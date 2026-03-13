@@ -113,6 +113,14 @@ describe('WorktreeTools', () => {
   let execFileSyncSpy: ReturnType<typeof spyOn>;
   let childCounter = 0;
 
+  it('does not claim worktree creation auto-spawns a worker', () => {
+    const tool = new WorktreeTools(createMergeDeps()).createWorktreeTool(() => 'test-feature');
+
+    expect(tool.description).toContain('return the task() payload');
+    expect(tool.description.toLowerCase()).not.toContain('automatically');
+    expect(tool.description.toLowerCase()).not.toContain('spawns mekkatorque');
+  });
+
   beforeEach(() => {
     cleanup();
     fs.mkdirSync(TEST_DIR, { recursive: true });
