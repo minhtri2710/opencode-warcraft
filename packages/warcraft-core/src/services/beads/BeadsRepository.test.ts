@@ -343,6 +343,22 @@ describe('BeadsRepository', () => {
       expect(result.value?.status).toBe('pending');
     });
 
+    it('should fail when task state uses an unsupported schema version', () => {
+      mockGateway.artifacts.set('task-123', {
+        task_state: JSON.stringify({
+          schemaVersion: 2,
+          status: 'pending',
+          origin: 'plan',
+        }),
+      });
+
+      const result = repository.getTaskState('task-123');
+      expect(result.success).toBe(false);
+      if (result.success === false) {
+        expect(result.error.message).toContain("Unsupported task_state schema version '2'");
+      }
+    });
+
     it('should return null when task state not found', () => {
       const result = repository.getTaskState('task-999');
       expect(result.success).toBe(true);

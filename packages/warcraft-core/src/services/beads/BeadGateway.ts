@@ -387,11 +387,14 @@ export class BeadGateway {
           console.warn(
             `[warcraft] Combined unclaim failed for '${beadId}', retrying with separate commands: ${reason}`,
           );
+
+          const fallbackFailures: string[] = [];
           try {
             this.runBr(['update', beadId, '-s', 'open'], `reopen bead '${beadId}'`);
           } catch (reopenError) {
             const reopenReason = reopenError instanceof Error ? reopenError.message : String(reopenError);
             console.warn(`[warcraft] Failed to reopen bead '${beadId}' during unclaim fallback: ${reopenReason}`);
+            fallbackFailures.push(`reopen failed: ${reopenReason}`);
           }
           try {
             this.runBr(['update', beadId, '--assignee', ''], `clear assignee on bead '${beadId}'`);
@@ -399,6 +402,15 @@ export class BeadGateway {
             const assigneeReason = assigneeError instanceof Error ? assigneeError.message : String(assigneeError);
             console.warn(
               `[warcraft] Failed to clear assignee on bead '${beadId}' during unclaim fallback: ${assigneeReason}`,
+            );
+            fallbackFailures.push(`clear assignee failed: ${assigneeReason}`);
+          }
+
+          if (fallbackFailures.length > 0) {
+            throw new BeadGatewayError(
+              'command_error',
+              `Failed to unclaim bead '${beadId}' [BR_COMMAND_FAILED]: ${fallbackFailures.join('; ')}`,
+              'BR_COMMAND_FAILED',
             );
           }
         }
@@ -475,12 +487,6 @@ export class BeadGateway {
     try {
       writeFileSync(tempFile, comment, 'utf8');
       this.runBr(['comments', 'add', beadId, '--file', tempFile, '--no-daemon'], `add comment to bead '${beadId}'`);
-    } catch (error) {
-      if (error instanceof BeadGatewayError && error.internalCode === 'BR_COMMAND_FAILED') {
-        this.runBr(['comments', 'add', beadId, '--file', tempFile, '--no-daemon'], `add comment to bead '${beadId}'`);
-      } else {
-        throw error;
-      }
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }

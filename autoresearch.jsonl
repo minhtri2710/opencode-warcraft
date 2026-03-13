@@ -1,1 +1,2 @@
 {"type":"config","name":"Optimize opencode-warcraft build+test time","metricName":"total_ms","metricUnit":"ms","bestDirection":"lower"}
+{"run":1,"commit":"5cc83b8","metric":6773,"metrics":{},"status":"keep","description":"Baseline: Build ~3048ms, Tests ~3725ms, Total ~6773ms. 978 tests pass.","timestamp":1773399542309,"segment":0}

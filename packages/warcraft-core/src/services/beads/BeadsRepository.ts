@@ -449,9 +449,23 @@ export class BeadsRepository {
       this.beforeRead();
 
       const raw = this.gateway.readArtifact(taskBeadId, 'task_state');
+      if (raw === null) {
+        return { success: true, value: null };
+      }
+
       const artifact = decodeTaskState(raw);
 
       if (!artifact) {
+        try {
+          const parsed = JSON.parse(raw) as { schemaVersion?: unknown };
+          if (parsed && typeof parsed === 'object' && 'schemaVersion' in parsed) {
+            throw new Error(`Unsupported task_state schema version '${String(parsed.schemaVersion)}'`);
+          }
+        } catch (error) {
+          if (error instanceof Error && error.message.startsWith('Unsupported task_state schema version')) {
+            throw error;
+          }
+        }
         return { success: true, value: null };
       }
 

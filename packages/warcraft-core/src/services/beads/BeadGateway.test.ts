@@ -605,6 +605,52 @@ describe('BeadGateway', () => {
 
     execSpy.mockRestore();
   });
+
+  it('unclaim throws when fallback commands still fail', () => {
+    const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+    const execSpy = spyOn(childProcess, 'execFileSync').mockImplementation((...args: any[]) => {
+      const argList = Array.isArray(args[1]) ? args[1].map(String) : [];
+      if (argList[0] === '--version') return 'beads_rust 1.2.3' as any;
+      if (argList.includes('--remove-label')) return '' as any;
+      if (argList.includes('--assignee') && argList.includes('-s')) {
+        throw new Error('combined command not supported');
+      }
+      if (argList.includes('-s') && argList.includes('open')) {
+        throw new Error('reopen failed');
+      }
+      if (argList.includes('--assignee')) {
+        throw new Error('clear assignee failed');
+      }
+      return '' as any;
+    });
+
+    const gateway = new BeadGateway('/repo');
+
+    expect(() => gateway.syncTaskStatus('bd-1', 'pending')).toThrow(/Failed to unclaim bead 'bd-1'/);
+
+    warnSpy.mockRestore();
+    execSpy.mockRestore();
+  });
+
+  it('addComment does not retry a failed br comments add command', () => {
+    const execSpy = spyOn(childProcess, 'execFileSync').mockImplementation((...args: any[]) => {
+      const argList = Array.isArray(args[1]) ? args[1].map(String) : [];
+      if (argList[0] === '--version') return 'beads_rust 1.2.3' as any;
+      if (argList[0] === 'init') return 'Initialized' as any;
+      if (argList[0] === 'comments' && argList[1] === 'add') {
+        throw new Error('comment write failed');
+      }
+      return '' as any;
+    });
+
+    const gateway = new BeadGateway('/repo');
+
+    expect(() => gateway.addComment('bd-1', 'hello')).toThrow(/comment write failed/);
+    const commentCalls = execSpy.mock.calls.filter((call) => Array.isArray(call[1]) && (call[1] as string[])[0] === 'comments');
+    expect(commentCalls).toHaveLength(1);
+
+    execSpy.mockRestore();
+  });
   it('reopens a bead by setting status open', () => {
     const execSpy = spyOn(childProcess, 'execFileSync')
       .mockReturnValueOnce('beads_rust 1.2.3')
