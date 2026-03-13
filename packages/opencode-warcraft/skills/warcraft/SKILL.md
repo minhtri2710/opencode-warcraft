@@ -299,7 +299,7 @@ task({
   description: "Warcraft: 01-task-name",
   prompt: <from taskToolCall.prompt>
 })
-  → [Mekkatorque implements in worktree]
+  → [Mekkatorque implements in the assigned workspace]
 
 warcraft_worktree_commit({ task: "01-task-name", summary: "...", status: "completed" })
   → warcraft_merge({ task: "01-task-name", strategy: "squash" })

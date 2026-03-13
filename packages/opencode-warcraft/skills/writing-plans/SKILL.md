@@ -145,5 +145,5 @@ Which approach?
 - Fresh subagent per task + code review
 
 **If Parallel Session chosen:**
-- Guide them to open new session in worktree
+- Guide them to open a new execution session in the appropriate Warcraft-managed workspace
 - **REQUIRED SUB-SKILL:** New session uses warcraft_skill:executing-plans

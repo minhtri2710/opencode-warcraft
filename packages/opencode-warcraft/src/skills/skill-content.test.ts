@@ -96,4 +96,19 @@ describe('skill content', () => {
     expect(skill!.template).not.toContain('Start each task in isolated workspace via `warcraft_worktree_create`');
     expect(skill!.template).toContain('issue the returned `task()` call in the assigned workspace');
   });
+
+  it('keeps remaining workspace wording aligned in warcraft and writing-plans skills', () => {
+    const warcraftSkill = BUILTIN_SKILLS.find((entry) => entry.name === 'warcraft');
+    const writingPlansSkill = BUILTIN_SKILLS.find((entry) => entry.name === 'writing-plans');
+
+    expect(warcraftSkill).toBeDefined();
+    expect(warcraftSkill!.template).not.toContain('[Mekkatorque implements in worktree]');
+    expect(warcraftSkill!.template).toContain('[Mekkatorque implements in the assigned workspace]');
+
+    expect(writingPlansSkill).toBeDefined();
+    expect(writingPlansSkill!.template).not.toContain('Guide them to open new session in worktree');
+    expect(writingPlansSkill!.template).toContain(
+      'Guide them to open a new execution session in the appropriate Warcraft-managed workspace',
+    );
+  });
 });
