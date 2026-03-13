@@ -40,4 +40,5 @@ Systematically explore the repository, trace execution flows across related impo
 - Fixed the misleading `FeatureTools.createFeatureTool()` claim that creation automatically makes the feature active. The tool metadata now describes the real behavior.
 - Built a benchmark-only fresh-eye audit harness under `eval/` so newly discovered issues can drive the experiment metric without breaking the package test suites before the implementation exists.
 - Fixed `DoctorTools` so per-feature worktree inspection failures degrade to a `stale_worktrees` warning instead of crashing the whole diagnostic tool.
-- Added permanent package-level regression coverage for the DoctorTools degraded path plus the benchmark-only eval that originally exposed it.
+- Extended the same fail-soft approach to feature enumeration failures, which now surface as a `feature_inventory` warning instead of aborting diagnostics.
+- Added permanent package-level regression coverage for the DoctorTools degraded paths plus the benchmark-only evals that originally exposed them.

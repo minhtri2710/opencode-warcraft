@@ -16,6 +16,7 @@ bun test \
   packages/opencode-warcraft/src/services/dispatch-coordinator.test.ts \
   packages/opencode-warcraft/src/tools/dispatch-task.test.ts \
   ./eval/doctor-tool.audit.test.ts \
+  ./eval/context-tools.audit.test.ts \
   packages/opencode-warcraft/src/index.test.ts \
   >"$TMP_OUTPUT" 2>&1
 STATUS=$?

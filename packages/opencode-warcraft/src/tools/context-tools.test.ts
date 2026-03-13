@@ -199,6 +199,24 @@ describe('ContextTools', () => {
       });
     });
 
+    it('degrades gracefully when worktree inventory fails during status rendering', async () => {
+      const worktreeService = {
+        listAll: () => Promise.reject(new Error('worktree inventory unavailable')),
+        get: () => Promise.resolve(null),
+        hasUncommittedChanges: () => Promise.resolve(false),
+      } as unknown as WorktreeService;
+
+      const result = await getStatusHealth({ worktreeService });
+
+      expect(result.success).toBe(true);
+      expect(result.data.worktreeHygiene).toEqual({
+        count: 0,
+        message: 'Failed to inspect worktrees: worktree inventory unavailable',
+        worktrees: [],
+      });
+      expect(result.data.nextAction).toBe('Generate tasks from plan with warcraft_tasks_sync');
+    });
+
     it('health does not expose excluded metric keys', async () => {
       // Write events that produce non-zero values for excluded metrics
       writeEventsJsonl([

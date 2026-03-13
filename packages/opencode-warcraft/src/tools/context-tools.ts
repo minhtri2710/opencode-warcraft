@@ -215,36 +215,50 @@ export class ContextTools {
     );
     const doneTasks = tasksSummary.filter((t: { status: string }) => t.status === 'done');
 
-    const allWorktrees = await worktreeService.listAll(featureName);
-    const staleWorktrees = allWorktrees.filter((wt: StaleWorktreeInfo) => wt.isStale);
-    const staleWarning =
-      staleWorktrees.length > 0
-        ? (() => {
-            const worktreesWithAge = staleWorktrees.map((wt: StaleWorktreeInfo) => {
-              const entry: { feature: string; step: string; path: string; ageInDays?: number } = {
-                feature: wt.feature,
-                step: wt.step,
-                path: wt.path,
+    let staleWarning: {
+      count: number;
+      message: string;
+      worktrees: Array<{ feature: string; step: string; path: string; ageInDays?: number }>;
+    } | null = null;
+    try {
+      const allWorktrees = await worktreeService.listAll(featureName);
+      const staleWorktrees = allWorktrees.filter((wt: StaleWorktreeInfo) => wt.isStale);
+      staleWarning =
+        staleWorktrees.length > 0
+          ? (() => {
+              const worktreesWithAge = staleWorktrees.map((wt: StaleWorktreeInfo) => {
+                const entry: { feature: string; step: string; path: string; ageInDays?: number } = {
+                  feature: wt.feature,
+                  step: wt.step,
+                  path: wt.path,
+                };
+                if (wt.lastCommitAge != null && Number.isFinite(wt.lastCommitAge)) {
+                  entry.ageInDays = Math.floor(wt.lastCommitAge / 86_400_000);
+                }
+                return entry;
+              });
+              const ages = worktreesWithAge.map((w) => w.ageInDays).filter((a): a is number => a != null);
+              const oldestAge = ages.length > 0 ? Math.max(...ages) : null;
+              const agePart = oldestAge != null ? ` (oldest: ${oldestAge} day${oldestAge === 1 ? '' : 's'})` : '';
+              const message =
+                `${staleWorktrees.length} stale worktree(s) detected${agePart}. ` +
+                'Run warcraft_worktree_prune to review and clean up, ' +
+                'or use warcraft_merge with cleanup: true to merge and remove.';
+              return {
+                count: staleWorktrees.length,
+                message,
+                worktrees: worktreesWithAge,
               };
-              if (wt.lastCommitAge != null && Number.isFinite(wt.lastCommitAge)) {
-                entry.ageInDays = Math.floor(wt.lastCommitAge / 86_400_000);
-              }
-              return entry;
-            });
-            const ages = worktreesWithAge.map((w) => w.ageInDays).filter((a): a is number => a != null);
-            const oldestAge = ages.length > 0 ? Math.max(...ages) : null;
-            const agePart = oldestAge != null ? ` (oldest: ${oldestAge} day${oldestAge === 1 ? '' : 's'})` : '';
-            const message =
-              `${staleWorktrees.length} stale worktree(s) detected${agePart}. ` +
-              'Run warcraft_worktree_prune to review and clean up, ' +
-              'or use warcraft_merge with cleanup: true to merge and remove.';
-            return {
-              count: staleWorktrees.length,
-              message,
-              worktrees: worktreesWithAge,
-            };
-          })()
-        : null;
+            })()
+          : null;
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      staleWarning = {
+        count: 0,
+        message: `Failed to inspect worktrees: ${reason}`,
+        worktrees: [],
+      };
+    }
 
     const STALE_DISPATCH_THRESHOLD_MS = 60_000;
     const now = Date.now();
