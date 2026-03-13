@@ -34,6 +34,40 @@ describe('createResolveFeature', () => {
     expect(resolve()).toBe('context-feature');
   });
 
+  it('checks the live working directory before the configured project root', () => {
+    const cwdSpy = spyOn(process, 'cwd').mockImplementation(
+      () => '/tmp/project/docs/.worktrees/context-feature/01-task',
+    );
+    const detectCalls: string[] = [];
+    const resolve = createResolveFeature('/tmp/project', createMockFeatureService(['fallback-feature']), (cwd) => {
+      detectCalls.push(cwd);
+      if (cwd.includes('/docs/.worktrees/')) {
+        return {
+          projectRoot: '/tmp/project',
+          feature: 'context-feature',
+          task: '01-task',
+          isWorktree: true,
+          mainProjectRoot: '/tmp/project',
+        };
+      }
+      return {
+        projectRoot: cwd,
+        feature: null,
+        task: null,
+        isWorktree: false,
+        mainProjectRoot: null,
+      };
+    });
+
+    try {
+      expect(resolve()).toBe('context-feature');
+      expect(detectCalls[0]).toBe('/tmp/project/docs/.worktrees/context-feature/01-task');
+      expect(detectCalls).not.toContain('/tmp/project');
+    } finally {
+      cwdSpy.mockRestore();
+    }
+  });
+
   it('returns sole feature when only one exists and no context', () => {
     const resolve = createResolveFeature('/tmp/project', createMockFeatureService(['only-feature']), () => ({
       projectRoot: '/tmp/project',

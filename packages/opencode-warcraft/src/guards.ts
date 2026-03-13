@@ -48,16 +48,19 @@ export function hasCompletionGateEvidence(summary: string, gate: (typeof COMPLET
     .map((line) => line.trim())
     .filter(Boolean);
 
+  const gatePattern = `\\b${escapeRegExp(gate)}s?\\b`;
+  const gateSuccessPattern = new RegExp(
+    `${gatePattern}(?:[^\\n\\r]{0,40}?)\\b(?:exit(?:\\s+code)?\\s*0|pass(?:ed|es)?|success(?:ful|fully)?|succeeded|ok)\\b`,
+    'i',
+  );
+
   return lines.some((line) => {
     // Check for fail signals first - if present, reject the line
     if (COMPLETION_FAIL_SIGNAL.test(line)) {
       return false;
     }
 
-    // Check for pass signals and gate name with word boundaries
-    // Allow optional trailing 's' for plural forms (test -> tests, build -> builds)
-    const gatePattern = new RegExp(`\\b${escapeRegExp(gate)}s?\\b`, 'i');
-    return gatePattern.test(line) && COMPLETION_PASS_SIGNAL.test(line);
+    return gateSuccessPattern.test(line);
   });
 }
 

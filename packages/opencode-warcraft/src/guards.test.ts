@@ -185,6 +185,10 @@ describe('guards.ts test suite', () => {
         expect(hasCompletionGateEvidence('BUILD passed', 'build')).toBe(true);
         expect(hasCompletionGateEvidence('Build PASSED', 'build')).toBe(true);
       });
+
+      it('does not treat another gate passing on the same line as build evidence', () => {
+        expect(hasCompletionGateEvidence('test passed; build pending', 'build')).toBe(false);
+      });
     });
 
     describe('test gate', () => {
@@ -235,6 +239,10 @@ describe('guards.ts test suite', () => {
       it('should handle case-insensitive gate name matching', () => {
         expect(hasCompletionGateEvidence('TESTS passed', 'test')).toBe(true);
         expect(hasCompletionGateEvidence('Tests PASSED', 'test')).toBe(true);
+      });
+
+      it('does not treat future-tense expectations as completed test evidence', () => {
+        expect(hasCompletionGateEvidence('Tests should succeed after the API fix', 'test')).toBe(false);
       });
     });
 

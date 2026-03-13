@@ -39,9 +39,15 @@ export function createResolveFeature(
       return explicit;
     }
 
-    const context = detectContextFn(directory);
-    if (context.feature) {
-      return context.feature;
+    const contextCandidates = [process.cwd(), directory].filter(
+      (candidate, index, all) => all.indexOf(candidate) === index,
+    );
+
+    for (const candidate of contextCandidates) {
+      const context = detectContextFn(candidate);
+      if (context.feature) {
+        return context.feature;
+      }
     }
 
     const features = listFeaturesSafe();

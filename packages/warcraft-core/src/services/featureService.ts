@@ -67,7 +67,22 @@ export class FeatureService {
     const feature = this.get(name);
     if (!feature) throw new Error(`Feature '${name}' not found`);
 
-    const updated = this.buildUpdatedFeature(feature, status);
+    const wasCompleted = feature.status === 'completed';
+    const willBeCompleted = status === 'completed';
+    const updated = this.buildUpdatedFeature(feature, status, {
+      clearCompletedAt: wasCompleted && !willBeCompleted,
+    });
+
+    if (willBeCompleted && !wasCompleted) {
+      this.store.complete(updated);
+      return updated;
+    }
+
+    if (wasCompleted && !willBeCompleted) {
+      this.store.reopen(updated);
+      return updated;
+    }
+
     this.store.save(updated);
     return updated;
   }

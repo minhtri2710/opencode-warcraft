@@ -780,6 +780,71 @@ describe('FeatureService store ownership', () => {
     expect(updated.approvedAt).toBeDefined();
   });
 
+  it('uses store.complete when updateStatus marks a feature completed', () => {
+    const sharedFeature: FeatureJson = {
+      name: 'shared-feature',
+      epicBeadId: 'bd-epic-1',
+      status: 'executing',
+      createdAt: '2024-01-01T00:00:00.000Z',
+      approvedAt: '2024-01-01T01:00:00.000Z',
+    };
+    let completedFeature: FeatureJson | null = null;
+    let savedFeature: FeatureJson | null = null;
+
+    const service = new FeatureService(
+      testRoot,
+      createFeatureStoreStub(sharedFeature, {
+        save: (feature: FeatureJson) => {
+          savedFeature = feature;
+        },
+        complete: (feature: FeatureJson) => {
+          completedFeature = feature;
+        },
+      }),
+      'on',
+    );
+
+    const updated = service.updateStatus('shared-feature', 'completed');
+
+    expect(updated.status).toBe('completed');
+    expect(updated.completedAt).toBeDefined();
+    expect(completedFeature).toBe(updated);
+    expect(savedFeature).toBeNull();
+  });
+
+  it('uses store.reopen and clears completedAt when updateStatus leaves completed', () => {
+    const sharedFeature: FeatureJson = {
+      name: 'shared-feature',
+      epicBeadId: 'bd-epic-1',
+      status: 'completed',
+      createdAt: '2024-01-01T00:00:00.000Z',
+      approvedAt: '2024-01-01T01:00:00.000Z',
+      completedAt: '2024-01-01T02:00:00.000Z',
+    };
+    let reopenedFeature: FeatureJson | null = null;
+    let savedFeature: FeatureJson | null = null;
+
+    const service = new FeatureService(
+      testRoot,
+      createFeatureStoreStub(sharedFeature, {
+        save: (feature: FeatureJson) => {
+          savedFeature = feature;
+        },
+        reopen: (feature: FeatureJson) => {
+          reopenedFeature = feature;
+        },
+      }),
+      'on',
+    );
+
+    const updated = service.updateStatus('shared-feature', 'approved');
+
+    expect(updated.status).toBe('approved');
+    expect(updated.completedAt).toBeUndefined();
+    expect(reopenedFeature).toBe(updated);
+    expect(savedFeature).toBeNull();
+  });
+
   it('does not mutate the shared feature object when setSession save fails', () => {
     const sharedFeature: FeatureJson = {
       name: 'shared-feature',
