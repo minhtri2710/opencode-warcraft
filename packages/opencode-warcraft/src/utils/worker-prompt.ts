@@ -168,7 +168,7 @@ ${verificationModel === 'tdd' ? '4. The minimal change needed to reach green is 
 If you hit a blocker requiring human decision, **DO NOT** use the question tool directly.
 Instead, escalate via the blocker protocol:
 
-1. **Save your progress** to the worktree (commit if appropriate)
+1. **Save your progress** to the workspace (commit if appropriate)
 2. **Call warcraft_worktree_commit** with blocker info:
 
 \`\`\`
