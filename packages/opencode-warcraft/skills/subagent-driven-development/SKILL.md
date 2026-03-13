@@ -13,7 +13,7 @@ Execute plan by dispatching fresh subagent per task, with two-stage review after
 
 Use Warcraft workflow tools for task lifecycle operations:
 - Check runnable tasks with `warcraft_status`
-- Start each task in isolated workspace via `warcraft_worktree_create`
+- Start each task via `warcraft_worktree_create`, then issue the returned `task()` call in the assigned workspace
 - Preserve completed work with `warcraft_worktree_commit`
 - Finish via `finishing-a-development-branch` (which uses `warcraft_merge` / `warcraft_worktree_discard`)
 - Do not replace these lifecycle steps with raw git commands

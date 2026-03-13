@@ -79,4 +79,21 @@ describe('skill content', () => {
     expect(skill!.template).toContain('Executes tasks in assigned workspace');
     expect(skill!.template).toContain('Issue the newly returned `task()` call to relaunch the worker');
   });
+
+  it('keeps dispatching-parallel-agents aligned with returned task() payload semantics', () => {
+    const skill = BUILTIN_SKILLS.find((entry) => entry.name === 'dispatching-parallel-agents');
+
+    expect(skill).toBeDefined();
+    expect(skill!.template).not.toContain('isolated worktrees');
+    expect(skill!.template).toContain('returns a task() payload');
+    expect(skill!.template).toContain('Issue all returned task() calls in the same assistant message');
+  });
+
+  it('keeps subagent-driven-development aligned with assigned workspace semantics', () => {
+    const skill = BUILTIN_SKILLS.find((entry) => entry.name === 'subagent-driven-development');
+
+    expect(skill).toBeDefined();
+    expect(skill!.template).not.toContain('Start each task in isolated workspace via `warcraft_worktree_create`');
+    expect(skill!.template).toContain('issue the returned `task()` call in the assigned workspace');
+  });
 });

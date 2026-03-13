@@ -81,7 +81,8 @@ Each agent gets:
 warcraft_worktree_create({ task: "01-fix-abort-tests" })
 warcraft_worktree_create({ task: "02-fix-batch-tests" })
 warcraft_worktree_create({ task: "03-fix-race-condition-tests" })
-// All three run concurrently in isolated worktrees
+// Each call prepares its assigned workspace and returns a task() payload.
+// Issue all returned task() calls in the same assistant message for true parallelism.
 ```
 
 Parallelize by issuing multiple task() calls in the same assistant message.
