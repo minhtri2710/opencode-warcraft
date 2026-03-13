@@ -21,6 +21,8 @@ bun test \
   ./eval/worktree-delegation.audit.test.ts \
   ./eval/worktree-tool-description.audit.test.ts \
   ./eval/agent-worktree-delegation.audit.test.ts \
+  ./eval/blocked-resume-delegation.audit.test.ts \
+  ./eval/blocker-protocol.audit.test.ts \
   packages/opencode-warcraft/src/index.test.ts \
   >"$TMP_OUTPUT" 2>&1
 STATUS=$?
