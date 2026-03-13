@@ -18,7 +18,7 @@ function extractSystemPrompt(source: string): string {
 
 describe('Worktree delegation audit', () => {
   it('documents warcraft_worktree_create as returning a task() payload instead of auto-spawning a worker', () => {
-    const systemPrompt = extractSystemPrompt(indexSource);
+    const systemPrompt = extractSystemPrompt(indexSource).replaceAll('\\`', '`');
 
     expect(systemPrompt).toContain('returns the `task()` payload needed to launch the worker');
     expect(systemPrompt).toContain('Issue the returned `task()` call');

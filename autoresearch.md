@@ -45,3 +45,4 @@ Systematically explore the repository, trace execution flows across related impo
 - Fixed `ContextTools` so `warcraft_status` degrades gracefully when worktree inventory fails, surfacing a `worktreeHygiene` warning instead of crashing status rendering.
 - Extended the same fail-soft behavior to per-task worktree lookup while rendering task workspace summaries; failed lookups now yield `workspace: null` instead of aborting the whole status payload.
 - Added package and benchmark-only regression coverage for the ContextTools degraded worktree-inventory and per-task worktree-lookup paths.
+- Expanded the audit workload to cover the runtime system prompt's worktree delegation contract, exposing that `index.ts` still claimed `warcraft_worktree_create` auto-spawned workers even though the tool returns a `task()` payload that must be issued explicitly.
