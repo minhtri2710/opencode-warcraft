@@ -131,7 +131,7 @@ function toCoordinatorDeps(services: DispatchOneTaskServices): DispatchCoordinat
 
 /**
  * Dispatch a single task with invariant guard checks and per-task concurrency lock.
- * This is the unified entry point used by both single-task (worktree) and batch dispatch.
+ * This is the unified entry point used by both single-task (workspace) and batch dispatch.
  *
  * Delegates to {@link DispatchCoordinator} which fixes the premature state mutation
  * bug by transitioning to `in_progress` only after prompt/spec preparation succeeds.

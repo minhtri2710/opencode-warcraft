@@ -42,6 +42,7 @@ bun test \
   ./eval/worker-prompt-blocker.audit.test.ts \
   ./eval/batch-jsdoc-workspace.audit.test.ts \
   ./eval/worker-prompt-jsdoc.audit.test.ts \
+  ./eval/dispatch-coordinator-jsdoc.audit.test.ts \
   packages/opencode-warcraft/src/index.test.ts \
   >"$TMP_OUTPUT" 2>&1
 STATUS=$?

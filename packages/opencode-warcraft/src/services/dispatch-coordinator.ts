@@ -170,7 +170,7 @@ async function acquireDispatchLock(
 
 /**
  * Single dispatch path that performs:
- * 1. Lock/acquire → 2. Validate → 3. Create/reuse worktree →
+ * 1. Lock/acquire → 2. Validate → 3. Prepare workspace →
  * 4. Build prompt/spec → 5. Transition to `in_progress` ONLY AFTER prep succeeds →
  * 6. Emit dispatch result metadata.
  *
@@ -182,7 +182,7 @@ export class DispatchCoordinator {
 
   /**
    * Dispatch a single task. This is the unified entry point used by both
-   * single-task (worktree) and batch dispatch.
+   * single-task (workspace) and batch dispatch.
    *
    * @param request - Task dispatch request
    * @param shared - Optional pre-fetched data (batch optimization)
