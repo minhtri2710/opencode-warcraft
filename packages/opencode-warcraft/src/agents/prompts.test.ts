@@ -692,6 +692,13 @@ describe('prompt snapshot invariants (lifecycle gates)', () => {
       expect(SAURFANG_PROMPT).not.toContain('Creates worktree + Mekkatorque');
     });
 
+    it('shared blocker protocol tells orchestrators to issue the returned task() call on resume', () => {
+      expect(KHADGAR_PROMPT).toContain('continueFrom: "blocked", decision');
+      expect(KHADGAR_PROMPT).toMatch(/Issue the returned\s+`?task\(\)`? call/);
+      expect(SAURFANG_PROMPT).toContain('continueFrom: "blocked", decision');
+      expect(SAURFANG_PROMPT).toMatch(/Issue the returned\s+`?task\(\)`? call/);
+    });
+
     it('Mekkatorque must NOT delegate (worker isolation)', () => {
       expect(MEKKATORQUE_PROMPT).toContain('NEVER delegate');
     });
