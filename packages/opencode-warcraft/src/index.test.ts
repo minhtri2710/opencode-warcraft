@@ -107,6 +107,17 @@ describe('Warcraft Plugin Tool Registration', () => {
     expect(pluginConfigSource).toContain('launches returned task() payloads');
   });
 
+  it('should keep Mekkatorque metadata aligned with direct-mode support', () => {
+    expect(warcraftAgents.mekkatorque.description.toLowerCase()).not.toContain('isolated worktrees');
+    expect(warcraftAgents.mekkatorque.description).toContain('assigned workspace');
+
+    const pluginConfigPath = path.resolve(import.meta.dir, 'plugin-config.ts');
+    const pluginConfigSource = readFileSync(pluginConfigPath, 'utf-8').toLowerCase();
+
+    expect(pluginConfigSource).not.toContain('executes tasks directly in isolated worktrees');
+    expect(pluginConfigSource).toContain('assigned workspace (worktree or direct mode)');
+  });
+
   it('should have context write tool with correct description', () => {
     const tool = pluginInstance.tool.warcraft_context_write;
     expect(tool.description).toContain('context file');

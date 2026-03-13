@@ -211,7 +211,8 @@ export async function applyWarcraftConfig(
         {
           name: 'mekkatorque',
           prompt: mekkatorquePrompt,
-          description: 'Mekkatorque (Worker/Coder) - Executes tasks directly in isolated worktrees. Never delegates.',
+          description:
+            'Mekkatorque (Worker/Coder) - Executes tasks directly in the assigned workspace (worktree or direct mode). Never delegates.',
           temperature: 0.3,
           mode: 'subagent',
           permission: { task: 'deny', delegate: 'deny', skill: 'allow' },

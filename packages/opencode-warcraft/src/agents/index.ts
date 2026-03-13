@@ -53,7 +53,7 @@ export const warcraftAgents = {
   },
   mekkatorque: {
     name: 'Mekkatorque (Worker/Coder)',
-    description: 'Executes tasks directly in isolated worktrees. Never delegates.',
+    description: 'Executes tasks directly in the assigned workspace (worktree or direct mode). Never delegates.',
     mode: 'subagent' as const,
   },
   algalon: {
