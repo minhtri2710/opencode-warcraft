@@ -87,7 +87,9 @@ describe('Warcraft Plugin Tool Registration', () => {
 
     expect(joined).toContain('returns the `task()` payload needed to launch the worker');
     expect(joined).toContain('Issue the returned `task()` call');
+    expect(joined).toContain('warcraft_worktree_create(task)` → issue returned `task()` call');
     expect(joined).not.toContain('creates worktree and spawns worker automatically');
+    expect(joined).not.toContain('warcraft_worktree_create(task)` → work in worktree → `warcraft_worktree_commit');
   });
 
   it('should have context write tool with correct description', () => {

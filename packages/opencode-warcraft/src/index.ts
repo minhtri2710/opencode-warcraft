@@ -42,7 +42,7 @@ Plan-first development: Write plan → User reviews → Approve → Execute task
 3. User adds comments in \`plan.md\` → \`warcraft_plan_read\` to see them
 4. Revise plan → User approves
 5. \`warcraft_tasks_sync()\` - Generate tasks from plan
-6. \`warcraft_worktree_create(task)\` → work in worktree → \`warcraft_worktree_commit(task, summary)\`
+6. \`warcraft_worktree_create(task)\` → issue returned \`task()\` call → \`warcraft_worktree_commit(task, summary)\`
 7. \`warcraft_merge(task)\` - Merge task branch into main (when ready)
 
 **Important:** \`warcraft_worktree_commit\` commits changes to task branch but does NOT merge.
