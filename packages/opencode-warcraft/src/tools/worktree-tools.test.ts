@@ -826,6 +826,20 @@ describe('mergeTaskTool verification defaults', () => {
   });
 });
 
+describe('mergeTaskTool verify arg handling', () => {
+  const resolveFeature = () => 'test-feature';
+
+  it('keeps verify optional so the runtime can fall back to verificationModel defaults', () => {
+    const deps = createMergeDeps({ verificationModel: 'tdd' });
+    const tools = new WorktreeTools(deps);
+    const mergeTool = tools.mergeTaskTool(resolveFeature);
+
+    expect(mergeTool.args.verify.parse(undefined)).toBeUndefined();
+    expect(mergeTool.args.verify.parse(true)).toBe(true);
+    expect(mergeTool.args.verify.parse(false)).toBe(false);
+  });
+});
+
 describe('mergeTaskTool verification uses projectDir not process.cwd()', () => {
   const resolveFeature = () => 'test-feature';
 

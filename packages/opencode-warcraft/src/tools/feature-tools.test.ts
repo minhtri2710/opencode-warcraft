@@ -101,6 +101,34 @@ describe('FeatureTools', () => {
       expect(result).toContain('test-feature');
     });
 
+    it('uses the canonical feature name returned by the service in the success message', async () => {
+      const canonicalFeatureService = {
+        create: () =>
+          ok({
+            name: 'canonical-feature',
+            epicBeadId: 'epic-1',
+            status: 'planning' as const,
+            createdAt: new Date().toISOString(),
+          }),
+      } as unknown as FeatureService;
+      const tool = new FeatureTools({ featureService: canonicalFeatureService }).createFeatureTool();
+
+      const result = await tool.execute({
+        name: 'User Provided Name',
+        ticket: undefined,
+        priority: undefined,
+      });
+
+      expect(result).toContain('canonical-feature');
+      expect(result).not.toContain('User Provided Name');
+    });
+
+    it('does not claim the new feature becomes active automatically', () => {
+      const tool = featureTools.createFeatureTool();
+
+      expect(tool.description.toLowerCase()).not.toContain('set it as active');
+    });
+
     it('validates priority is within range 1-5', async () => {
       const tool = featureTools.createFeatureTool();
 

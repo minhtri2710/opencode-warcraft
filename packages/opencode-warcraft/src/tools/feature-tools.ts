@@ -39,7 +39,7 @@ export class FeatureTools {
         const feature = outcome.value;
         const epicBeadId = (feature as { epicBeadId?: string }).epicBeadId;
         return toolSuccess({
-          message: `Feature "${name}" created (epic: ${epicBeadId || 'unknown'}).
+          message: `Feature "${feature.name}" created (epic: ${epicBeadId || 'unknown'}).
 
 ## Discovery Phase Required
 

@@ -701,8 +701,7 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
         verify: tool.schema
           .boolean()
           .optional()
-          .default(false)
-          .describe('Run build+test after merge to verify integration'),
+          .describe('Run build+test after merge to verify integration (defaults to enabled in TDD mode)'),
         cleanup: tool.schema
           .boolean()
           .optional()

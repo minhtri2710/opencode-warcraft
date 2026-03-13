@@ -1,0 +1,40 @@
+# Autoresearch: Fresh-eyes bug hunt across opencode-warcraft
+
+## Objective
+Systematically explore the repository, trace execution flows across related imports/callers, and convert user-facing or workflow-affecting issues into regression tests and fixes. The focus is correctness and behavior fidelity, not benchmark gaming. The current audit workload targets fresh-eye bugs in the tool/workflow layer that have a high chance of misleading agents or causing incorrect orchestration behavior.
+
+## Metrics
+- **Primary**: audit_failures (count, lower is better)
+- **Secondary**: audit_runtime_ms, lint_pass, full_test_pass
+
+## How to Run
+`./autoresearch.sh` — runs the current fresh-eye audit suite and outputs `METRIC audit_failures=<n>` and `METRIC audit_runtime_ms=<n>`.
+
+## Files in Scope
+- `packages/opencode-warcraft/src/tools/feature-tools.ts` — feature creation/completion tool surfaces and user-facing messaging
+- `packages/opencode-warcraft/src/tools/worktree-tools.ts` — merge/commit/discard behavior and verification flow
+- `packages/opencode-warcraft/src/services/dispatch-coordinator.ts` — single-task dispatch orchestration and lifecycle guarantees
+- `packages/opencode-warcraft/src/tools/dispatch-task.ts` — compatibility wrapper around unified dispatch
+- `packages/opencode-warcraft/src/tools/batch-tools.ts` — parallel dispatch orchestration
+- `packages/opencode-warcraft/src/index.ts` — plugin wiring and tool registration
+- `packages/opencode-warcraft/src/**/*.test.ts` — regression coverage for discovered issues
+- `autoresearch.sh` / `autoresearch.checks.sh` / `autoresearch.md` — autoresearch harness and notes
+
+## Off Limits
+- Public API redesigns unrelated to discovered bugs
+- Artificially weakening tests/checks to improve the metric
+- Benchmark-specific hacks that do not improve real behavior
+- Dependency changes unless absolutely required for a correctness fix
+
+## Constraints
+- Follow `AGENTS.md` code style and architecture rules
+- Keep local ESM imports with `.js` extensions
+- Use `bun:test` for regression coverage
+- `bun run lint` and `bun run test` must pass before keeping a result
+- Do not cheat on the benchmark; each improvement should reflect a real bug fix or stronger regression coverage
+
+## What's Been Tried
+- Fixed `warcraft_merge` verify-argument behavior so omitted `verify` correctly falls back to the verification model instead of being forced to `false` by the schema layer.
+- Fixed `warcraft_feature_create` success messaging so it uses the canonical feature name returned by the service instead of the raw user input.
+- Added regression coverage for both fixes.
+- New audit target discovered: `FeatureTools.createFeatureTool()` still claims it "set[s] it as active", but feature creation does not actually establish active selection. This is a user-facing behavior mismatch worth fixing without changing broader feature-resolution semantics.
