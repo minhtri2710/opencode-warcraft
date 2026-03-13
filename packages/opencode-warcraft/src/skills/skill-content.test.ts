@@ -61,4 +61,22 @@ describe('skill content', () => {
     expect(skill!.template).toContain('Reference: SPEC_REVIEWER_PROMPT');
     expect(skill!.template).toContain('Reference: CODE_QUALITY_REVIEWER_PROMPT');
   });
+
+  it('keeps workspace guidance aligned with direct-mode support in using-git-worktrees', () => {
+    const skill = BUILTIN_SKILLS.find((entry) => entry.name === 'using-git-worktrees');
+
+    expect(skill).toBeDefined();
+    expect(skill!.template).not.toContain('Create isolated worktree');
+    expect(skill!.template).toContain('Prepare the task workspace');
+    expect(skill!.template).toContain('Issue the returned `task()` call');
+  });
+
+  it('keeps warcraft skill workspace guidance aligned with returned-task orchestration', () => {
+    const skill = BUILTIN_SKILLS.find((entry) => entry.name === 'warcraft');
+
+    expect(skill).toBeDefined();
+    expect(skill!.template).not.toContain('Executes tasks in worktrees');
+    expect(skill!.template).toContain('Executes tasks in assigned workspace');
+    expect(skill!.template).toContain('Issue the newly returned `task()` call to relaunch the worker');
+  });
 });

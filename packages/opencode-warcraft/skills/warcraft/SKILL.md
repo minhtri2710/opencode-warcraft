@@ -1,6 +1,6 @@
 ---
 name: warcraft
-description: Plan-first AI development with isolated git worktrees and human review. Use for any feature development.
+description: Plan-first AI development with Warcraft-managed task workspaces and human review. Use for any feature development.
 ---
 
 # Warcraft Workflow
@@ -24,7 +24,7 @@ Khadgar (Hybrid) — plans AND orchestrates
 | -------------- | -------- | ---------------------------------- |
 | `@khadgar`     | Primary  | Discovery + planning + orchestration |
 | `@brann`       | Subagent | Exploration/research/retrieval     |
-| `@mekkatorque` | Subagent | Executes tasks in worktrees        |
+| `@mekkatorque` | Subagent | Executes tasks in assigned workspace |
 | `@algalon`     | Subagent | Plan/code quality review           |
 
 ### Dedicated Mode
@@ -41,7 +41,7 @@ Mimiron (Planner) → Saurfang (Orchestrator)
 | `@mimiron`     | Primary  | Discovery + planning (never executes) |
 | `@saurfang`    | Primary  | Orchestration (delegates, verifies, merges) |
 | `@brann`       | Subagent | Exploration/research/retrieval     |
-| `@mekkatorque` | Subagent | Executes tasks in worktrees        |
+| `@mekkatorque` | Subagent | Executes tasks in assigned workspace |
 | `@algalon`     | Subagent | Plan/code quality review           |
 
 ---
@@ -350,6 +350,7 @@ When worker returns `status: 'blocked'`:
 1. `warcraft_status()` - get details
 2. Ask user via question tool
 3. Resume: `warcraft_worktree_create({ task, continueFrom: "blocked", decision: "..." })`
+4. Issue the newly returned `task()` call to relaunch the worker
 
 ### Plan Gap Detected
 

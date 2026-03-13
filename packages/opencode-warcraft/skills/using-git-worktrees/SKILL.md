@@ -1,6 +1,6 @@
 ---
 name: using-git-worktrees
-description: Use when starting implementation work that requires isolation from the current branch and reproducible task execution.
+description: Use when starting implementation work that requires Warcraft-managed task workspaces and reproducible task execution.
 ---
 
 # Using Git Worktrees
@@ -18,8 +18,8 @@ Primary interfaces:
 ## Standard Flow
 
 1. Confirm task is runnable (`warcraft_status`)
-2. Create isolated worktree (`warcraft_worktree_create`)
-3. Implement and verify inside that worktree
+2. Prepare the task workspace (`warcraft_worktree_create`)
+3. Issue the returned `task()` call and implement in the assigned workspace
 4. Commit/report (`warcraft_worktree_commit`)
 5. Merge or discard based on outcome
 
@@ -30,7 +30,8 @@ Warcraft tools keep task state, reports, and branch/worktree metadata in sync. M
 ## Red Flags
 
 Never:
-- Start task work without a worktree
+- Start task work without a Warcraft-managed workspace
+- Skip the returned `task()` call after `warcraft_worktree_create`
 - Bypass Warcraft task status updates
 - Merge/discard without reflecting result in Warcraft flow
 
