@@ -440,5 +440,24 @@ describe('DoctorTools', () => {
       expect(result.success).toBe(true);
       expect(result.data.checks.every((c) => c.status === 'ok')).toBe(true);
     });
+
+    it('degrades gracefully when worktree inspection fails for a feature', async () => {
+      const result = await runDoctor({
+        worktreeService: {
+          listAll: () => Promise.reject(new Error('worktree index unavailable')),
+        },
+      });
+
+      expect(result.success).toBe(true);
+      const check = result.data.checks.find((c) => c.name === 'stale_worktrees');
+      expect(check).toBeDefined();
+      expect(check!.status).toBe('warning');
+      expect(check!.message).toContain('Failed to inspect worktrees');
+      expect(check!.details).toEqual({
+        staleWorktrees: [],
+        inspectionFailures: [{ feature: 'test-feature', error: 'worktree index unavailable' }],
+      });
+      expect(result.data.summary).toContain('1 issue');
+    });
   });
 });

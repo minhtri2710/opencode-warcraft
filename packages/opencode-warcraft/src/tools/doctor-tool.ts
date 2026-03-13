@@ -86,6 +86,10 @@ export class DoctorTools {
           path: string;
           ageInDays: number | null;
         }> = [];
+        const worktreeInspectionFailures: Array<{
+          feature: string;
+          error: string;
+        }> = [];
         const orphanedBranches: Array<{
           feature: string;
           step: string;
@@ -173,31 +177,39 @@ export class DoctorTools {
           }
 
           // Check worktrees
-          const worktrees = await worktreeService.listAll(featureName);
-          for (const wt of worktrees as StaleWorktreeInfo[]) {
-            // Stale worktrees (exist but no associated active task)
-            if (wt.isStale) {
-              allStaleWorktrees.push({
-                feature: wt.feature,
-                step: wt.step,
-                path: wt.path,
-                ageInDays:
-                  wt.lastCommitAge != null && Number.isFinite(wt.lastCommitAge)
-                    ? Math.floor(wt.lastCommitAge / 86_400_000)
-                    : null,
-              });
-            }
+          try {
+            const worktrees = await worktreeService.listAll(featureName);
+            for (const wt of worktrees as StaleWorktreeInfo[]) {
+              // Stale worktrees (exist but no associated active task)
+              if (wt.isStale) {
+                allStaleWorktrees.push({
+                  feature: wt.feature,
+                  step: wt.step,
+                  path: wt.path,
+                  ageInDays:
+                    wt.lastCommitAge != null && Number.isFinite(wt.lastCommitAge)
+                      ? Math.floor(wt.lastCommitAge / 86_400_000)
+                      : null,
+                });
+              }
 
-            // Orphaned branches: worktree exists but task is done/cancelled
-            const taskStatus = taskStatusMap.get(wt.step);
-            if (taskStatus === 'done' || taskStatus === 'cancelled') {
-              orphanedBranches.push({
-                feature: wt.feature,
-                step: wt.step,
-                path: wt.path,
-                taskStatus,
-              });
+              // Orphaned branches: worktree exists but task is done/cancelled
+              const taskStatus = taskStatusMap.get(wt.step);
+              if (taskStatus === 'done' || taskStatus === 'cancelled') {
+                orphanedBranches.push({
+                  feature: wt.feature,
+                  step: wt.step,
+                  path: wt.path,
+                  taskStatus,
+                });
+              }
             }
+          } catch (error) {
+            const reason = error instanceof Error ? error.message : String(error);
+            worktreeInspectionFailures.push({
+              feature: featureName,
+              error: reason,
+            });
           }
         }
 
@@ -263,12 +275,18 @@ export class DoctorTools {
         );
 
         checks.push(
-          allStaleWorktrees.length > 0
+          allStaleWorktrees.length > 0 || worktreeInspectionFailures.length > 0
             ? {
                 name: 'stale_worktrees',
                 status: 'warning',
-                message: `${allStaleWorktrees.length} stale worktree(s) found with no associated active task.`,
-                details: allStaleWorktrees,
+                message:
+                  worktreeInspectionFailures.length > 0
+                    ? `Failed to inspect worktrees for ${worktreeInspectionFailures.length} feature(s).`
+                    : `${allStaleWorktrees.length} stale worktree(s) found with no associated active task.`,
+                details:
+                  worktreeInspectionFailures.length > 0
+                    ? { staleWorktrees: allStaleWorktrees, inspectionFailures: worktreeInspectionFailures }
+                    : allStaleWorktrees,
               }
             : {
                 name: 'stale_worktrees',
