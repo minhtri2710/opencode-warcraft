@@ -682,7 +682,7 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
   }
 
   /**
-   * Merge completed task branch into current branch (explicit integration)
+   * Integrate completed task work into current branch (explicit merge or direct-mode status check)
    */
   mergeTaskTool(resolveFeature: (name?: string) => string | null): ToolDefinition {
     // Capture deps in closure to avoid 'this' binding issues
@@ -690,7 +690,7 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
     const execAsync = injectedExecAsync ?? defaultExecAsync;
     const projectDir = this.deps.projectDir ?? process.cwd();
     return tool({
-      description: 'Merge completed task branch into current branch (explicit integration)',
+      description: 'Integrate completed task work into current branch (explicit merge or direct-mode status check)',
       args: {
         task: tool.schema.string().describe('Task folder name to merge'),
         strategy: tool.schema
