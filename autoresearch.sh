@@ -45,6 +45,7 @@ bun test \
   ./eval/dispatch-coordinator-jsdoc.audit.test.ts \
   ./eval/worktree-commit-description.audit.test.ts \
   ./eval/merge-tool-description.audit.test.ts \
+  ./eval/agents-jsdoc-isolation.audit.test.ts \
   packages/opencode-warcraft/src/index.test.ts \
   >"$TMP_OUTPUT" 2>&1
 STATUS=$?

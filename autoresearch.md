@@ -57,3 +57,13 @@ Systematically explore the repository, trace execution flows across related impo
 - Expanded the audit workload once more to the last remaining skill wording drift and found `warcraft` still described `warcraft_worktree_create` as creating the worktree in one section and as "Create worktree + delegation instructions" in its tool table, while `subagent-driven-development` still told users to set up an isolated workspace before starting. Those phrases also need to reflect Warcraft-managed assigned workspaces rather than unconditional worktrees.
 - Expanded the audit workload to `warcraft_status` next-action messaging and found a stale orchestration contract there too: when exactly one task is runnable, ContextTools still told users only to call `warcraft_worktree_create` and omitted the required step to issue the returned `task()` call.
 - Expanded the same `warcraft_status` audit to the multi-runnable path and found that ContextTools still told users only that tasks were ready to start in parallel, without directing them to `warcraft_batch_execute` preview/execute or to issue all returned `task()` calls in the same assistant message.
+- Fixed three stale delegation contracts in TaskTools: createTaskTool success message no longer says 'to use its worktree', updateTaskTool reopen-rejection now mentions the returned task() call.
+- Fixed two stale contracts in WorktreeTools: blocked-task message and missing-baseCommit error now mention the returned task() call.
+- Fixed the stale formatBlockedResponse in worktree-response.ts to mention the returned task() call.
+- Fixed two residual Mekkatorque worktree-only claims in the exported agent description and agents/index.ts JSDoc.
+- Fixed the Mekkatorque Docker Sandbox prompt: 'workspace is mounted' instead of 'worktree is mounted'.
+- Fixed the batch-tools preview nextAction to mention issuing returned task() calls after execute.
+- Fixed the index.ts blocked-resume CRITICAL note: 'SAME workspace' instead of 'SAME worktree'.
+- Fixed the worker prompt blocker protocol: 'Save your progress to the workspace' instead of 'to the worktree'.
+- Fixed stale JSDoc in batch-tools, worker-prompt, dispatch-coordinator, and dispatch-task: all now use 'workspace' terminology instead of 'worktree' unconditionally.
+- Fixed warcraft_worktree_commit and warcraft_merge tool descriptions and JSDoc to not claim branch-specific operations unconditionally.

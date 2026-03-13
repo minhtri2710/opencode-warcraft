@@ -6,7 +6,7 @@
  * - Mimiron (Planner): Plans features, interviews, writes plans
  * - Saurfang (Orchestrator): Delegates, launches returned task() payloads, verifies, merges
  * - Brann (Research/Collector): Explores codebase and external docs
- * - Mekkatorque (Worker/Coder): Executes tasks in isolation
+ * - Mekkatorque (Worker/Coder): Executes tasks in assigned workspace
  * - Algalon (Consultant/Reviewer): Reviews plan quality
  */
 
