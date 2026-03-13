@@ -15,13 +15,13 @@ export class FeatureTools {
   constructor(private readonly deps: FeatureToolsDependencies) {}
 
   /**
-   * Create a new feature and set it as active
+   * Create a new feature
    */
   createFeatureTool(): ToolDefinition {
     // Capture deps in closure to avoid 'this' binding issues
     const { featureService } = this.deps;
     return tool({
-      description: 'Create a new feature and set it as active',
+      description: 'Create a new feature',
       args: {
         name: tool.schema.string().describe('Feature name'),
         ticket: tool.schema.string().optional().describe('Ticket reference'),
