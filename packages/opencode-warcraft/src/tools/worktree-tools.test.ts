@@ -1695,3 +1695,28 @@ describe('formatSpecContent', () => {
     expect(result).not.toContain('**'); // No bold formatting since task not found
   });
 });
+
+// ============================================================================
+// Delegation contract regression: user-facing messages must include the full
+// warcraft_worktree_create → task() call contract.
+// ============================================================================
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+describe('WorktreeTools delegation messaging', () => {
+  const source = readFileSync(join(import.meta.dir, 'worktree-tools.ts'), 'utf-8');
+
+  it('blocked-task message mentions the returned task() call after resume', () => {
+    const idx = source.indexOf('Task blocked. Warcraft Master');
+    expect(idx).toBeGreaterThan(-1);
+    const blockedMsg = source.slice(idx, idx + 300);
+    expect(blockedMsg).toMatch(/task\(\)/);
+  });
+
+  it('missing baseCommit error mentions the returned task() call after recreation', () => {
+    const idx = source.indexOf('is missing baseCommit');
+    expect(idx).toBeGreaterThan(-1);
+    const msg = source.slice(idx, idx + 300);
+    expect(msg).toMatch(/task\(\)/);
+  });
+});

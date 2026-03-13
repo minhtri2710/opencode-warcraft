@@ -430,7 +430,7 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
             message:
               workspaceMode === 'direct'
                 ? 'Task blocked in direct mode. Warcraft Master will ask user and resume against the project root workspace.'
-                : 'Task blocked. Warcraft Master will ask user and resume with warcraft_worktree_create(continueFrom: "blocked", decision: answer)',
+                : 'Task blocked. Warcraft Master will ask user and resume with warcraft_worktree_create(continueFrom: "blocked", decision: answer), then issue the returned task() call',
           });
         }
 
@@ -453,7 +453,7 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
               : null;
           if (!baseCommit) {
             return toolError(
-              `Task "${task}" is missing baseCommit. Recreate the worktree with warcraft_worktree_create before completing.`,
+              `Task "${task}" is missing baseCommit. Recreate the workspace with warcraft_worktree_create and issue the returned task() call before completing.`,
             );
           }
 
