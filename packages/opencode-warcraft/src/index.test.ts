@@ -4,6 +4,10 @@
  */
 import { beforeAll, describe, expect, it } from 'bun:test';
 import type { Plugin } from '@opencode-ai/plugin';
+import { readFileSync } from 'fs';
+import * as path from 'path';
+import { warcraftAgents } from './agents/index.js';
+import { saurfangAgent } from './agents/saurfang.js';
 import { createTestOpencodeClient } from './e2e/helpers/opencode-client.js';
 import plugin from './index.js';
 
@@ -90,6 +94,17 @@ describe('Warcraft Plugin Tool Registration', () => {
     expect(joined).toContain('warcraft_worktree_create(task)` → issue returned `task()` call');
     expect(joined).not.toContain('creates worktree and spawns worker automatically');
     expect(joined).not.toContain('warcraft_worktree_create(task)` → work in worktree → `warcraft_worktree_commit');
+  });
+
+  it('should keep Saurfang metadata aligned with returned-task orchestration semantics', () => {
+    expect(saurfangAgent.description.toLowerCase()).not.toContain('spawns workers');
+    expect(warcraftAgents.saurfang.description.toLowerCase()).not.toContain('spawns workers');
+
+    const pluginConfigPath = path.resolve(import.meta.dir, 'plugin-config.ts');
+    const pluginConfigSource = readFileSync(pluginConfigPath, 'utf-8').toLowerCase();
+
+    expect(pluginConfigSource).not.toContain('delegates, spawns workers, verifies, merges');
+    expect(pluginConfigSource).toContain('launches returned task() payloads');
   });
 
   it('should have context write tool with correct description', () => {

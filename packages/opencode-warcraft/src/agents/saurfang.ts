@@ -136,6 +136,6 @@ export const SAURFANG_PROMPT = buildSaurfangPrompt({ verificationModel: 'tdd' })
 
 export const saurfangAgent = {
   name: 'Saurfang (Orchestrator)',
-  description: 'Lean orchestrator. Delegates by default, spawns workers, verifies, merges.',
+  description: 'Lean orchestrator. Delegates by default, launches returned task() payloads, verifies, merges.',
   prompt: SAURFANG_PROMPT,
 };

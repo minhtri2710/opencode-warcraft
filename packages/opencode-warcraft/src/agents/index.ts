@@ -4,7 +4,7 @@
  * The Warcraft Character Model:
  * - Khadgar (Hybrid): Plans AND orchestrates based on phase
  * - Mimiron (Planner): Plans features, interviews, writes plans
- * - Saurfang (Orchestrator): Delegates, spawns workers, verifies, merges
+ * - Saurfang (Orchestrator): Delegates, launches returned task() payloads, verifies, merges
  * - Brann (Research/Collector): Explores codebase and external docs
  * - Mekkatorque (Worker/Coder): Executes tasks in isolation
  * - Algalon (Consultant/Reviewer): Reviews plan quality
@@ -43,7 +43,7 @@ export const warcraftAgents = {
   },
   saurfang: {
     name: 'Saurfang (Orchestrator)',
-    description: 'Orchestrates execution. Delegates, spawns workers, verifies, merges.',
+    description: 'Orchestrates execution. Delegates, launches returned task() payloads, verifies, merges.',
     mode: 'primary' as const,
   },
   brann: {

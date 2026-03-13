@@ -174,7 +174,8 @@ export async function applyWarcraftConfig(
         {
           name: 'saurfang',
           prompt: saurfangPrompt,
-          description: 'Saurfang (Orchestrator) - Orchestrates execution. Delegates, spawns workers, verifies, merges.',
+          description:
+            'Saurfang (Orchestrator) - Orchestrates execution. Delegates, launches returned task() payloads, verifies, merges.',
           temperature: 0.5,
           permission: {
             question: 'allow',
