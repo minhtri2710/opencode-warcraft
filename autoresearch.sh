@@ -38,6 +38,7 @@ bun test \
   ./eval/mekkatorque-residual.audit.test.ts \
   ./eval/mekkatorque-docker-sandbox.audit.test.ts \
   ./eval/batch-preview-next-action.audit.test.ts \
+  ./eval/index-blocked-resume.audit.test.ts \
   packages/opencode-warcraft/src/index.test.ts \
   >"$TMP_OUTPUT" 2>&1
 STATUS=$?

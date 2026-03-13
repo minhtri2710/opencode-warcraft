@@ -95,6 +95,8 @@ describe('Warcraft Plugin Tool Registration', () => {
     expect(joined).toContain('warcraft_worktree_create(task)` → issue returned `task()` call');
     expect(joined).not.toContain('creates worktree and spawns worker automatically');
     expect(joined).not.toContain('warcraft_worktree_create(task)` → work in worktree → `warcraft_worktree_commit');
+    // Blocked-resume CRITICAL note should not claim SAME worktree unconditionally
+    expect(joined).not.toMatch(/SAME worktree/i);
   });
 
   it('should keep Saurfang metadata aligned with returned-task orchestration semantics', () => {

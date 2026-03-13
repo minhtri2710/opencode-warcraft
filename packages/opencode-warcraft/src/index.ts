@@ -64,7 +64,7 @@ Use \`warcraft_merge\` to explicitly integrate changes. Worktrees persist until 
 4. Resume with \`warcraft_worktree_create(task, continueFrom: "blocked", decision: answer)\`
 5. Issue the newly returned \`task()\` call to relaunch the worker in the same workspace
 
-**CRITICAL**: When resuming, the returned \`task()\` call launches a NEW worker in the SAME worktree.
+**CRITICAL**: When resuming, the returned \`task()\` call launches a NEW worker in the SAME workspace.
 The previous worker's progress is preserved. Include the user's decision in the \`decision\` parameter.
 
 **After the returned task() call returns:**
