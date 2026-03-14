@@ -338,9 +338,6 @@ export class ContextTools {
       if (!planStatus || planStatus === 'draft') {
         return 'Write or revise plan with warcraft_plan_write, then get approval';
       }
-      if (planStatus === 'review') {
-        return 'Await plan approval or revise the plan';
-      }
       if (taskList.length === 0) {
         return 'Generate tasks from plan with warcraft_tasks_sync';
       }

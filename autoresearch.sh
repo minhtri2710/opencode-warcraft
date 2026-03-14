@@ -58,6 +58,7 @@ bun test \
   ./eval/doctor-direct-mode-wording.audit.test.ts \
   ./eval/warcraft-skill-discard-table.audit.test.ts \
   ./eval/batch-preview-nonterminal.audit.test.ts \
+  ./eval/context-dead-review-branch.audit.test.ts \
   ./eval/feature-complete-irreversible.audit.test.ts \
   ./eval/warcraft-tools-docs-completeness.audit.test.ts \
   ./eval/readme-tool-completeness.audit.test.ts \
