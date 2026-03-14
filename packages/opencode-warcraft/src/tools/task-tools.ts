@@ -146,14 +146,26 @@ export class TaskTools {
           instantWorkflowActivated = true;
         }
 
+        const pendingManualTasks = !hasPlan
+          ? taskService
+              .list(feature)
+              .filter((task) => task.origin === 'manual' && task.status === 'pending')
+              .map((task) => task.folder)
+          : [];
+        const expansionWarning =
+          pendingManualTasks.length > 1
+            ? '\nThis feature now has multiple pending manual tasks and has likely outgrown the tiny-task path. Prefer warcraft_plan_write with Workflow Path: lightweight before dispatching more work.'
+            : '';
+
         return toolSuccess({
           feature,
           task: folder,
           workflowPath: instantWorkflowActivated ? 'instant' : featureData?.workflowPath ?? 'standard',
+          pendingManualTasks,
           message:
             instantWorkflowActivated
-              ? `Manual task created: ${folder}\nInstant workflow activated for feature "${feature}" (no formal plan required for this small task). Include enough detail in the task description to make it self-contained, then call warcraft_worktree_create and issue the returned task() call.`
-              : `Manual task created: ${folder}\nReminder: call warcraft_worktree_create to prepare the task workspace, then issue the returned task() call to start the worker in the assigned workspace.`,
+              ? `Manual task created: ${folder}\nInstant workflow activated for feature "${feature}" (no formal plan required for this small task). Include enough detail in the task description to make it self-contained, then call warcraft_worktree_create and issue the returned task() call.${expansionWarning}`
+              : `Manual task created: ${folder}\nReminder: call warcraft_worktree_create to prepare the task workspace, then issue the returned task() call to start the worker in the assigned workspace.${expansionWarning}`,
         });
       },
     });

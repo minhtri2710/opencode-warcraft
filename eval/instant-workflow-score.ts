@@ -163,6 +163,34 @@ async function checkManualTaskCanPromoteInstantWorkflow(): Promise<CheckResult> 
   };
 }
 
+async function checkManualTaskWarnsWhenInstantWorkflowOutgrowsTinyPath(): Promise<CheckResult> {
+  const ctx = createWorkspace();
+  ctx.featureService.create('quick-fix');
+  const createTask = ctx.taskTools.createTaskTool((name?: string) => name || 'quick-fix');
+  await createTask.execute({
+    feature: 'quick-fix',
+    name: 'Tighten prompt wording',
+    priority: 3,
+    description:
+      'Background: tiny wording fix. Impact: prompt text only. Safety: low risk. Verify: prompt tests. Rollback: revert.',
+  } as any);
+  const raw = (await createTask.execute({
+    feature: 'quick-fix',
+    name: 'Refresh help text',
+    priority: 3,
+    description:
+      'Background: second tiny wording fix. Impact: help text only. Safety: low risk. Verify: prompt tests. Rollback: revert.',
+  } as any)) as string;
+  const parsed = parseToolResponse(raw);
+  const message = String(parsed.data?.message || '');
+  const pass = /multiple pending manual tasks/i.test(message) && /Workflow Path: lightweight/i.test(message);
+  return {
+    id: 'manual-task-expansion-warning',
+    pass,
+    detail: pass ? 'manual task creation warns when instant workflow has outgrown the tiny-task path' : `message=${message}`,
+  };
+}
+
 async function checkManualTaskSpecIsSelfContained(): Promise<CheckResult> {
   const ctx = createWorkspace();
   ctx.featureService.create('quick-fix');
@@ -352,6 +380,7 @@ async function main() {
     checkFeatureCreateAnalyzesTinyRequest(),
     checkFeatureCreateAnalyzesBroadRequest(),
     checkManualTaskCanPromoteInstantWorkflow(),
+    checkManualTaskWarnsWhenInstantWorkflowOutgrowsTinyPath(),
     checkManualTaskSpecIsSelfContained(),
     checkStatusNextActionSupportsInstantPath(),
     checkStatusNextActionSupportsLightweightRecommendation(),

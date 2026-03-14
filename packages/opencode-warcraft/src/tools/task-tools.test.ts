@@ -43,6 +43,17 @@ class MockTaskService implements Partial<TaskService> {
     return `${orderStr}-${name.toLowerCase().replace(/\s+/g, '-')}`;
   }
 
+  list(featureName: string) {
+    return this.createCalls
+      .filter((call) => call.feature === featureName)
+      .map((call, index) => ({
+        folder: `${String(call.order ?? index + 1).padStart(2, '0')}-${call.name.toLowerCase().replace(/\s+/g, '-')}`,
+        name: call.name,
+        status: 'pending' as const,
+        origin: 'manual' as const,
+      }));
+  }
+
   previewSync(): unknown {
     return this.previewResult;
   }
@@ -323,6 +334,36 @@ describe('TaskTools', () => {
       expect(parsed.data.message).toContain('Instant workflow activated');
       expect(mockFeatureService.updateStatusCalls).toContain('executing');
       expect(mockFeatureService.patchCalls).toContainEqual({ workflowPath: 'instant' });
+    });
+
+    it('warns when instant work grows into multiple pending manual tasks', async () => {
+      mockFeatureService.feature = {
+        ...mockFeatureService.feature,
+        status: 'planning',
+      };
+      mockPlanService.planResult = null;
+
+      const tool = taskTools.createTaskTool(resolveFeature);
+      await tool.execute({
+        name: 'Tiny Fix',
+        description: 'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
+        order: 1,
+        feature: undefined,
+        priority: 3,
+      });
+      const raw = await tool.execute({
+        name: 'Second Tiny Fix',
+        description: 'Background: second tiny change. Impact: help text only. Safety: low. Verify: prompt tests. Rollback: revert.',
+        order: 2,
+        feature: undefined,
+        priority: 3,
+      });
+      const parsed = JSON.parse(raw);
+
+      expect(parsed.success).toBe(true);
+      expect(parsed.data.pendingManualTasks).toEqual(['01-tiny-fix', '02-second-tiny-fix']);
+      expect(parsed.data.message).toContain('multiple pending manual tasks');
+      expect(parsed.data.message).toContain('Workflow Path: lightweight');
     });
   });
   describe('syncTasksTool', () => {
