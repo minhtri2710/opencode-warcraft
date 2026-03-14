@@ -1,6 +1,6 @@
 # Warcraft Tools Inventory
 
-## Tools (17 total)
+## Tools (19 total)
 
 ### Feature Management (2 tools)
 | Tool | Purpose |
@@ -22,12 +22,13 @@
 | `warcraft_task_create` | Create manual task (not from plan) |
 | `warcraft_task_update` | Update task status or summary |
 
-### Worktree (3 tools)
+### Worktree (4 tools)
 | Tool | Purpose |
 |------|---------|
-| `warcraft_worktree_create` | Create worktree and begin work |
-| `warcraft_worktree_commit` | Commit changes, write report (does NOT merge) |
-| `warcraft_worktree_discard` | Discard changes, reset status |
+| `warcraft_worktree_create` | Prepare workspace and return task() delegation payload |
+| `warcraft_worktree_commit` | Finalize work, write report (does NOT merge) |
+| `warcraft_worktree_discard` | Abort task and reset status (reverts changes only in worktree mode) |
+| `warcraft_worktree_prune` | Prune stale worktrees (safe by default via dryRun=true) |
 
 #### warcraft_worktree_create output
 
@@ -39,7 +40,7 @@
 ### Merge (1 tool)
 | Tool | Purpose |
 |------|---------|
-| `warcraft_merge` | Integrate a task branch using `merge`/`squash`/`rebase`. Successful results may report a real merge, an already-integrated branch, or no commits to apply. Optional `verify` runs build+test afterward. |
+| `warcraft_merge` | Integrate completed task work using `merge`/`squash`/`rebase`. Successful results may report a real merge, an already-integrated branch, or no commits to apply. Optional `verify` runs build+test afterward. |
 
 ### Batch (1 tool)
 | Tool | Purpose |
@@ -65,6 +66,11 @@
 | Tool | Purpose |
 |------|---------|
 | `warcraft_skill` | Load registered Warcraft skills by ID |
+
+### Diagnostics (1 tool)
+| Tool | Purpose |
+|------|---------|
+| `warcraft_doctor` | Run project diagnostics (feature inventory, stale worktrees, config checks) |
 
 ## Key Tool Parameters
 
@@ -130,16 +136,18 @@ Each agent has an explicit allowlist of Warcraft tools. Tools not in an agent's 
 | `warcraft_worktree_create` | Yes | No | Yes | No | No | No |
 | `warcraft_worktree_commit` | Yes | No | No | Yes | No | No |
 | `warcraft_worktree_discard` | Yes | No | Yes | No | No | No |
+| `warcraft_worktree_prune` | Yes | No | Yes | No | No | No |
 | `warcraft_merge` | Yes | No | Yes | No | No | No |
 | `warcraft_batch_execute` | Yes | No | Yes | No | No | No |
 | `warcraft_context_write` | Yes | Yes | Yes | Yes | Yes | Yes |
 | `warcraft_status` | Yes | Yes | Yes | No | Yes | Yes |
 | `warcraft_agents_md` | Yes | No | Yes | No | No | No |
+| `warcraft_doctor` | Yes | No | Yes | No | No | No |
 
 **Key patterns:**
-- **Khadgar** (hybrid): full access to all 17 tools
+- **Khadgar** (hybrid): full access to all 19 tools
 - **Mimiron** (planner): planning + read-only tools (6 tools)
-- **Saurfang** (orchestrator): all except `worktree_commit` and `plan_write` (15 tools)
+- **Saurfang** (orchestrator): all except `worktree_commit` and `plan_write` (17 tools)
 - **Mekkatorque** (worker): minimal set, commit, read plan, write context, load skills (4 tools)
 - **Brann** (explorer) and **Algalon** (reviewer): read-only + context + skills (4 tools each)
 
@@ -181,11 +189,12 @@ These options control tool behavior at runtime. They are supported by `ConfigSer
 | Feature | 2 | create, complete |
 | Plan | 3 | write, read, approve |
 | Task | 3 | sync, create, update |
-| Worktree | 3 | create, commit, discard |
+| Worktree | 4 | create, commit, discard, prune |
 | Merge | 1 | merge |
 | Batch | 1 | batch_execute |
 | Context | 1 | write |
 | AGENTS.md | 1 | agents_md |
 | Status | 1 | status |
 | Skill | 1 | skill |
-| **Total** | **17** | |
+| Diagnostics | 1 | doctor |
+| **Total** | **19** | |
