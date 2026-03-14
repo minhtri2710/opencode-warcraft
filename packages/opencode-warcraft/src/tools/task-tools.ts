@@ -337,6 +337,8 @@ export class TaskTools {
           remainingManualTasks.length > 0
             ? { feature, tasks: remainingManualTasks, mode: resultingWorkflowPath === 'standard' ? 'standard' : 'lightweight' }
             : null;
+        const planApproveArgs = remainingManualTasks.length === 0 ? { feature } : null;
+        const taskSyncArgs = remainingManualTasks.length === 0 ? { feature, mode: 'sync' as const } : null;
         const promotionFlow = taskExpandArgs
           ? buildPendingManualPromotionFlow(taskExpandArgs, { feature }, { feature, mode: 'sync' })
           : buildDraftPlanPromotionFlow({ feature }, { feature, mode: 'sync' });
@@ -350,8 +352,8 @@ export class TaskTools {
           mergedIntoExistingPlan: !!existingPlan,
           planScaffold,
           planWriteArgs: { feature, content: planScaffold },
-          planApproveArgs: { feature },
-          taskSyncArgs: { feature, mode: 'sync' },
+          planApproveArgs,
+          taskSyncArgs,
           remainingManualTasks,
           taskExpandArgs,
           promotionFlow,

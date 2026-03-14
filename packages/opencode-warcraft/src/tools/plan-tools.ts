@@ -112,14 +112,16 @@ export class PlanTools {
           remainingManualTasks.length > 0
             ? { feature, tasks: remainingManualTasks, mode: workflowPath === 'standard' ? 'standard' : 'lightweight' }
             : null;
+        const planApproveArgs = remainingManualTasks.length === 0 ? { feature } : null;
+        const taskSyncArgs = remainingManualTasks.length === 0 ? { feature, mode: 'sync' as const } : null;
         return toolSuccess({
           workflowPath,
           generatedFromManualTasks,
           sourceTaskCount,
           planScaffoldMode: generatedFromManualTasks ? scaffoldMode : null,
           content: planContent,
-          planApproveArgs: { feature },
-          taskSyncArgs: { feature, mode: 'sync' },
+          planApproveArgs,
+          taskSyncArgs,
           remainingManualTasks,
           taskExpandArgs,
           promotionFlow: taskExpandArgs

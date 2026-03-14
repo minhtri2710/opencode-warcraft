@@ -477,7 +477,7 @@ export class ContextTools {
         ? buildPlanScaffold(featureName, planScaffoldMode, pendingManualTasks)
         : null;
     const planWriteArgs = planScaffold ? { feature: featureName, content: planScaffold } : null;
-    const planApproveArgs = plan && planStatus === 'draft' ? { feature: featureName } : null;
+    const planApproveArgs = plan && planStatus === 'draft' && pendingManualTasks.length === 0 ? { feature: featureName } : null;
     const taskSyncArgs = plan && planStatus === 'approved' && tasks.length === 0 ? { feature: featureName, mode: 'sync' as const } : null;
     const taskExpandArgs =
       planScaffoldMode && pendingManualTasks.length > 0

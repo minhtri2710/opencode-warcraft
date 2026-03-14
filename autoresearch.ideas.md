@@ -1,1 +1,1 @@
-- Consider tightening `warcraft_plan_approve` so it warns or blocks when a draft plan still leaves unmatched manual tasks outside the reviewed plan. Only do this if the new `remainingManualTasks` / `taskExpandArgs` / `promotionFlow` guidance still allows too many incomplete approvals.
+- If agents still try to approve incomplete drafts despite the new withheld `planApproveArgs` / `taskSyncArgs`, tighten `warcraft_plan_approve` itself so it warns or blocks when unmatched manual tasks still sit outside the reviewed draft plan.

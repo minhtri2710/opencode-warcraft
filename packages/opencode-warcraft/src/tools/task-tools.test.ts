@@ -689,8 +689,8 @@ describe('TaskTools', () => {
         tasks: ['01-tiny-fix'],
         mode: 'lightweight',
       });
-      expect(parsed.data.planApproveArgs).toEqual({ feature: 'test-feature' });
-      expect(parsed.data.taskSyncArgs).toEqual({ feature: 'test-feature', mode: 'sync' });
+      expect(parsed.data.planApproveArgs).toBeNull();
+      expect(parsed.data.taskSyncArgs).toBeNull();
       expect(parsed.data.promotionFlow?.[0]).toEqual({
         type: 'tool',
         tool: 'warcraft_task_expand',

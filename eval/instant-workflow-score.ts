@@ -895,6 +895,7 @@ async function checkStatusDraftPlanSurfacesRemainingManualPromotion(): Promise<C
   })) as string;
   const parsed = parseToolResponse(raw);
   const pass =
+    parsed.data?.planApproveArgs == null &&
     parsed.data?.taskExpandArgs?.feature === 'doc-tune' &&
     JSON.stringify(parsed.data?.taskExpandArgs?.tasks) === JSON.stringify(['01-tiny-fix']) &&
     parsed.data?.taskExpandArgs?.mode === 'lightweight' &&
@@ -1328,6 +1329,8 @@ async function checkTaskExpandReturnsFollowUpExpansionForRemainingManualTasks():
   const parsed = parseToolResponse(raw);
   const pass =
     JSON.stringify(parsed.data?.remainingManualTasks) === JSON.stringify(['01-tiny-fix']) &&
+    parsed.data?.planApproveArgs == null &&
+    parsed.data?.taskSyncArgs == null &&
     parsed.data?.taskExpandArgs?.feature === 'doc-tune' &&
     JSON.stringify(parsed.data?.taskExpandArgs?.tasks) === JSON.stringify(['01-tiny-fix']) &&
     parsed.data?.taskExpandArgs?.mode === 'lightweight' &&

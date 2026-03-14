@@ -475,6 +475,7 @@ describe('ContextTools', () => {
 
       expect(result.success).toBe(true);
       expect(result.data.planScaffold).toBeNull();
+      expect(result.data.planApproveArgs).toBeNull();
       expect(result.data.taskExpandArgs).toEqual({
         feature: 'test-feature',
         tasks: ['01-tiny-fix'],

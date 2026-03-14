@@ -158,6 +158,8 @@ describe('PlanTools', () => {
 
     expect(parsed.success).toBe(true);
     expect(parsed.data.remainingManualTasks).toEqual(['01-follow-up']);
+    expect(parsed.data.planApproveArgs).toBeNull();
+    expect(parsed.data.taskSyncArgs).toBeNull();
     expect(parsed.data.taskExpandArgs).toEqual({
       feature: 'test-feature',
       tasks: ['01-follow-up'],
