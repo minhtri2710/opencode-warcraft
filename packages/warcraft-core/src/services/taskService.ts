@@ -469,6 +469,11 @@ export class TaskService {
       throw new Error(`Priority must be an integer between 1 and 5 (inclusive), got: ${priority}`);
     }
 
+    // Validate explicit order
+    if (order !== undefined && (!Number.isInteger(order) || order < 1)) {
+      throw new Error(`Task order must be a positive integer, got: ${order}`);
+    }
+
     const nextOrder = order ?? this.store.getNextOrder(featureName);
     const folder = deriveTaskFolder(nextOrder, name);
     const slug = slugifyTaskName(name);

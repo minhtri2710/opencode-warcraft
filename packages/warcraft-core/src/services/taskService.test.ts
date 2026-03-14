@@ -2388,6 +2388,41 @@ Second task.
     });
   });
 
+  describe('create validates order parameter', () => {
+    it('rejects zero order', () => {
+      const featureName = 'test-feature';
+      setupFeature(featureName);
+      const offStores = createStores(PROJECT_ROOT, 'off', createRepository('off'));
+      const svc = new TaskService(PROJECT_ROOT, offStores.taskStore, 'off');
+      expect(() => svc.create(featureName, 'Test Task', 0, 3)).toThrow(/positive integer/);
+    });
+
+    it('rejects negative order', () => {
+      const featureName = 'test-feature';
+      setupFeature(featureName);
+      const offStores = createStores(PROJECT_ROOT, 'off', createRepository('off'));
+      const svc = new TaskService(PROJECT_ROOT, offStores.taskStore, 'off');
+      expect(() => svc.create(featureName, 'Test Task', -1, 3)).toThrow(/positive integer/);
+    });
+
+    it('rejects non-integer order', () => {
+      const featureName = 'test-feature';
+      setupFeature(featureName);
+      const offStores = createStores(PROJECT_ROOT, 'off', createRepository('off'));
+      const svc = new TaskService(PROJECT_ROOT, offStores.taskStore, 'off');
+      expect(() => svc.create(featureName, 'Test Task', 1.5, 3)).toThrow(/positive integer/);
+    });
+
+    it('accepts valid positive integer order', () => {
+      const featureName = 'test-feature';
+      setupFeature(featureName);
+      const offStores = createStores(PROJECT_ROOT, 'off', createRepository('off'));
+      const svc = new TaskService(PROJECT_ROOT, offStores.taskStore, 'off');
+      const folder = svc.create(featureName, 'Valid Task', 1, 3);
+      expect(folder).toBe('01-valid-task');
+    });
+  });
+
   describe('previewSync and sync produce identical classification', () => {
     it('both methods agree on created/removed/kept/manual for the same input (off-mode)', () => {
       const featureName = 'test-feature';
