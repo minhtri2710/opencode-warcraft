@@ -31,6 +31,23 @@ describe('slug utilities', () => {
       expect(slugifyTaskName('naïve über task')).toBe('naive-uber-task');
     });
 
+    it('truncates very long names with hash suffix', () => {
+      const longName = 'Implement the comprehensive distributed event-driven microservice architecture with fault-tolerant state management';
+      const result = slugifyTaskName(longName);
+      expect(result.length).toBeLessThanOrEqual(60);
+      // Should end with a 6-char hash
+      expect(result).toMatch(/-[a-f0-9]{6}$/);
+      // Should preserve meaningful prefix
+      expect(result).toStartWith('implement-the-comprehensive');
+    });
+
+    it('does not truncate names within length limit', () => {
+      const normalName = 'Setup API client';
+      const result = slugifyTaskName(normalName);
+      expect(result).toBe('setup-api-client');
+      expect(result).not.toMatch(/-[a-f0-9]{6}$/);
+    });
+
     it('strips leading and trailing hyphens', () => {
       expect(slugifyTaskName('-leading')).toBe('leading');
       expect(slugifyTaskName('trailing-')).toBe('trailing');

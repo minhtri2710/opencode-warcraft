@@ -1,8 +1,15 @@
 import { createHash } from 'crypto';
 
 /**
+ * Maximum slug length to prevent filesystem path limit issues.
+ * Folder name = `NN-slug` (2 digits + hyphen + slug), so total ~63 chars max.
+ */
+const MAX_SLUG_LENGTH = 60;
+
+/**
  * Convert a human-readable task name to a filesystem-safe slug.
- * Lowercases, replaces whitespace runs with hyphens, strips non-alphanumeric/hyphen chars.
+ * Lowercases, normalizes Unicode, replaces non-alphanumeric runs with hyphens.
+ * Truncates long slugs with a hash suffix to prevent path length issues.
  */
 export function slugifyTaskName(name: string): string {
   const slug = name
@@ -13,12 +20,19 @@ export function slugifyTaskName(name: string): string {
     .replace(/^-+|-+$/g, '');
 
   // Preserve existing slugs for normal task names, but never emit an empty or hyphen-only folder segment.
-  if (/[a-z0-9]/.test(slug)) {
-    return slug;
+  if (!/[a-z0-9]/.test(slug)) {
+    const hash = createHash('sha256').update(name, 'utf8').digest('hex').slice(0, 8);
+    return `task-${hash}`;
   }
 
-  const hash = createHash('sha256').update(name, 'utf8').digest('hex').slice(0, 8);
-  return `task-${hash}`;
+  // Truncate overly long slugs with a hash suffix for uniqueness
+  if (slug.length > MAX_SLUG_LENGTH) {
+    const hash = createHash('sha256').update(name, 'utf8').digest('hex').slice(0, 6);
+    const truncated = slug.slice(0, MAX_SLUG_LENGTH - 7).replace(/-+$/, '');
+    return `${truncated}-${hash}`;
+  }
+
+  return slug;
 }
 
 export function slugifyIdentifierSegment(value: string): string {
