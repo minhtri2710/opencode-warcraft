@@ -3292,12 +3292,188 @@ Second task description.
       // With secondary matching, the existing tasks are reconciled by title.
       const result = offService.previewSync(featureName);
 
-      // Both existing tasks should be kept (reconciled by title), none created or removed
+      // Both existing tasks should be reconciled by title, none created or removed
       expect(result.created.length).toBe(0);
       expect(result.removed.length).toBe(0);
-      expect(result.kept.length).toBe(2);
+      expect(result.kept.length).toBe(0);
+      expect(result.reconciled).toEqual([
+        {
+          from: '02-setup-environment',
+          to: '01-setup-environment',
+          planTitle: 'Setup Environment',
+          beadId: undefined,
+        },
+        {
+          from: '01-build-feature',
+          to: '02-build-feature',
+          planTitle: 'Build Feature',
+          beadId: undefined,
+        },
+      ]);
     });
   });
+  describe('sync() - manual task promotion into plan tasks', () => {
+    it('previewSync reports matching manual tasks as reconciliations instead of duplicates', () => {
+      const featureName = 'manual-promotion-preview';
+      setupFeature(featureName);
+      const featurePath = path.join(TEST_DIR, 'docs', featureName);
+
+      const offStores = createStores(PROJECT_ROOT, 'off', createRepository('off'));
+      const offService = new TaskService(PROJECT_ROOT, offStores.taskStore, 'off');
+      offService.create(
+        featureName,
+        'Tiny Fix',
+        1,
+        3,
+        'Background: tiny fix. Impact: prompt text only. Safety: low. Verify: prompt tests. Rollback: revert.',
+      );
+      offService.create(
+        featureName,
+        'Second Tiny Fix',
+        2,
+        3,
+        'Background: second tiny fix. Impact: help text only. Safety: low. Verify: prompt tests. Rollback: revert.',
+      );
+
+      const planContent = [
+        '# Plan',
+        '',
+        'Workflow Path: lightweight',
+        '',
+        '## Discovery',
+        '',
+        'Impact: prompt/help text only',
+        'Safety: low',
+        'Verify: prompt tests',
+        'Rollback: revert',
+        '',
+        '## Tasks',
+        '',
+        '### 1. Tiny Fix',
+        '',
+        '**Depends on**: none',
+        '',
+        'Refine the first instant task.',
+        '',
+        '### 2. Second Tiny Fix',
+        '',
+        '**Depends on**: 1',
+        '',
+        'Refine the second instant task.',
+        '',
+      ].join('\n');
+      fs.writeFileSync(path.join(featurePath, 'plan.md'), planContent);
+
+      const result = offService.previewSync(featureName);
+
+      expect(result.created).toEqual([]);
+      expect(result.removed).toEqual([]);
+      expect(result.manual).toEqual([]);
+      expect(result.reconciled).toEqual([
+        {
+          from: '01-tiny-fix',
+          to: '01-tiny-fix',
+          planTitle: 'Tiny Fix',
+          beadId: 'local-manual-promotion-preview-01-tiny-fix',
+        },
+        {
+          from: '02-second-tiny-fix',
+          to: '02-second-tiny-fix',
+          planTitle: 'Second Tiny Fix',
+          beadId: 'local-manual-promotion-preview-02-second-tiny-fix',
+        },
+      ]);
+    });
+
+    it('sync converts matching manual tasks into canonical plan tasks without duplication', () => {
+      const featureName = 'manual-promotion-sync';
+      setupFeature(featureName);
+      const featurePath = path.join(TEST_DIR, 'docs', featureName);
+
+      const offStores = createStores(PROJECT_ROOT, 'off', createRepository('off'));
+      const offService = new TaskService(PROJECT_ROOT, offStores.taskStore, 'off');
+      offService.create(
+        featureName,
+        'Tiny Fix',
+        1,
+        3,
+        'Background: tiny fix. Impact: prompt text only. Safety: low. Verify: prompt tests. Rollback: revert.',
+      );
+      offService.create(
+        featureName,
+        'Second Tiny Fix',
+        2,
+        3,
+        'Background: second tiny fix. Impact: help text only. Safety: low. Verify: prompt tests. Rollback: revert.',
+      );
+
+      const planContent = [
+        '# Plan',
+        '',
+        'Workflow Path: lightweight',
+        '',
+        '## Discovery',
+        '',
+        'Impact: prompt/help text only',
+        'Safety: low',
+        'Verify: prompt tests',
+        'Rollback: revert',
+        '',
+        '## Tasks',
+        '',
+        '### 1. Tiny Fix',
+        '',
+        '**Depends on**: none',
+        '',
+        'Refine the first instant task.',
+        '',
+        '### 2. Second Tiny Fix',
+        '',
+        '**Depends on**: 1',
+        '',
+        'Refine the second instant task.',
+        '',
+      ].join('\n');
+      fs.writeFileSync(path.join(featurePath, 'plan.md'), planContent);
+
+      const result = offService.sync(featureName);
+      const first = offService.getRawStatus(featureName, '01-tiny-fix');
+      const second = offService.getRawStatus(featureName, '02-second-tiny-fix');
+
+      expect(result.created).toEqual([]);
+      expect(result.removed).toEqual([]);
+      expect(result.manual).toEqual([]);
+      expect(result.reconciled).toEqual([
+        {
+          from: '01-tiny-fix',
+          to: '01-tiny-fix',
+          planTitle: 'Tiny Fix',
+          beadId: 'local-manual-promotion-sync-01-tiny-fix',
+        },
+        {
+          from: '02-second-tiny-fix',
+          to: '02-second-tiny-fix',
+          planTitle: 'Second Tiny Fix',
+          beadId: 'local-manual-promotion-sync-02-second-tiny-fix',
+        },
+      ]);
+      expect(offService.list(featureName).map((task) => task.folder)).toEqual(['01-tiny-fix', '02-second-tiny-fix']);
+      expect(first).toMatchObject({
+        origin: 'plan',
+        planTitle: 'Tiny Fix',
+        folder: '01-tiny-fix',
+        brief: 'Background: tiny fix. Impact: prompt text only. Safety: low. Verify: prompt tests. Rollback: revert.',
+      });
+      expect(second).toMatchObject({
+        origin: 'plan',
+        planTitle: 'Second Tiny Fix',
+        folder: '02-second-tiny-fix',
+        brief: 'Background: second tiny fix. Impact: help text only. Safety: low. Verify: prompt tests. Rollback: revert.',
+        dependsOn: ['01-tiny-fix'],
+      });
+    });
+  });
+
   describe('sync() - bead reconciliation', () => {
     const setupApprovedOnModePlan = (featureName: string, planContent: string): void => {
       const featurePath = path.join(TEST_DIR, '.beads/artifacts', featureName);

@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as path from 'path';
 import type { TaskInfo, TaskStatus } from '../../types.js';
 import { ensureDir, fileExists, readJson, writeJson, writeText } from '../../utils/fs.js';
 import type { LockOptions } from '../../utils/json-lock.js';
@@ -186,5 +187,20 @@ export class FilesystemTaskStore implements TaskStore {
 
   flush(): void {
     // No-op for filesystem store
+  }
+
+  reconcilePlanTask(featureName: string, currentFolder: string, nextFolder: string, status: TaskStatus): void {
+    const currentTaskPath = getTaskPath(this.projectRoot, featureName, currentFolder);
+    const nextTaskPath = getTaskPath(this.projectRoot, featureName, nextFolder);
+
+    if (currentFolder !== nextFolder) {
+      if (fileExists(nextTaskPath)) {
+        throw new Error(`Cannot reconcile task '${currentFolder}' to '${nextFolder}': destination already exists`);
+      }
+      ensureDir(path.dirname(nextTaskPath));
+      fs.renameSync(currentTaskPath, nextTaskPath);
+    }
+
+    writeJsonLockedSync(getTaskStatusPath(this.projectRoot, featureName, nextFolder), status);
   }
 }

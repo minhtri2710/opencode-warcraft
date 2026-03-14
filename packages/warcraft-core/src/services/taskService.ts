@@ -279,23 +279,19 @@ export class TaskService {
     const reconciled: ReconciliationAction[] = [];
     const manual: string[] = [];
 
-    for (const existing of existingTasks) {
-      if (existing.origin === 'manual') {
-        manual.push(existing.folder);
-      }
-    }
-
     for (const planTask of planTasks) {
       const dependsOn = this.resolveDependencies(planTask, planTasks);
       const occupiedFolder = existingTasks.find((existing) => existing.folder === planTask.folder);
-      if (occupiedFolder && (occupiedFolder.origin === 'manual' || occupiedFolder.status === 'cancelled')) {
+      if (occupiedFolder?.status === 'cancelled') {
         continue;
       }
 
       const exactMatch = existingTasks.find(
-        (existing) => this.isEligiblePlanMatch(existing, matchedExistingFolders) && existing.folder === planTask.folder,
+        (existing) =>
+          this.isEligiblePlanMatch(existing, matchedExistingFolders, supportsReconciliation) && existing.folder === planTask.folder,
       );
-      const titleMatch = exactMatch ?? this.findTitleMatchCandidate(planTask, existingTasks, matchedExistingFolders);
+      const titleMatch =
+        exactMatch ?? this.findTitleMatchCandidate(planTask, existingTasks, matchedExistingFolders, supportsReconciliation);
 
       if (!titleMatch) {
         created.push(planTask.folder);
@@ -318,7 +314,12 @@ export class TaskService {
     }
 
     for (const existing of existingTasks) {
-      if (existing.origin === 'manual' || matchedExistingFolders.has(existing.folder)) {
+      if (matchedExistingFolders.has(existing.folder)) {
+        continue;
+      }
+
+      if (existing.origin === 'manual') {
+        manual.push(existing.folder);
         continue;
       }
 
@@ -393,9 +394,15 @@ export class TaskService {
     this.store.reconcilePlanTask(featureName, action.currentTask.folder, action.planTask.folder, canonicalStatus);
   }
 
-  private isEligiblePlanMatch(existing: TaskInfo, matchedExistingFolders: Set<string>): boolean {
+  private isEligiblePlanMatch(
+    existing: TaskInfo,
+    matchedExistingFolders: Set<string>,
+    supportsReconciliation: boolean,
+  ): boolean {
     return (
-      existing.origin !== 'manual' && existing.status !== 'cancelled' && !matchedExistingFolders.has(existing.folder)
+      existing.status !== 'cancelled' &&
+      !matchedExistingFolders.has(existing.folder) &&
+      (existing.origin !== 'manual' || supportsReconciliation)
     );
   }
 
@@ -403,9 +410,11 @@ export class TaskService {
     planTask: ParsedTask,
     existingTasks: TaskInfo[],
     matchedExistingFolders: Set<string>,
+    supportsReconciliation: boolean,
   ): TaskInfo | null {
     const matches = existingTasks.filter(
-      (existing) => this.isEligiblePlanMatch(existing, matchedExistingFolders) && existing.planTitle === planTask.name,
+      (existing) =>
+        this.isEligiblePlanMatch(existing, matchedExistingFolders, supportsReconciliation) && existing.planTitle === planTask.name,
     );
 
     return matches.length === 1 ? matches[0] : null;

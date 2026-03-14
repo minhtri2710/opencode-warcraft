@@ -598,6 +598,56 @@ async function checkPlanWriteCanMaterializeStandardScaffold(): Promise<CheckResu
   };
 }
 
+async function checkScaffoldPromotionSyncsManualTasksIntoPlan(): Promise<CheckResult> {
+  const ctx = createWorkspace();
+  ctx.featureService.create('doc-tune');
+  const createTask = ctx.taskTools.createTaskTool((name?: string) => name || 'doc-tune');
+  await createTask.execute({
+    feature: 'doc-tune',
+    name: 'Refresh docs wording',
+    priority: 3,
+    description:
+      'Background: update the README wording for the instant workflow path. Impact: README text only. Safety: keep behavior unchanged. Verify: docs tests still pass. Rollback: revert.',
+  } as any);
+  await createTask.execute({
+    feature: 'doc-tune',
+    name: 'Refresh help text',
+    priority: 3,
+    description:
+      'Background: update inline help text for the instant workflow path. Impact: help text only. Safety: keep behavior unchanged. Verify: docs tests still pass. Rollback: revert.',
+  } as any);
+
+  await ctx.planTools.writePlanTool((name?: string) => name || 'doc-tune').execute(
+    { feature: 'doc-tune', useScaffold: true } as any,
+    {} as any,
+  );
+  await ctx.planTools.approvePlanTool((name?: string) => name || 'doc-tune').execute({ feature: 'doc-tune' } as any, {} as any);
+  const syncRaw = (await ctx.taskTools.syncTasksTool((name?: string) => name || 'doc-tune').execute({
+    feature: 'doc-tune',
+    mode: 'sync',
+  } as any)) as string;
+  const parsed = parseToolResponse(syncRaw);
+  const first = ctx.taskService.getRawStatus('doc-tune', '01-refresh-docs-wording');
+  const second = ctx.taskService.getRawStatus('doc-tune', '02-refresh-help-text');
+  const pass =
+    parsed.success === true &&
+    Array.isArray(parsed.data?.created) &&
+    parsed.data.created.length === 0 &&
+    Array.isArray(parsed.data?.manualTasks) &&
+    parsed.data.manualTasks.length === 0 &&
+    Array.isArray(parsed.data?.reconciled) &&
+    parsed.data.reconciled.length === 2 &&
+    first?.origin === 'plan' &&
+    second?.origin === 'plan';
+  return {
+    id: 'scaffold-promotion-sync',
+    pass,
+    detail: pass
+      ? 'manual instant tasks can be promoted through scaffolded planning and sync without duplicate tasks'
+      : `sync=${JSON.stringify(parsed.data ?? null)} first=${JSON.stringify(first ?? null)} second=${JSON.stringify(second ?? null)}`,
+  };
+}
+
 async function checkPromptsMentionInstantPath(): Promise<CheckResult> {
   const khadgar = buildKhadgarPrompt({ verificationModel: 'tdd' });
   const saurfang = buildSaurfangPrompt({ verificationModel: 'tdd' });
@@ -679,6 +729,7 @@ async function main() {
     checkStatusReturnsPlanWriteArgsForEscalatedInstantWork(),
     checkPlanWriteCanMaterializeLightweightScaffold(),
     checkPlanWriteCanMaterializeStandardScaffold(),
+    checkScaffoldPromotionSyncsManualTasksIntoPlan(),
     checkPromptsMentionInstantPath(),
     checkBeadsModeManualBriefPersistence(),
   ]);
