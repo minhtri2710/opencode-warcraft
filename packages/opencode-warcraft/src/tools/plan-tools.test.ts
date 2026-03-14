@@ -199,6 +199,10 @@ describe('PlanTools', () => {
     expect(parsed.error).toContain('Cannot approve plan');
     expect(parsed.error).toContain('01-follow-up');
     expect(parsed.error).toContain('warcraft_task_expand');
+    expect(parsed.hints).toEqual([
+      'Run warcraft_task_expand with {"feature":"test-feature","tasks":["01-follow-up"],"mode":"lightweight"} to merge the remaining manual tasks into the draft plan.',
+      'After expansion succeeds, review the updated draft and retry warcraft_plan_approve.',
+    ]);
     expect(approveCalls).toEqual([]);
   });
 

@@ -1,1 +1,1 @@
-- If blocked promotion steps still create friction, consider extending structured tool-error payloads (or warning metadata) so approval blockers can return machine-readable follow-up args, not just prose, without weakening the explicit review gate.
+- If blocked promotion recovery still feels brittle, consider extending tool-error responses with richer structured metadata (not just string hints) so agents can recover exact follow-up args from failures as reliably as they can from success payloads.

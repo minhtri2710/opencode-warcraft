@@ -1091,7 +1091,10 @@ async function checkPlanApproveRejectsRemainingManualTasks(): Promise<CheckResul
     parsed.success === false &&
     /cannot approve plan/i.test(String(parsed.error || '')) &&
     /01-tiny-fix/.test(String(parsed.error || '')) &&
-    /warcraft_task_expand/.test(String(parsed.error || ''));
+    /warcraft_task_expand/.test(String(parsed.error || '')) &&
+    Array.isArray((parsed as any).hints) &&
+    /warcraft_task_expand/.test(String((parsed as any).hints?.[0] || '')) &&
+    /retry warcraft_plan_approve/i.test(String((parsed as any).hints?.[1] || ''));
   return {
     id: 'plan-approve-blocked-by-remaining-manual-tasks',
     pass,

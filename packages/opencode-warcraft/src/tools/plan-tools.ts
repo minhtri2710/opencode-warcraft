@@ -193,6 +193,10 @@ export class PlanTools {
             return toolError(
               `Cannot approve plan: ${preview.manual.length} pending manual task(s) still sit outside the reviewed draft plan (${preview.manual.join(', ')}). ` +
                 `Run warcraft_task_expand with ${JSON.stringify(taskExpandArgs)} before approval.`,
+              [
+                `Run warcraft_task_expand with ${JSON.stringify(taskExpandArgs)} to merge the remaining manual tasks into the draft plan.`,
+                'After expansion succeeds, review the updated draft and retry warcraft_plan_approve.',
+              ],
             );
           }
         }
