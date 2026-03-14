@@ -1,4 +1,4 @@
-import type { RemoteMcpConfig } from './types';
+import type { RemoteMcpConfig } from './types.js';
 
 export const context7Mcp: RemoteMcpConfig = {
   type: 'remote',
