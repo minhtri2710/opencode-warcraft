@@ -109,4 +109,92 @@ describe('FilesystemTaskStore', () => {
       expect(result.beadId).toBe('bead-xyz-123');
     });
   });
+
+  describe('list and ordering', () => {
+    it('list returns empty array for non-existent feature', () => {
+      const store = new FilesystemTaskStore(tmpDir);
+      expect(store.list('nonexistent')).toEqual([]);
+    });
+
+    it('list returns tasks sorted by folder name', () => {
+      const store = new FilesystemTaskStore(tmpDir);
+      const status: TaskStatus = { status: 'pending', origin: 'plan' };
+      store.createTask('feat', '02-build', 'Build', status, 3);
+      store.createTask('feat', '01-setup', 'Setup', status, 3);
+
+      const tasks = store.list('feat');
+      expect(tasks.length).toBe(2);
+      expect(tasks[0].folder).toBe('01-setup');
+      expect(tasks[1].folder).toBe('02-build');
+    });
+
+    it('getNextOrder returns 1 for empty feature', () => {
+      const store = new FilesystemTaskStore(tmpDir);
+      expect(store.getNextOrder('feat')).toBe(1);
+    });
+
+    it('getNextOrder returns max + 1', () => {
+      const store = new FilesystemTaskStore(tmpDir);
+      const status: TaskStatus = { status: 'pending', origin: 'plan' };
+      store.createTask('feat', '01-setup', 'Setup', status, 3);
+      store.createTask('feat', '03-deploy', 'Deploy', status, 3);
+
+      expect(store.getNextOrder('feat')).toBe(4);
+    });
+  });
+
+  describe('delete', () => {
+    it('removes a task folder', () => {
+      const store = new FilesystemTaskStore(tmpDir);
+      const status: TaskStatus = { status: 'pending', origin: 'plan' };
+      store.createTask('feat', '01-setup', 'Setup', status, 3);
+
+      expect(store.get('feat', '01-setup')).not.toBeNull();
+      store.delete('feat', '01-setup');
+      expect(store.get('feat', '01-setup')).toBeNull();
+    });
+
+    it('does not throw for non-existent task', () => {
+      const store = new FilesystemTaskStore(tmpDir);
+      expect(() => store.delete('feat', '99-missing')).not.toThrow();
+    });
+  });
+
+  describe('save', () => {
+    it('updates an existing task status', () => {
+      const store = new FilesystemTaskStore(tmpDir);
+      const status: TaskStatus = { status: 'pending', origin: 'plan' };
+      store.createTask('feat', '01-setup', 'Setup', status, 3);
+
+      store.save('feat', '01-setup', { ...status, status: 'in_progress' });
+      const raw = store.getRawStatus('feat', '01-setup');
+      expect(raw?.status).toBe('in_progress');
+    });
+  });
+
+  describe('writeReport', () => {
+    it('writes report.md to task folder', () => {
+      const store = new FilesystemTaskStore(tmpDir);
+      const status: TaskStatus = { status: 'pending', origin: 'plan' };
+      store.createTask('feat', '01-setup', 'Setup', status, 3);
+
+      const reportPath = store.writeReport('feat', '01-setup', '# Report\n\nAll tests passed.');
+      expect(fs.existsSync(reportPath)).toBe(true);
+      expect(fs.readFileSync(reportPath, 'utf-8')).toContain('All tests passed.');
+    });
+  });
+
+  describe('getRunnableTasks', () => {
+    it('returns null (filesystem store defers to service layer)', () => {
+      const store = new FilesystemTaskStore(tmpDir);
+      expect(store.getRunnableTasks('feat')).toBeNull();
+    });
+  });
+
+  describe('flush', () => {
+    it('is a no-op that does not throw', () => {
+      const store = new FilesystemTaskStore(tmpDir);
+      expect(() => store.flush()).not.toThrow();
+    });
+  });
 });

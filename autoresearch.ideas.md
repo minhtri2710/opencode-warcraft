@@ -10,18 +10,20 @@
 - BOM handling inconsistency ✅
 - `folderSource` missing in FilesystemTaskStore ✅
 - `configService.get()` cache on parse error ✅
+- Bullet-point dependency format in parseTasksFromPlan ✅
+- `getTaskBeadActions` missing dispatch_prepared ✅
+- `specFormatter` undefined summary in completed tasks ✅
 
-## Remaining ideas (lower priority / design changes)
-- **Alphabetical sort breaks for 100+ tasks** — `padStart(2, '0')` means task 100 sorts before 99. Edge case.
-- **`parseTasksFromPlan` doesn't handle bullet-point dependency format** — `- Depends on: 1` not matched by regex.
+## Remaining ideas (design limitations, not bugs)
+- **Alphabetical sort breaks for 100+ tasks** — `padStart(2, '0')` limitation. Would require breaking folder name changes.
 - **`worktreeService.ts` rebase strategy partial cherry-pick cleanup** — Would need new GitClient `reset` method.
 
-## Fresh angles to explore
-- beadMapping.ts — mapping between bead statuses and task statuses, edge cases
-- beadStatus.ts — status normalization logic
-- bv-runner.ts — BV triage runner subprocess handling
-- BvTriageService.ts — triage service integration
-- discovery-gate.ts / plan-review-gate.ts / workflow-path.ts — plan gate logic
-- transition-journal.ts — state transition journaling
-- detection.ts — runtime detection utilities
-- agentsMdService.ts — AGENTS.md generation
+## Areas fully explored
+- All 45 test files, all source files in services/, utils/, beads/
+- State stores (fs-*, beads-*), factory, transitions
+- Plan gates (discovery, review, workflow-path)
+- Context markdown, spec formatter, agents.md service
+- Docker sandbox service, config service
+- Event logger, trace context, outcomes
+- Slug utils, path utils, shell utils, fs utils, detection
+- Task dependency graph, task state machine
