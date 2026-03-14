@@ -1,12 +1,18 @@
 import { describe, expect, it } from 'bun:test';
-import { getTaskBeadActions } from './beadMapping.js';
-import { mapBeadStatusToTaskStatus, mapBeadStatusToFeatureStatus } from './beadStatus.js';
 import type { TaskStatusType } from '../../types.js';
+import { getTaskBeadActions } from './beadMapping.js';
+import { mapBeadStatusToFeatureStatus, mapBeadStatusToTaskStatus } from './beadStatus.js';
 
 describe('beads module cross-validation', () => {
   const ALL_TASK_STATUSES: TaskStatusType[] = [
-    'pending', 'in_progress', 'dispatch_prepared', 'done',
-    'cancelled', 'blocked', 'failed', 'partial',
+    'pending',
+    'in_progress',
+    'dispatch_prepared',
+    'done',
+    'cancelled',
+    'blocked',
+    'failed',
+    'partial',
   ];
 
   describe('every bead action has removeLabels', () => {
@@ -57,7 +63,7 @@ describe('beads module cross-validation', () => {
 
   describe('deferred label cleanup symmetry', () => {
     const DEFERRED: TaskStatusType[] = ['blocked', 'failed', 'partial', 'cancelled'];
-    
+
     for (const from of DEFERRED) {
       for (const to of DEFERRED) {
         if (from !== to) {

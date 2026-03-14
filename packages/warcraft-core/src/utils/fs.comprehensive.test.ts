@@ -2,14 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import {
-  fileExists,
-  readText,
-  writeText,
-  readJson,
-  writeJson,
-  ensureDir,
-} from './fs.js';
+import { ensureDir, fileExists, readJson, readText, writeJson, writeText } from './fs.js';
 
 describe('fs utils comprehensive', () => {
   const tmpBase = os.tmpdir();

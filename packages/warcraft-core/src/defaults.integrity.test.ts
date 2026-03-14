@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { DEFAULT_WARCRAFT_CONFIG, DEFAULT_AGENT_MODELS } from './defaults.js';
+import { DEFAULT_AGENT_MODELS, DEFAULT_WARCRAFT_CONFIG } from './defaults.js';
 
 describe('defaults agent integrity', () => {
   it('all agent models have provider/model format', () => {

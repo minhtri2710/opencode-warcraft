@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
 import { detectContext, findProjectRoot } from './utils/detection.js';
+import { fileExists, readJson, readText } from './utils/fs.js';
 import {
   getContextPath,
   getFeatureJsonPath,
@@ -17,7 +18,6 @@ import {
   normalizePath,
   sanitizeName,
 } from './utils/paths.js';
-import { fileExists, readJson, readText } from './utils/fs.js';
 
 describe('warcraft-core path helpers', () => {
   it('getWarcraftDir returns .beads/artifacts for on mode', () => {

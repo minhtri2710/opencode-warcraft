@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'bun:test';
-import { createEventLogger, WARCRAFT_EVENT_TYPES } from './event-logger.js';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { createEventLogger, WARCRAFT_EVENT_TYPES } from './event-logger.js';
 
 describe('event-logger persistence', () => {
   it('createEventLogger writes to file', () => {
@@ -15,10 +15,10 @@ describe('event-logger persistence', () => {
         previousStatus: 'pending',
         newStatus: 'in_progress',
       });
-      
+
       // Check event log file exists
       const files = fs.readdirSync(tempDir, { recursive: true }) as string[];
-      const hasLog = files.some(f => String(f).includes('event') || String(f).endsWith('.jsonl'));
+      const hasLog = files.some((f) => String(f).includes('event') || String(f).endsWith('.jsonl'));
       // May or may not create file depending on implementation
       expect(typeof hasLog).toBe('boolean');
     } finally {
@@ -31,10 +31,12 @@ describe('event-logger persistence', () => {
     try {
       const logger = createEventLogger(tempDir);
       for (const type of WARCRAFT_EVENT_TYPES) {
-        expect(() => logger.emit(type as any, {
-          featureName: 'test',
-          taskFolder: '01-test',
-        })).not.toThrow();
+        expect(() =>
+          logger.emit(type as any, {
+            featureName: 'test',
+            taskFolder: '01-test',
+          }),
+        ).not.toThrow();
       }
     } finally {
       fs.rmSync(tempDir, { recursive: true, force: true });

@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'bun:test';
 import {
+  collectOutcomes,
+  degraded,
+  diagnostic,
+  fatal,
+  fromError,
+  isUsable,
   ok,
   okVoid,
-  degraded,
-  fatal,
-  diagnostic,
-  isUsable,
-  worstSeverity,
   withDiagnostics,
-  fromError,
-  collectOutcomes,
+  worstSeverity,
 } from './outcomes.js';
 
 describe('outcomes exhaustive severity', () => {

@@ -165,10 +165,7 @@ describe('artifactSchemas round-trip', () => {
         featureName: 'my-feature',
         planSection: 'Do the setup',
         context: 'Some context here',
-        priorTasks: [
-          { folder: '00-init', summary: 'Initialized' },
-          { folder: '00-pre' },
-        ],
+        priorTasks: [{ folder: '00-init', summary: 'Initialized' }, { folder: '00-pre' }],
       });
       expect(md).toContain('# Task: 01-setup');
       expect(md).toContain('**Feature:** my-feature');

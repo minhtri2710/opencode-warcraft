@@ -26,8 +26,14 @@ describe('taskDependencyGraph stress', () => {
 
   it('wide fan-out then fan-in', () => {
     const root = task('00-root', 'done');
-    const middle = Array.from({ length: 5 }, (_, i) => task(`${String(i + 1).padStart(2, '0')}-mid`, 'pending', ['00-root']));
-    const final = task('10-final', 'pending', middle.map((t) => t.folder));
+    const middle = Array.from({ length: 5 }, (_, i) =>
+      task(`${String(i + 1).padStart(2, '0')}-mid`, 'pending', ['00-root']),
+    );
+    const final = task(
+      '10-final',
+      'pending',
+      middle.map((t) => t.folder),
+    );
     const result = computeRunnableAndBlocked([root, ...middle, final]);
     expect(result.runnable).toHaveLength(5);
     expect(result.blocked['10-final']).toBeDefined();

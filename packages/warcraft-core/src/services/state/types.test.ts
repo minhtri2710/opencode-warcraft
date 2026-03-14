@@ -2,11 +2,11 @@ import { describe, expect, it } from 'bun:test';
 import type {
   CreateFeatureInput,
   FeatureStore,
-  TaskStore,
   PlanStore,
   StoreSet,
   TaskArtifactKind,
   TaskSaveOptions,
+  TaskStore,
 } from './types.js';
 
 describe('state types validation', () => {

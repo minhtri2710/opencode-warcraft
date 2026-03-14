@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'bun:test';
-import { ContextService } from './contextService.js';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { ContextService } from './contextService.js';
 
 describe('contextService stress', () => {
   const provider = { getBeadsMode: () => 'off' as const };

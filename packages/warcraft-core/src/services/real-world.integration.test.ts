@@ -1,17 +1,17 @@
-import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
-import { FeatureService } from './featureService.js';
-import { PlanService } from './planService.js';
-import { TaskService } from './taskService.js';
-import { ContextService } from './contextService.js';
-import { FilesystemFeatureStore } from './state/fs-feature-store.js';
-import { FilesystemPlanStore } from './state/fs-plan-store.js';
-import { FilesystemTaskStore } from './state/fs-task-store.js';
-import { createNoopLogger } from '../utils/logger.js';
-import { ConfigService } from './configService.js';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { getWarcraftPath, getPlanPath } from '../utils/paths.js';
+import { createNoopLogger } from '../utils/logger.js';
+import { getPlanPath, getWarcraftPath } from '../utils/paths.js';
+import { ConfigService } from './configService.js';
+import { ContextService } from './contextService.js';
+import { FeatureService } from './featureService.js';
+import { PlanService } from './planService.js';
+import { FilesystemFeatureStore } from './state/fs-feature-store.js';
+import { FilesystemPlanStore } from './state/fs-plan-store.js';
+import { FilesystemTaskStore } from './state/fs-task-store.js';
+import { TaskService } from './taskService.js';
 
 describe('Full service integration: real-world scenario', () => {
   let tempDir: string;
@@ -52,7 +52,9 @@ describe('Full service integration: real-world scenario', () => {
     contextService.write('add-payment-api', 'architecture', '# Architecture\n- Controller → Service → Stripe');
 
     // 3. Write plan
-    writePlan('add-payment-api', `# Plan
+    writePlan(
+      'add-payment-api',
+      `# Plan
 
 ## Discovery
 
@@ -78,7 +80,8 @@ Handle Stripe webhook events
 ### 4. Integration Tests
 Depends on: 2, 3
 End-to-end payment flow tests
-`);
+`,
+    );
 
     // 4. Approve plan
     planService.approve('add-payment-api');
@@ -94,7 +97,7 @@ End-to-end payment flow tests
 
     // 7. Execute tasks in order
     const tasks = taskService.list('add-payment-api');
-    
+
     // Complete Setup
     taskService.update('add-payment-api', tasks[0].folder, { status: 'in_progress' });
     taskService.update('add-payment-api', tasks[0].folder, {

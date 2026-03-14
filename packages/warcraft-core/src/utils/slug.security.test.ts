@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import {
-  deriveTaskFolder,
-  slugifyTaskName,
-  slugifyIdentifierSegment,
-} from './slug.js';
+import { deriveTaskFolder, slugifyIdentifierSegment, slugifyTaskName } from './slug.js';
 
 describe('slug security and boundary', () => {
   it('XSS attempt in task name', () => {

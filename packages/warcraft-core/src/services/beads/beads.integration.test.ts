@@ -1,11 +1,8 @@
 import { describe, expect, it } from 'bun:test';
-import { isBeadsEnabled, requireBeadsEnabled } from './beadsMode.js';
 import type { BeadsModeProvider } from '../state/types.js';
 import { BeadGatewayError } from './BeadGateway.types.js';
-import {
-  decodeIdFromJson,
-  extractBeadContent,
-} from './beadDecoders.js';
+import { decodeIdFromJson, extractBeadContent } from './beadDecoders.js';
+import { isBeadsEnabled, requireBeadsEnabled } from './beadsMode.js';
 
 describe('beads module integration', () => {
   describe('beadsMode + BeadGatewayError', () => {

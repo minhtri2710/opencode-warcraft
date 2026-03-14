@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'bun:test';
-import { DockerSandboxService } from './dockerSandboxService.js';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { DockerSandboxService } from './dockerSandboxService.js';
 
 describe('DockerSandboxService more', () => {
   describe('validateImage', () => {

@@ -1,21 +1,21 @@
 import { describe, expect, it } from 'bun:test';
+import type { TaskStatus } from '../../types.js';
 import {
   CURRENT_SCHEMA_VERSION,
-  encodeTaskState,
+  decodeTaskReport,
   decodeTaskState,
-  taskStateFromTaskStatus,
-  taskStateToTaskStatus,
-  encodeWorkerPrompt,
   decodeWorkerPrompt,
   encodeTaskReport,
-  decodeTaskReport,
   encodeTaskSpec,
-  type TaskStateArtifact,
-  type WorkerPromptArtifact,
+  encodeTaskState,
+  encodeWorkerPrompt,
   type TaskReportArtifact,
   type TaskSpecArtifact,
+  type TaskStateArtifact,
+  taskStateFromTaskStatus,
+  taskStateToTaskStatus,
+  type WorkerPromptArtifact,
 } from './artifactSchemas.js';
-import type { TaskStatus } from '../../types.js';
 
 describe('artifactSchemas comprehensive', () => {
   describe('CURRENT_SCHEMA_VERSION', () => {
@@ -23,7 +23,16 @@ describe('artifactSchemas comprehensive', () => {
   });
 
   describe('TaskState encode/decode', () => {
-    const ALL_STATUSES = ['pending', 'in_progress', 'dispatch_prepared', 'done', 'cancelled', 'blocked', 'failed', 'partial'] as const;
+    const ALL_STATUSES = [
+      'pending',
+      'in_progress',
+      'dispatch_prepared',
+      'done',
+      'cancelled',
+      'blocked',
+      'failed',
+      'partial',
+    ] as const;
 
     for (const status of ALL_STATUSES) {
       it(`round-trips ${status}`, () => {
@@ -209,9 +218,7 @@ describe('artifactSchemas comprehensive', () => {
         featureName: 'feat',
         planSection: 'Build it',
         context: '',
-        priorTasks: [
-          { folder: '01-setup', summary: 'Setup completed' },
-        ],
+        priorTasks: [{ folder: '01-setup', summary: 'Setup completed' }],
       };
       const md = encodeTaskSpec(spec);
       expect(md).toContain('## Prior Tasks');

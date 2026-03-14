@@ -1,16 +1,13 @@
 import { describe, expect, it } from 'bun:test';
-import { SimpleGitClient } from './simple-git-client.js';
 import type { GitClient } from './git-client.js';
+import { SimpleGitClient } from './simple-git-client.js';
 
 describe('SimpleGitClient exhaustive', () => {
-  const INTERFACE_METHODS = [
-    'status', 'branch', 'log', 'add', 'commit',
-    'diff', 'merge', 'revparse',
-  ];
+  const INTERFACE_METHODS = ['status', 'branch', 'log', 'add', 'commit', 'diff', 'merge', 'revparse'];
 
   describe('interface compliance', () => {
     const client = new SimpleGitClient(process.cwd());
-    
+
     for (const method of INTERFACE_METHODS) {
       it(`has ${method} method`, () => {
         expect(typeof (client as any)[method]).toBe('function');

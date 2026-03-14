@@ -40,9 +40,7 @@ describe('defaults', () => {
 
     it('defines agent configs for all six agents', () => {
       const agents = DEFAULT_WARCRAFT_CONFIG.agents!;
-      expect(Object.keys(agents).sort()).toEqual([
-        'algalon', 'brann', 'khadgar', 'mekkatorque', 'mimiron', 'saurfang',
-      ]);
+      expect(Object.keys(agents).sort()).toEqual(['algalon', 'brann', 'khadgar', 'mekkatorque', 'mimiron', 'saurfang']);
     });
 
     it('all agent configs have model and temperature', () => {

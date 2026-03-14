@@ -14,7 +14,10 @@ function createMockPlanStore(overrides: Partial<PlanStore> = {}): PlanStore {
       approvedContent = content;
     },
     isApproved: (_f, content) => approved && content === approvedContent,
-    revokeApproval: () => { approved = false; approvedContent = ''; },
+    revokeApproval: () => {
+      approved = false;
+      approvedContent = '';
+    },
     syncPlanDescription: () => {},
     ...overrides,
   };
@@ -100,7 +103,9 @@ describe('PlanService extra edge cases', () => {
     it('calls syncPlanDescription on write', () => {
       let synced = false;
       const store = createMockPlanStore({
-        syncPlanDescription: () => { synced = true; },
+        syncPlanDescription: () => {
+          synced = true;
+        },
       });
       fs.mkdirSync(path.join(tempDir, 'docs', 'sync-test'), { recursive: true });
       const service = new PlanService(tempDir, store, 'off');

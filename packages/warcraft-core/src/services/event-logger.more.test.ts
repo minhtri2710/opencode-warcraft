@@ -1,13 +1,8 @@
 import { describe, expect, it } from 'bun:test';
-import {
-  WARCRAFT_EVENT_TYPES,
-  createNoopEventLogger,
-  createEventLogger,
-  computeTrustMetrics,
-} from './event-logger.js';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { computeTrustMetrics, createEventLogger, createNoopEventLogger, WARCRAFT_EVENT_TYPES } from './event-logger.js';
 
 describe('event-logger comprehensive', () => {
   describe('WARCRAFT_EVENT_TYPES', () => {

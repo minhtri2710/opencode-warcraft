@@ -1,15 +1,15 @@
-import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
-import { TaskService } from './taskService.js';
-import { FeatureService } from './featureService.js';
-import { PlanService } from './planService.js';
-import { FilesystemTaskStore } from './state/fs-task-store.js';
-import { FilesystemFeatureStore } from './state/fs-feature-store.js';
-import { FilesystemPlanStore } from './state/fs-plan-store.js';
-import { createNoopLogger } from '../utils/logger.js';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { getWarcraftPath, getPlanPath } from '../utils/paths.js';
+import { createNoopLogger } from '../utils/logger.js';
+import { getPlanPath, getWarcraftPath } from '../utils/paths.js';
+import { FeatureService } from './featureService.js';
+import { PlanService } from './planService.js';
+import { FilesystemFeatureStore } from './state/fs-feature-store.js';
+import { FilesystemPlanStore } from './state/fs-plan-store.js';
+import { FilesystemTaskStore } from './state/fs-task-store.js';
+import { TaskService } from './taskService.js';
 
 describe('TaskService sync reconciliation', () => {
   let tempDir: string;
@@ -126,7 +126,10 @@ describe('TaskService computeRunnableStatus', () => {
   });
 
   it('computeRunnableStatus with chain of deps', () => {
-    writePlan('chain', `# Plan\n\n### 1. First\nDo first\n\n### 2. Second\nDepends on: 1\n\nDo second\n\n### 3. Third\nDepends on: 2\n\nDo third\n`);
+    writePlan(
+      'chain',
+      `# Plan\n\n### 1. First\nDo first\n\n### 2. Second\nDepends on: 1\n\nDo second\n\n### 3. Third\nDepends on: 2\n\nDo third\n`,
+    );
     service.sync('chain');
 
     const result = service.computeRunnableStatus('chain');

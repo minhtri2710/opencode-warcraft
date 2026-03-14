@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'bun:test';
-import { ConfigService } from './configService.js';
-import { createNoopLogger } from '../utils/logger.js';
 import { DEFAULT_WARCRAFT_CONFIG } from '../defaults.js';
 import type { WarcraftConfig } from '../types.js';
+import { createNoopLogger } from '../utils/logger.js';
+import { ConfigService } from './configService.js';
 
 describe('configService property validation', () => {
   const service = new ConfigService(createNoopLogger());

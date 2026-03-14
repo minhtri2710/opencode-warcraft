@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import { ConfigService } from './configService.js';
 import { createNoopLogger } from '../utils/logger.js';
+import { ConfigService } from './configService.js';
 
 describe('configService comprehensive', () => {
   it('constructor with noop logger', () => {

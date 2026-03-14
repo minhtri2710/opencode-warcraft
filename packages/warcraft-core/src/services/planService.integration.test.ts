@@ -1,11 +1,11 @@
-import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
-import { PlanService } from './planService.js';
-import { FilesystemPlanStore } from './state/fs-plan-store.js';
-import { FilesystemFeatureStore } from './state/fs-feature-store.js';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { getWarcraftPath, getPlanPath } from '../utils/paths.js';
+import { getPlanPath, getWarcraftPath } from '../utils/paths.js';
+import { PlanService } from './planService.js';
+import { FilesystemFeatureStore } from './state/fs-feature-store.js';
+import { FilesystemPlanStore } from './state/fs-plan-store.js';
 
 describe('PlanService integration', () => {
   let tempDir: string;

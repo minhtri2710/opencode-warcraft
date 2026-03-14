@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { mapBeadStatusToTaskStatus, mapBeadStatusToFeatureStatus } from './beadStatus.js';
+import { mapBeadStatusToFeatureStatus, mapBeadStatusToTaskStatus } from './beadStatus.js';
 
 describe('beadStatus extra edge cases', () => {
   describe('mapBeadStatusToTaskStatus', () => {

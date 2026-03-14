@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import type { GitClient, StatusResult, BranchResult, CommitResult, LogResult } from './git-client.js';
+import type { BranchResult, CommitResult, GitClient, LogResult, StatusResult } from './git-client.js';
 
 describe('git-client types', () => {
   it('StatusResult has clean property', () => {

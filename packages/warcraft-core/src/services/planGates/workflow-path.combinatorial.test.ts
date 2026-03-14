@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'bun:test';
-import { detectWorkflowPath, countPlanTasks, hasLightweightMiniRecord, validateLightweightPlan } from './workflow-path.js';
+import {
+  countPlanTasks,
+  detectWorkflowPath,
+  hasLightweightMiniRecord,
+  validateLightweightPlan,
+} from './workflow-path.js';
 
 describe('workflow-path combinatorial', () => {
   const PLAN_TEMPLATES = {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import { computeRunnableAndBlocked, type TaskWithDeps } from './taskDependencyGraph.js';
 import type { TaskStatusType } from '../types.js';
+import { computeRunnableAndBlocked, type TaskWithDeps } from './taskDependencyGraph.js';
 
 function task(folder: string, status: TaskStatusType, deps: string[] = []): TaskWithDeps {
   return { folder, status, dependsOn: deps };
@@ -8,8 +8,14 @@ function task(folder: string, status: TaskStatusType, deps: string[] = []): Task
 
 describe('taskDependencyGraph exhaustive status', () => {
   const ALL_STATUSES: TaskStatusType[] = [
-    'pending', 'in_progress', 'dispatch_prepared', 'done',
-    'cancelled', 'blocked', 'failed', 'partial',
+    'pending',
+    'in_progress',
+    'dispatch_prepared',
+    'done',
+    'cancelled',
+    'blocked',
+    'failed',
+    'partial',
   ];
 
   describe('single task with each status', () => {
@@ -29,10 +35,7 @@ describe('taskDependencyGraph exhaustive status', () => {
   describe('dependency satisfaction per status', () => {
     for (const depStatus of ALL_STATUSES) {
       it(`pending task with ${depStatus} dep`, () => {
-        const result = computeRunnableAndBlocked([
-          task('01-dep', depStatus),
-          task('02-child', 'pending', ['01-dep']),
-        ]);
+        const result = computeRunnableAndBlocked([task('01-dep', depStatus), task('02-child', 'pending', ['01-dep'])]);
         if (depStatus === 'done') {
           expect(result.runnable).toContain('02-child');
         } else {
@@ -64,18 +67,12 @@ describe('taskDependencyGraph exhaustive status', () => {
     });
 
     it('failed dep blocks child', () => {
-      const result = computeRunnableAndBlocked([
-        task('01-a', 'failed'),
-        task('02-b', 'pending', ['01-a']),
-      ]);
+      const result = computeRunnableAndBlocked([task('01-a', 'failed'), task('02-b', 'pending', ['01-a'])]);
       expect(result.blocked['02-b']).toBeDefined();
     });
 
     it('partial dep blocks child', () => {
-      const result = computeRunnableAndBlocked([
-        task('01-a', 'partial'),
-        task('02-b', 'pending', ['01-a']),
-      ]);
+      const result = computeRunnableAndBlocked([task('01-a', 'partial'), task('02-b', 'pending', ['01-a'])]);
       expect(result.blocked['02-b']).toBeDefined();
     });
   });

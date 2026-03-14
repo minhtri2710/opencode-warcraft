@@ -1,14 +1,9 @@
 import { describe, expect, it } from 'bun:test';
+import { validateDiscoverySection } from './discovery-gate.js';
+import { formatPlanReviewChecklistIssues, validatePlanReviewChecklist } from './plan-review-gate.js';
 import {
-  validateDiscoverySection,
-} from './discovery-gate.js';
-import {
-  validatePlanReviewChecklist,
-  formatPlanReviewChecklistIssues,
-} from './plan-review-gate.js';
-import {
-  detectWorkflowPath,
   countPlanTasks,
+  detectWorkflowPath,
   hasLightweightMiniRecord,
   validateLightweightPlan,
 } from './workflow-path.js';

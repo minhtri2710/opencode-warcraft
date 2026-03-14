@@ -1,9 +1,18 @@
 import { describe, expect, it } from 'bun:test';
 import {
-  ok, okVoid, degraded, fatal,
-  diagnostic, isUsable, worstSeverity,
-  withDiagnostics, fromError, collectOutcomes,
-  type OperationOutcome, type Diagnostic, type Severity,
+  collectOutcomes,
+  type Diagnostic,
+  degraded,
+  diagnostic,
+  fatal,
+  fromError,
+  isUsable,
+  type OperationOutcome,
+  ok,
+  okVoid,
+  type Severity,
+  withDiagnostics,
+  worstSeverity,
 } from './outcomes.js';
 
 describe('outcomes API completeness', () => {
@@ -36,11 +45,7 @@ describe('outcomes API completeness', () => {
     });
 
     it('with multiple diagnostics', () => {
-      const diags = [
-        diagnostic('a', 'first'),
-        diagnostic('b', 'second'),
-        diagnostic('c', 'third'),
-      ];
+      const diags = [diagnostic('a', 'first'), diagnostic('b', 'second'), diagnostic('c', 'third')];
       const result = degraded('val', diags);
       expect(result.severity).toBe('degraded');
       expect(result.diagnostics.length).toBe(3);

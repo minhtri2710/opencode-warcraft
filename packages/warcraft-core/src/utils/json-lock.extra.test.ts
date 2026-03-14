@@ -52,10 +52,7 @@ describe('deepMerge extra edge cases', () => {
   });
 
   it('deep merges nested objects', () => {
-    const result = deepMerge(
-      { config: { theme: 'dark', lang: 'en' } },
-      { config: { theme: 'light' } } as any,
-    );
+    const result = deepMerge({ config: { theme: 'dark', lang: 'en' } }, { config: { theme: 'light' } } as any);
     expect(result.config.theme).toBe('light');
     expect(result.config.lang).toBe('en');
   });
@@ -131,11 +128,7 @@ describe('acquireLockSync', () => {
 describe('updateJsonLockedSync', () => {
   it('creates file with default when it does not exist', () => {
     const filePath = path.join(TEST_DIR, 'update-create.json');
-    updateJsonLockedSync(
-      filePath,
-      (current) => ({ ...current, added: true }),
-      { initial: 'value' },
-    );
+    updateJsonLockedSync(filePath, (current) => ({ ...current, added: true }), { initial: 'value' });
     const result = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
     expect(result.initial).toBe('value');
     expect(result.added).toBe(true);
@@ -144,11 +137,7 @@ describe('updateJsonLockedSync', () => {
   it('updates existing file', () => {
     const filePath = path.join(TEST_DIR, 'update-existing.json');
     fs.writeFileSync(filePath, JSON.stringify({ count: 1 }));
-    updateJsonLockedSync(
-      filePath,
-      (current: any) => ({ ...current, count: current.count + 1 }),
-      { count: 0 },
-    );
+    updateJsonLockedSync(filePath, (current: any) => ({ ...current, count: current.count + 1 }), { count: 0 });
     const result = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
     expect(result.count).toBe(2);
   });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import { DEFAULT_AGENT_MODELS, DEFAULT_WARCRAFT_CONFIG } from './defaults.js';
-import type { WarcraftConfig, AgentModelConfig } from './types.js';
+import type { AgentModelConfig, WarcraftConfig } from './types.js';
 
 describe('defaults and types round-trip', () => {
   it('DEFAULT_WARCRAFT_CONFIG is valid WarcraftConfig', () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { renderContextSection, renderContextSections, appendContextContent } from './context-markdown.js';
+import { appendContextContent, renderContextSection, renderContextSections } from './context-markdown.js';
 
 describe('context-markdown advanced scenarios', () => {
   describe('renderContextSection', () => {

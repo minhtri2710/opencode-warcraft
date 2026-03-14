@@ -1,16 +1,16 @@
-import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
-import { FeatureService } from './featureService.js';
-import { PlanService } from './planService.js';
-import { TaskService } from './taskService.js';
-import { FilesystemFeatureStore } from './state/fs-feature-store.js';
-import { FilesystemPlanStore } from './state/fs-plan-store.js';
-import { FilesystemTaskStore } from './state/fs-task-store.js';
-import { ContextService } from './contextService.js';
-import { createNoopLogger } from '../utils/logger.js';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { getWarcraftPath, getPlanPath } from '../utils/paths.js';
+import { createNoopLogger } from '../utils/logger.js';
+import { getPlanPath, getWarcraftPath } from '../utils/paths.js';
+import { ContextService } from './contextService.js';
+import { FeatureService } from './featureService.js';
+import { PlanService } from './planService.js';
+import { FilesystemFeatureStore } from './state/fs-feature-store.js';
+import { FilesystemPlanStore } from './state/fs-plan-store.js';
+import { FilesystemTaskStore } from './state/fs-task-store.js';
+import { TaskService } from './taskService.js';
 
 describe('Multi-feature workflow', () => {
   let tempDir: string;

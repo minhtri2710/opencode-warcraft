@@ -3,9 +3,19 @@ import { DockerSandboxService } from './dockerSandboxService.js';
 
 describe('DockerSandboxService validation', () => {
   const INVALID_IMAGES = [
-    '', ' ', 'a b', '../escape', '/absolute', 'with;injection',
-    'with&&chain', 'with|pipe', 'with`backtick`', 'with$(cmd)',
-    'with${var}', 'has\nnewline', 'has\ttab',
+    '',
+    ' ',
+    'a b',
+    '../escape',
+    '/absolute',
+    'with;injection',
+    'with&&chain',
+    'with|pipe',
+    'with`backtick`',
+    'with$(cmd)',
+    'with${var}',
+    'has\nnewline',
+    'has\ttab',
   ];
 
   describe('rejects invalid images', () => {

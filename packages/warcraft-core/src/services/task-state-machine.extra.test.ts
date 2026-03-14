@@ -10,8 +10,14 @@ import {
 describe('task-state-machine extra edge cases', () => {
   it('all same-status transitions are allowed', () => {
     const allStatuses: TaskStatusType[] = [
-      'pending', 'in_progress', 'dispatch_prepared', 'done',
-      'cancelled', 'blocked', 'failed', 'partial',
+      'pending',
+      'in_progress',
+      'dispatch_prepared',
+      'done',
+      'cancelled',
+      'blocked',
+      'failed',
+      'partial',
     ];
     for (const status of allStatuses) {
       expect(isTransitionAllowed(status, status)).toBe(true);
@@ -20,8 +26,14 @@ describe('task-state-machine extra edge cases', () => {
 
   it('validateTransition does not throw for any same-status transition', () => {
     const allStatuses: TaskStatusType[] = [
-      'pending', 'in_progress', 'dispatch_prepared', 'done',
-      'cancelled', 'blocked', 'failed', 'partial',
+      'pending',
+      'in_progress',
+      'dispatch_prepared',
+      'done',
+      'cancelled',
+      'blocked',
+      'failed',
+      'partial',
     ];
     for (const status of allStatuses) {
       expect(() => validateTransition(status, status)).not.toThrow();
@@ -96,8 +108,13 @@ describe('task-state-machine extra edge cases', () => {
 
   it('cancel from any active state', () => {
     const cancellableStatuses: TaskStatusType[] = [
-      'pending', 'in_progress', 'dispatch_prepared',
-      'blocked', 'failed', 'partial', 'done',
+      'pending',
+      'in_progress',
+      'dispatch_prepared',
+      'blocked',
+      'failed',
+      'partial',
+      'done',
     ];
     for (const status of cancellableStatuses) {
       expect(isTransitionAllowed(status, 'cancelled')).toBe(true);

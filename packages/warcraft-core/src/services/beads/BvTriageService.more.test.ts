@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import { BvTriageService } from './BvTriageService.js';
 import { createNoopLogger } from '../../utils/logger.js';
+import { BvTriageService } from './BvTriageService.js';
 
 describe('BvTriageService comprehensive', () => {
   const logger = createNoopLogger();

@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import {
-  deriveTaskFolder,
-  deriveDeterministicLocalId,
-  slugifyIdentifierSegment,
-  slugifyTaskName,
-} from './slug.js';
+import { deriveDeterministicLocalId, deriveTaskFolder, slugifyIdentifierSegment, slugifyTaskName } from './slug.js';
 
 describe('slug extra edge cases', () => {
   describe('slugifyTaskName', () => {

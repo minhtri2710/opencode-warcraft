@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import {
-  appendContextContent,
-  renderContextSection,
-  renderContextSections,
-} from './context-markdown.js';
+import { appendContextContent, renderContextSection, renderContextSections } from './context-markdown.js';
 
 describe('context-markdown property tests', () => {
   it('appendContextContent is idempotent with same content', () => {

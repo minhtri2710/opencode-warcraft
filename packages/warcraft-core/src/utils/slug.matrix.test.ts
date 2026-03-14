@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import {
-  slugifyTaskName,
-  deriveTaskFolder,
-  deriveDeterministicLocalId,
-  slugifyIdentifierSegment,
-} from './slug.js';
+import { deriveDeterministicLocalId, deriveTaskFolder, slugifyIdentifierSegment, slugifyTaskName } from './slug.js';
 
 describe('slug matrix', () => {
   // Test deriveTaskFolder for orders 1-50
@@ -24,13 +19,27 @@ describe('slug matrix', () => {
 
   describe('slugifyTaskName special inputs', () => {
     const INPUTS = [
-      'Simple', 'Two Words', 'three separate words',
-      'UPPERCASE', 'mixedCase', 'with-dashes',
-      'with_underscores', 'with.dots', 'with/slashes',
-      'with (parens)', 'with [brackets]', 'with {braces}',
-      '123numeric', 'end123', 'mid123dle',
-      'café', 'über', 'naïve',
-      'a', 'ab', 'abc',
+      'Simple',
+      'Two Words',
+      'three separate words',
+      'UPPERCASE',
+      'mixedCase',
+      'with-dashes',
+      'with_underscores',
+      'with.dots',
+      'with/slashes',
+      'with (parens)',
+      'with [brackets]',
+      'with {braces}',
+      '123numeric',
+      'end123',
+      'mid123dle',
+      'café',
+      'über',
+      'naïve',
+      'a',
+      'ab',
+      'abc',
       'very long task name that goes on and on and on to test truncation behavior',
     ];
 
@@ -46,8 +55,11 @@ describe('slug matrix', () => {
 
   describe('deriveDeterministicLocalId consistency matrix', () => {
     const INPUTS = [
-      ['a'], ['b'], ['c'],
-      ['a', 'b'], ['b', 'a'], // order matters
+      ['a'],
+      ['b'],
+      ['c'],
+      ['a', 'b'],
+      ['b', 'a'], // order matters
       ['feature', 'task', 'extra'],
       ['same', 'same', 'same'],
     ];

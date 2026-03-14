@@ -19,16 +19,20 @@ import type {
 describe('types', () => {
   it('TaskStatusType includes all expected values', () => {
     const statuses: TaskStatusType[] = [
-      'pending', 'in_progress', 'dispatch_prepared', 'done',
-      'cancelled', 'blocked', 'failed', 'partial',
+      'pending',
+      'in_progress',
+      'dispatch_prepared',
+      'done',
+      'cancelled',
+      'blocked',
+      'failed',
+      'partial',
     ];
     expect(statuses).toHaveLength(8);
   });
 
   it('FeatureStatusType includes all expected values', () => {
-    const statuses: FeatureStatusType[] = [
-      'planning', 'approved', 'executing', 'completed',
-    ];
+    const statuses: FeatureStatusType[] = ['planning', 'approved', 'executing', 'completed'];
     expect(statuses).toHaveLength(4);
   });
 

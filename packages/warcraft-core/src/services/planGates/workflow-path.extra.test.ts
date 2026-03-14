@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'bun:test';
-import { detectWorkflowPath, hasLightweightMiniRecord, countPlanTasks, validateLightweightPlan } from './workflow-path.js';
+import {
+  countPlanTasks,
+  detectWorkflowPath,
+  hasLightweightMiniRecord,
+  validateLightweightPlan,
+} from './workflow-path.js';
 
 describe('workflow-path extra edge cases', () => {
   describe('detectWorkflowPath', () => {
@@ -83,13 +88,13 @@ describe('workflow-path extra edge cases', () => {
     it('reports too many tasks', () => {
       const content = '### 1. A\n### 2. B\n### 3. C\n### 4. D\nImpact: x\nSafety: x\nVerify: x\nRollback: x';
       const errors = validateLightweightPlan(content);
-      expect(errors.some(e => e.includes('task'))).toBe(true);
+      expect(errors.some((e) => e.includes('task'))).toBe(true);
     });
 
     it('reports missing mini-record', () => {
       const content = '### 1. Task';
       const errors = validateLightweightPlan(content);
-      expect(errors.some(e => e.includes('mini-record'))).toBe(true);
+      expect(errors.some((e) => e.includes('mini-record'))).toBe(true);
     });
 
     it('reports both task count and mini-record violations', () => {

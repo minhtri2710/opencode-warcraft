@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import { formatSpecContent } from './specFormatter.js';
 import type { SpecData } from '../types.js';
+import { formatSpecContent } from './specFormatter.js';
 
 describe('specFormatter all field combinations', () => {
   const FEATURE_NAMES = ['simple', 'complex-feature', 'x'];
@@ -9,16 +9,8 @@ describe('specFormatter all field combinations', () => {
     { folder: '05-build', name: 'Build Core Module', order: 5 },
     { folder: '99-final', name: 'Deploy', order: 99 },
   ];
-  const DEP_CONFIGS = [
-    [],
-    ['01-init'],
-    ['01-a', '02-b', '03-c'],
-  ];
-  const PLAN_SECTIONS = [
-    null,
-    'Simple plan',
-    '## Detailed\n\n- Step 1\n- Step 2\n\n```ts\ncode\n```',
-  ];
+  const DEP_CONFIGS = [[], ['01-init'], ['01-a', '02-b', '03-c']];
+  const PLAN_SECTIONS = [null, 'Simple plan', '## Detailed\n\n- Step 1\n- Step 2\n\n```ts\ncode\n```'];
 
   for (const feat of FEATURE_NAMES) {
     for (const task of TASK_CONFIGS) {

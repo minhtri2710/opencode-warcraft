@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'bun:test';
 import {
-  BeadGatewayError,
+  type AuditEntry,
   type BeadArtifactKind,
   type BeadComment,
-  type AuditEntry,
+  BeadGatewayError,
   type BeadGatewayErrorCode,
 } from './BeadGateway.types.js';
 

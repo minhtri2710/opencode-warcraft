@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import type { WarcraftEvent } from './event-logger.js';
-import { WARCRAFT_EVENT_TYPES, createEventLogger, createNoopEventLogger } from './event-logger.js';
+import { createEventLogger, createNoopEventLogger, WARCRAFT_EVENT_TYPES } from './event-logger.js';
 
 describe('event-logger type system', () => {
   it('WARCRAFT_EVENT_TYPES has expected count', () => {

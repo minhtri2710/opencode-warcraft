@@ -14,8 +14,8 @@ function createMockRepository(): BeadsRepository {
     createEpic: () => ({ success: true, value: 'bd-epic-1' }),
     closeBead: () => ({ success: true, value: undefined }),
     reopenBead: () => ({ success: true, value: undefined }),
-    getGateway: () => ({} as any),
-    getViewerGateway: () => ({} as any),
+    getGateway: () => ({}) as any,
+    getViewerGateway: () => ({}) as any,
     getEpicByFeatureName: () => ({ success: true, value: 'bd-epic-1' }),
     getTaskState: () => ({ success: true, value: null }),
     setTaskState: () => ({ success: true, value: undefined }),
@@ -138,7 +138,11 @@ describe('TaskService.update timestamp behavior', () => {
   it('does not override existing completedAt', () => {
     const featureName = 'keep-completed';
     setupFeature(featureName);
-    setupTask(featureName, '01-test', { status: 'in_progress', startedAt: '2024-01-01T00:00:00Z', completedAt: '2024-01-02T00:00:00Z' });
+    setupTask(featureName, '01-test', {
+      status: 'in_progress',
+      startedAt: '2024-01-01T00:00:00Z',
+      completedAt: '2024-01-02T00:00:00Z',
+    });
 
     const stores = createStores(testRoot, 'off', createMockRepository());
     const service = new TaskService(testRoot, stores.taskStore, 'off');
@@ -156,7 +160,9 @@ describe('TaskService.transition edge cases', () => {
     const stores = createStores(testRoot, 'off', createMockRepository());
     const service = new TaskService(testRoot, stores.taskStore, 'off');
 
-    expect(() => service.transition(featureName, '99-nonexistent', 'in_progress')).toThrow("Task '99-nonexistent' not found");
+    expect(() => service.transition(featureName, '99-nonexistent', 'in_progress')).toThrow(
+      "Task '99-nonexistent' not found",
+    );
   });
 
   it('passes extras through to update', () => {
@@ -204,7 +210,9 @@ describe('TaskService.update triggers onTaskStatusChanged', () => {
 
     const stores = createStores(testRoot, 'off', createMockRepository());
     const service = new TaskService(testRoot, stores.taskStore, 'off', {
-      onTaskStatusChanged: () => { callbackCalled = true; },
+      onTaskStatusChanged: () => {
+        callbackCalled = true;
+      },
     });
 
     service.update(featureName, '01-test', { summary: 'Updated summary' });

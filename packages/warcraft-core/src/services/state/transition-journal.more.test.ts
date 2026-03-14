@@ -51,7 +51,13 @@ describe('transition-journal comprehensive', () => {
 
   it('append returns full entry with seq', () => {
     const journal = new TransitionJournal(tempDir);
-    const entry = journal.append({ ts: 1234567890, feature: 'my-feat', task: 'task-1', from: 'pending', to: 'in_progress' });
+    const entry = journal.append({
+      ts: 1234567890,
+      feature: 'my-feat',
+      task: 'task-1',
+      from: 'pending',
+      to: 'in_progress',
+    });
     expect(entry.seq).toBeDefined();
     expect(entry.ts).toBe(1234567890);
     expect(entry.feature).toBe('my-feat');

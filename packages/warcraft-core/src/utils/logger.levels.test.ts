@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { LOG_LEVELS, type LogLevel, type LogEntry, createNoopLogger, createConsoleLogger } from './logger.js';
+import { createConsoleLogger, createNoopLogger, LOG_LEVELS, type LogEntry, type LogLevel } from './logger.js';
 
 describe('logger LOG_LEVELS', () => {
   it('has 4 levels', () => {

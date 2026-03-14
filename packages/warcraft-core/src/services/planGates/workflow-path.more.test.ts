@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { detectWorkflowPath, countPlanTasks, hasLightweightMiniRecord } from './workflow-path.js';
+import { countPlanTasks, detectWorkflowPath, hasLightweightMiniRecord } from './workflow-path.js';
 
 describe('workflow-path more scenarios', () => {
   describe('detectWorkflowPath', () => {

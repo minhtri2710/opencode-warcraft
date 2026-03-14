@@ -26,7 +26,9 @@ describe('runBvCommand extra edge cases', () => {
   });
 
   it('returns error string when executor throws on invalid JSON', () => {
-    const executor: BvCommandExecutor = () => { throw new Error('cmd failed'); };
+    const executor: BvCommandExecutor = () => {
+      throw new Error('cmd failed');
+    };
     const { result, error } = runBvCommand(['test'], { directory: '/tmp', enabled: true, executor });
     expect(result).toBeNull();
     expect(error).toBeDefined();

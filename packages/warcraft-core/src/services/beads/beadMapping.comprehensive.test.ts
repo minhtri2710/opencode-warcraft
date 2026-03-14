@@ -1,11 +1,17 @@
 import { describe, expect, it } from 'bun:test';
-import { getTaskBeadActions, type TaskBeadAction } from './beadMapping.js';
 import type { TaskStatusType } from '../../types.js';
+import { getTaskBeadActions, type TaskBeadAction } from './beadMapping.js';
 
 describe('beadMapping comprehensive', () => {
   const ALL_STATUSES: TaskStatusType[] = [
-    'pending', 'in_progress', 'dispatch_prepared', 'done',
-    'cancelled', 'blocked', 'failed', 'partial',
+    'pending',
+    'in_progress',
+    'dispatch_prepared',
+    'done',
+    'cancelled',
+    'blocked',
+    'failed',
+    'partial',
   ];
 
   describe('every status returns actions', () => {

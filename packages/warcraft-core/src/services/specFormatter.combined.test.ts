@@ -86,11 +86,7 @@ describe('formatSpecContent combined scenarios', () => {
   it('spec with only completed tasks', () => {
     const formatted = formatSpecContent(
       makeSpec({
-        completedTasks: [
-          { name: 'A' },
-          { name: 'B', summary: 'Done' },
-          { name: 'C', summary: '' },
-        ],
+        completedTasks: [{ name: 'A' }, { name: 'B', summary: 'Done' }, { name: 'C', summary: '' }],
       }),
     );
     expect(formatted).toContain('## Completed Tasks');

@@ -13,8 +13,8 @@ function createMockRepository(): BeadsRepository {
     createEpic: () => ({ success: true, value: 'e' }),
     closeBead: () => ({ success: true, value: undefined }),
     reopenBead: () => ({ success: true, value: undefined }),
-    getGateway: () => ({} as any),
-    getViewerGateway: () => ({} as any),
+    getGateway: () => ({}) as any,
+    getViewerGateway: () => ({}) as any,
     getEpicByFeatureName: () => ({ success: true, value: 'e' }),
     getTaskState: () => ({ success: true, value: null }),
     setTaskState: () => ({ success: true, value: undefined }),
@@ -101,7 +101,7 @@ describe('TaskService get/list/getRawStatus', () => {
     const stores = createStores(testRoot, 'off', createMockRepository());
     const service = new TaskService(testRoot, stores.taskStore, 'off');
     const tasks = service.list('sorted');
-    expect(tasks.map(t => t.folder)).toEqual(['01-first', '02-second', '03-third']);
+    expect(tasks.map((t) => t.folder)).toEqual(['01-first', '02-second', '03-third']);
   });
 });
 

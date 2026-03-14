@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'bun:test';
-import { detectContext, findProjectRoot } from './detection.js';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { detectContext, findProjectRoot } from './detection.js';
 
 describe('detection more scenarios', () => {
   describe('detectContext', () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import type { BvCommandExecutor } from './bv-runner.js';
 import { BvTriageService } from './BvTriageService.js';
+import type { BvCommandExecutor } from './bv-runner.js';
 
 function createMockExecutor(result: unknown = null, shouldThrow = false): BvCommandExecutor {
   return () => {

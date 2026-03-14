@@ -1,11 +1,11 @@
-import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
-import { TaskService } from './taskService.js';
-import { FilesystemTaskStore } from './state/fs-task-store.js';
-import { createNoopLogger } from '../utils/logger.js';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { getWarcraftPath, getPlanPath } from '../utils/paths.js';
+import { createNoopLogger } from '../utils/logger.js';
+import { getPlanPath, getWarcraftPath } from '../utils/paths.js';
+import { FilesystemTaskStore } from './state/fs-task-store.js';
+import { TaskService } from './taskService.js';
 
 describe('TaskService manual task creation', () => {
   let tempDir: string;

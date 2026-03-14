@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import { mapBeadStatusToTaskStatus, mapBeadStatusToFeatureStatus } from './beadStatus.js';
-import type { TaskStatusType, FeatureStatusType } from '../../types.js';
+import type { FeatureStatusType, TaskStatusType } from '../../types.js';
+import { mapBeadStatusToFeatureStatus, mapBeadStatusToTaskStatus } from './beadStatus.js';
 
 describe('beadStatus comprehensive', () => {
   const BEAD_STATUSES = ['open', 'closed', 'in_progress'];

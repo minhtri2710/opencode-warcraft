@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'bun:test';
-import { acquireLock, patchJsonLockedSync, writeJsonLockedSync } from './json-lock.js';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { acquireLock, patchJsonLockedSync, writeJsonLockedSync } from './json-lock.js';
 
 describe('json-lock more scenarios', () => {
   let tempDir: string;

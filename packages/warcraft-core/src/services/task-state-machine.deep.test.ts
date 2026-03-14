@@ -1,16 +1,22 @@
 import { describe, expect, it } from 'bun:test';
+import type { TaskStatusType } from '../types.js';
 import {
   ALLOWED_TRANSITIONS,
+  InvalidTransitionError,
   isTransitionAllowed,
   validateTransition,
-  InvalidTransitionError,
 } from './task-state-machine.js';
-import type { TaskStatusType } from '../types.js';
 
 describe('task-state-machine deep validation', () => {
   const ALL_STATES: TaskStatusType[] = [
-    'pending', 'in_progress', 'dispatch_prepared', 'done',
-    'cancelled', 'blocked', 'failed', 'partial',
+    'pending',
+    'in_progress',
+    'dispatch_prepared',
+    'done',
+    'cancelled',
+    'blocked',
+    'failed',
+    'partial',
   ];
 
   describe('ALLOWED_TRANSITIONS', () => {

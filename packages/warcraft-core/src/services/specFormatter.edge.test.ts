@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import { formatSpecContent } from './specFormatter.js';
 import type { SpecData } from '../types.js';
+import { formatSpecContent } from './specFormatter.js';
 
 function makeSpec(overrides: Partial<SpecData> = {}): SpecData {
   return {
@@ -57,9 +57,11 @@ describe('specFormatter edge cases', () => {
   });
 
   it('handles task with high order number', () => {
-    const result = formatSpecContent(makeSpec({
-      task: { folder: '99-final', name: 'Final', order: 99 },
-    }));
+    const result = formatSpecContent(
+      makeSpec({
+        task: { folder: '99-final', name: 'Final', order: 99 },
+      }),
+    );
     expect(result).toContain('99-final');
   });
 
@@ -69,9 +71,11 @@ describe('specFormatter edge cases', () => {
   });
 
   it('handles unicode in context files', () => {
-    const result = formatSpecContent(makeSpec({
-      contextFiles: [{ name: 'notes', content: '日本語テスト 🎉' }],
-    }));
+    const result = formatSpecContent(
+      makeSpec({
+        contextFiles: [{ name: 'notes', content: '日本語テスト 🎉' }],
+      }),
+    );
     expect(result).toContain('🎉');
   });
 });

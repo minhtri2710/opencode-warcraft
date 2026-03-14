@@ -24,20 +24,14 @@ describe('FilesystemFeatureStore', () => {
     });
 
     it('returns true after feature is created', () => {
-      store.create(
-        { name: 'my-feature', status: 'planning', createdAt: '2024-01-01T00:00:00Z' },
-        3,
-      );
+      store.create({ name: 'my-feature', status: 'planning', createdAt: '2024-01-01T00:00:00Z' }, 3);
       expect(store.exists('my-feature')).toBe(true);
     });
   });
 
   describe('create()', () => {
     it('creates feature directory structure with feature.json, context/, and tasks/', () => {
-      const result = store.create(
-        { name: 'my-feature', status: 'planning', createdAt: '2024-01-01T00:00:00Z' },
-        3,
-      );
+      const result = store.create({ name: 'my-feature', status: 'planning', createdAt: '2024-01-01T00:00:00Z' }, 3);
 
       expect(result.name).toBe('my-feature');
       expect(result.status).toBe('planning');
@@ -51,15 +45,9 @@ describe('FilesystemFeatureStore', () => {
     });
 
     it('throws when feature already exists', () => {
-      store.create(
-        { name: 'my-feature', status: 'planning', createdAt: '2024-01-01T00:00:00Z' },
-        3,
-      );
+      store.create({ name: 'my-feature', status: 'planning', createdAt: '2024-01-01T00:00:00Z' }, 3);
       expect(() =>
-        store.create(
-          { name: 'my-feature', status: 'planning', createdAt: '2024-01-02T00:00:00Z' },
-          3,
-        ),
+        store.create({ name: 'my-feature', status: 'planning', createdAt: '2024-01-02T00:00:00Z' }, 3),
       ).toThrow("Feature 'my-feature' already exists");
     });
 
@@ -72,24 +60,15 @@ describe('FilesystemFeatureStore', () => {
     });
 
     it('derives epicBeadId deterministically from name', () => {
-      const r1 = store.create(
-        { name: 'deterministic-test', status: 'planning', createdAt: '2024-01-01T00:00:00Z' },
-        1,
-      );
+      const r1 = store.create({ name: 'deterministic-test', status: 'planning', createdAt: '2024-01-01T00:00:00Z' }, 1);
       // Clean up and recreate to verify determinism
       fs.rmSync(path.join(tempDir, 'docs', 'deterministic-test'), { recursive: true, force: true });
-      const r2 = store.create(
-        { name: 'deterministic-test', status: 'planning', createdAt: '2024-01-02T00:00:00Z' },
-        1,
-      );
+      const r2 = store.create({ name: 'deterministic-test', status: 'planning', createdAt: '2024-01-02T00:00:00Z' }, 1);
       expect(r1.epicBeadId).toBe(r2.epicBeadId);
     });
 
     it('sets createdAt from input', () => {
-      const result = store.create(
-        { name: 'ts-feature', status: 'planning', createdAt: '2025-06-15T12:00:00Z' },
-        3,
-      );
+      const result = store.create({ name: 'ts-feature', status: 'planning', createdAt: '2025-06-15T12:00:00Z' }, 3);
       expect(result.createdAt).toBe('2025-06-15T12:00:00Z');
     });
   });
@@ -100,10 +79,7 @@ describe('FilesystemFeatureStore', () => {
     });
 
     it('returns stored feature data', () => {
-      store.create(
-        { name: 'my-feature', status: 'planning', createdAt: '2024-01-01T00:00:00Z', ticket: 'ABC-1' },
-        3,
-      );
+      store.create({ name: 'my-feature', status: 'planning', createdAt: '2024-01-01T00:00:00Z', ticket: 'ABC-1' }, 3);
       const result = store.get('my-feature');
       expect(result).not.toBeNull();
       expect(result!.name).toBe('my-feature');
@@ -136,10 +112,7 @@ describe('FilesystemFeatureStore', () => {
 
   describe('save()', () => {
     it('persists updated feature data', () => {
-      const created = store.create(
-        { name: 'save-test', status: 'planning', createdAt: '2024-01-01T00:00:00Z' },
-        3,
-      );
+      const created = store.create({ name: 'save-test', status: 'planning', createdAt: '2024-01-01T00:00:00Z' }, 3);
 
       const updated: FeatureJson = { ...created, status: 'approved', approvedAt: '2024-01-02T00:00:00Z' };
       store.save(updated);
@@ -152,10 +125,7 @@ describe('FilesystemFeatureStore', () => {
 
   describe('complete() and reopen()', () => {
     it('complete persists the feature (same as save)', () => {
-      const created = store.create(
-        { name: 'complete-test', status: 'planning', createdAt: '2024-01-01T00:00:00Z' },
-        3,
-      );
+      const created = store.create({ name: 'complete-test', status: 'planning', createdAt: '2024-01-01T00:00:00Z' }, 3);
 
       const completed: FeatureJson = { ...created, status: 'completed', completedAt: '2024-01-02T00:00:00Z' };
       store.complete(completed);
@@ -166,10 +136,7 @@ describe('FilesystemFeatureStore', () => {
     });
 
     it('reopen persists the feature (same as save)', () => {
-      const created = store.create(
-        { name: 'reopen-test', status: 'completed', createdAt: '2024-01-01T00:00:00Z' },
-        3,
-      );
+      const created = store.create({ name: 'reopen-test', status: 'completed', createdAt: '2024-01-01T00:00:00Z' }, 3);
 
       const reopened: FeatureJson = { ...created, status: 'executing' };
       store.reopen(reopened);

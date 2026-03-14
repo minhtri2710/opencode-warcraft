@@ -6,8 +6,14 @@ import { mapBeadStatusToTaskStatus } from './beadStatus.js';
 describe('beadMapping comprehensive', () => {
   describe('getTaskBeadActions for all statuses', () => {
     const ALL_STATUSES: TaskStatusType[] = [
-      'pending', 'in_progress', 'dispatch_prepared', 'done',
-      'cancelled', 'blocked', 'failed', 'partial',
+      'pending',
+      'in_progress',
+      'dispatch_prepared',
+      'done',
+      'cancelled',
+      'blocked',
+      'failed',
+      'partial',
     ];
 
     for (const status of ALL_STATUSES) {

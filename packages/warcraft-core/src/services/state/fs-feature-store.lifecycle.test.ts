@@ -1,8 +1,8 @@
-import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
-import { FilesystemFeatureStore } from './fs-feature-store.js';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { FilesystemFeatureStore } from './fs-feature-store.js';
 
 describe('FilesystemFeatureStore lifecycle', () => {
   let tempDir: string;
@@ -50,7 +50,12 @@ describe('FilesystemFeatureStore lifecycle', () => {
   });
 
   it('complete marks feature', () => {
-    const feat = { name: 'comp', status: 'completed' as const, createdAt: new Date().toISOString(), completedAt: new Date().toISOString() };
+    const feat = {
+      name: 'comp',
+      status: 'completed' as const,
+      createdAt: new Date().toISOString(),
+      completedAt: new Date().toISOString(),
+    };
     store.create({ name: 'comp', status: 'planning', createdAt: new Date().toISOString() });
     store.complete(feat);
     const got = store.get('comp');
@@ -59,7 +64,12 @@ describe('FilesystemFeatureStore lifecycle', () => {
 
   it('reopen reopens completed feature', () => {
     store.create({ name: 'reop', status: 'planning', createdAt: new Date().toISOString() });
-    store.complete({ name: 'reop', status: 'completed', createdAt: new Date().toISOString(), completedAt: new Date().toISOString() });
+    store.complete({
+      name: 'reop',
+      status: 'completed',
+      createdAt: new Date().toISOString(),
+      completedAt: new Date().toISOString(),
+    });
     store.reopen({ name: 'reop', status: 'executing', createdAt: new Date().toISOString() });
     const got = store.get('reop');
     expect(got!.status).toBe('executing');

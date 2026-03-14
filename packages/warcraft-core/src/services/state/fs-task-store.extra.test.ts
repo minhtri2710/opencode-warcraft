@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { FilesystemTaskStore } from './fs-task-store.js';
 import type { TaskStatus } from '../../types.js';
+import { FilesystemTaskStore } from './fs-task-store.js';
 
 describe('FilesystemTaskStore extra', () => {
   let tempDir: string;

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
+import { createConsoleLogger, createNoopLogger } from '../utils/logger.js';
 import { ConfigService } from './configService.js';
-import { createNoopLogger, createConsoleLogger } from '../utils/logger.js';
 
 describe('configService deep', () => {
   it('get with default logger returns valid config', () => {

@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'bun:test';
 import {
-  ok, degraded, fatal,
-  diagnostic, isUsable, worstSeverity,
-  type Diagnostic, type Severity,
+  type Diagnostic,
+  degraded,
+  diagnostic,
+  fatal,
+  isUsable,
+  ok,
+  type Severity,
+  worstSeverity,
 } from './outcomes.js';
 
 describe('outcomes worstSeverity matrix', () => {

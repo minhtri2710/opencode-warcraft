@@ -1,17 +1,17 @@
 import { describe, expect, it } from 'bun:test';
+import type { BeadsMode } from '../types.js';
 import {
-  sanitizeName,
-  getWarcraftDir,
-  getWarcraftPath,
+  getContextPath,
   getFeaturePath,
   getPlanPath,
-  getTasksPath,
   getTaskPath,
-  getTaskStatusPath,
   getTaskReportPath,
-  getContextPath,
+  getTaskStatusPath,
+  getTasksPath,
+  getWarcraftDir,
+  getWarcraftPath,
+  sanitizeName,
 } from './paths.js';
-import type { BeadsMode } from '../types.js';
 
 describe('paths exhaustive modes', () => {
   const MODES: BeadsMode[] = ['on', 'off'];

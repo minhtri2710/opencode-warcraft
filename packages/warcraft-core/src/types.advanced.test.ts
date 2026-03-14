@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'bun:test';
 import type {
+  AgentModelConfig,
+  BeadsMode,
   FeatureJson,
+  SpecData,
   TaskStatus,
   TaskStatusType,
-  BeadsMode,
-  SpecData,
-  AgentModelConfig,
   WarcraftConfig,
 } from './types.js';
 
@@ -61,9 +61,7 @@ describe('types advanced validation', () => {
           { name: 'decisions', content: 'Use TS' },
           { name: 'learnings', content: 'Perf matters' },
         ],
-        completedTasks: [
-          { name: 'Init', summary: 'Initialized' },
-        ],
+        completedTasks: [{ name: 'Init', summary: 'Initialized' }],
       };
       expect(spec.featureName).toBe('feat');
       expect(spec.task.folder).toBe('01-a');

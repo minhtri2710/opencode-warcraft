@@ -1,16 +1,16 @@
 import { describe, expect, it } from 'bun:test';
+import type { BeadsMode } from '../types.js';
 import {
-  getWarcraftPath,
+  getContextPath,
   getFeaturePath,
   getPlanPath,
-  getTasksPath,
   getTaskPath,
-  getTaskStatusPath,
   getTaskReportPath,
-  getContextPath,
+  getTaskStatusPath,
+  getTasksPath,
+  getWarcraftPath,
   sanitizeName,
 } from './paths.js';
-import type { BeadsMode } from '../types.js';
 
 describe('paths determinism matrix', () => {
   const MODES: BeadsMode[] = ['off'];

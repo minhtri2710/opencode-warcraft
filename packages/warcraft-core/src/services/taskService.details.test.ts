@@ -1,11 +1,11 @@
-import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
-import { TaskService, TASK_STATUS_SCHEMA_VERSION } from './taskService.js';
-import { FilesystemTaskStore } from './state/fs-task-store.js';
-import { createNoopLogger } from '../utils/logger.js';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { getWarcraftPath, getPlanPath } from '../utils/paths.js';
+import { createNoopLogger } from '../utils/logger.js';
+import { getPlanPath, getWarcraftPath } from '../utils/paths.js';
+import { FilesystemTaskStore } from './state/fs-task-store.js';
+import { TASK_STATUS_SCHEMA_VERSION, TaskService } from './taskService.js';
 
 describe('TaskService TASK_STATUS_SCHEMA_VERSION', () => {
   it('is 1', () => {
@@ -121,10 +121,13 @@ describe('TaskService getRunnableTasks detail', () => {
   });
 
   it('all categories sum to total', () => {
-    writePlan('sum', `# Plan\n\n### 1. A\nDepends on: none\nA\n\n### 2. B\nDepends on: 1\nB\n\n### 3. C\nDepends on: 1\nC\n`);
+    writePlan(
+      'sum',
+      `# Plan\n\n### 1. A\nDepends on: none\nA\n\n### 2. B\nDepends on: 1\nB\n\n### 3. C\nDepends on: 1\nC\n`,
+    );
     service.sync('sum');
     service.update('sum', service.list('sum')[0].folder, { status: 'done', summary: 'A' });
-    
+
     const result = service.getRunnableTasks('sum');
     const total = result.runnable.length + result.blocked.length + result.completed.length + result.inProgress.length;
     expect(total).toBe(3);

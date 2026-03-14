@@ -1,11 +1,11 @@
-import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
-import { FeatureService } from './featureService.js';
-import { FilesystemFeatureStore } from './state/fs-feature-store.js';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { getWarcraftPath } from '../utils/paths.js';
 import type { FeatureStatusType } from '../types.js';
+import { getWarcraftPath } from '../utils/paths.js';
+import { FeatureService } from './featureService.js';
+import { FilesystemFeatureStore } from './state/fs-feature-store.js';
 
 describe('FeatureService status transition matrix', () => {
   let tempDir: string;
@@ -28,12 +28,12 @@ describe('FeatureService status transition matrix', () => {
         const service = new FeatureService(tempDir, store, 'off');
         const name = `feat-${fromStatus}-${toStatus}`;
         service.create(name);
-        
+
         // Set initial status
         if (fromStatus !== 'planning') {
           service.updateStatus(name, fromStatus);
         }
-        
+
         // Transition
         const updated = service.updateStatus(name, toStatus);
         expect(updated.status).toBe(toStatus);

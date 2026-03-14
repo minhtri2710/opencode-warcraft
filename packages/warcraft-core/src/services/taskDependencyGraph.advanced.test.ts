@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import { computeRunnableAndBlocked, type TaskWithDeps } from './taskDependencyGraph.js';
 import type { TaskStatusType } from '../types.js';
+import { computeRunnableAndBlocked, type TaskWithDeps } from './taskDependencyGraph.js';
 
 function task(folder: string, status: TaskStatusType, deps?: string[]): TaskWithDeps {
   return { folder, status, dependsOn: deps };
@@ -54,10 +54,7 @@ describe('taskDependencyGraph advanced patterns', () => {
   });
 
   it('cancelled task blocks downstream', () => {
-    const result = computeRunnableAndBlocked([
-      task('01-a', 'cancelled'),
-      task('02-b', 'pending', ['01-a']),
-    ]);
+    const result = computeRunnableAndBlocked([task('01-a', 'cancelled'), task('02-b', 'pending', ['01-a'])]);
     expect(result.blocked['02-b']).toBeDefined();
   });
 
@@ -72,17 +69,12 @@ describe('taskDependencyGraph advanced patterns', () => {
   });
 
   it('undefined deps: implicit sequential', () => {
-    const result = computeRunnableAndBlocked([
-      task('01-a', 'pending', undefined),
-      task('02-b', 'pending', undefined),
-    ]);
+    const result = computeRunnableAndBlocked([task('01-a', 'pending', undefined), task('02-b', 'pending', undefined)]);
     expect(result.runnable.length).toBeGreaterThanOrEqual(1);
   });
 
   it('empty deps array: runnable', () => {
-    const result = computeRunnableAndBlocked([
-      task('01-a', 'pending', []),
-    ]);
+    const result = computeRunnableAndBlocked([task('01-a', 'pending', [])]);
     expect(result.runnable).toContain('01-a');
   });
 
@@ -96,9 +88,7 @@ describe('taskDependencyGraph advanced patterns', () => {
   });
 
   it('20 independent tasks: all runnable', () => {
-    const tasks = Array.from({ length: 20 }, (_, i) => 
-      task(`${String(i + 1).padStart(2, '0')}-task`, 'pending', [])
-    );
+    const tasks = Array.from({ length: 20 }, (_, i) => task(`${String(i + 1).padStart(2, '0')}-task`, 'pending', []));
     const result = computeRunnableAndBlocked(tasks);
     expect(result.runnable.length).toBe(20);
   });
