@@ -94,6 +94,16 @@ describe('formatSpecContent structure', () => {
     expect(formatted).toContain('- Setup: Created project skeleton');
   });
 
+  it('renders completed tasks without summary gracefully', () => {
+    const specData = createSpecData({
+      completedTasks: [{ name: 'Setup', summary: undefined as unknown as string }],
+    });
+
+    const formatted = formatSpecContent(specData);
+    expect(formatted).toContain('- Setup');
+    expect(formatted).not.toContain('undefined');
+  });
+
   it('infers testing task type from plan section', () => {
     const specData = createSpecData({
       planSection: '- Test: src/utils.test.ts',

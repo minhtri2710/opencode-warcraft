@@ -78,7 +78,7 @@ export function formatSpecContent(data: SpecData): string {
   }
 
   if (completedTasks.length > 0) {
-    const completedLines = completedTasks.map((t) => `- ${t.name}: ${t.summary}`);
+    const completedLines = completedTasks.map((t) => (t.summary ? `- ${t.name}: ${t.summary}` : `- ${t.name}`));
     specLines.push('## Completed Tasks', '', ...completedLines, '');
   }
 
