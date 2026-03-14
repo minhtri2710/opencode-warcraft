@@ -122,6 +122,20 @@ describe('ContextService', () => {
       expect(compiled).toContain('## execution-decisions\n\n- Parallelize task execution');
       expect(compiled).not.toContain('## Execution Decisions');
     });
+
+    it('strips BOM characters from context file content during compile', () => {
+      const featureName = 'bom-test';
+      setupFeature(featureName);
+
+      // Write a context file with BOM prefix
+      const contextPath = path.join(TEST_DIR, '.beads/artifacts', featureName, 'context');
+      fs.mkdirSync(contextPath, { recursive: true });
+      fs.writeFileSync(path.join(contextPath, 'notes.md'), '\uFEFFSome notes with BOM');
+
+      const compiled = service.compile(featureName);
+      expect(compiled).not.toContain('\uFEFF');
+      expect(compiled).toContain('Some notes with BOM');
+    });
   });
 
   describe('stats()', () => {
