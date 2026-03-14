@@ -43,10 +43,10 @@ Plan-first development: Write plan → User reviews → Approve → Execute task
 4. Revise plan → User approves
 5. \`warcraft_tasks_sync()\` - Generate tasks from plan
 6. \`warcraft_worktree_create(task)\` → issue returned \`task()\` call → \`warcraft_worktree_commit(task, summary)\`
-7. \`warcraft_merge(task)\` - Merge task branch into main (when ready)
+7. \`warcraft_merge(task)\` - Integrate completed task work (when ready)
 
-**Important:** \`warcraft_worktree_commit\` commits changes to task branch but does NOT merge.
-Use \`warcraft_merge\` to explicitly integrate changes. Worktrees persist until manually removed.
+**Important:** \`warcraft_worktree_commit\` finalizes work but does NOT merge.
+Use \`warcraft_merge\` to explicitly integrate changes.
 
 ### Delegated Execution
 
