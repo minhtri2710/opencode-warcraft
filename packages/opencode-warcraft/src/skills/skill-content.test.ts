@@ -118,6 +118,7 @@ describe('skill content', () => {
 
     expect(subagentDrivenSkill).toBeDefined();
     expect(subagentDrivenSkill!.template).not.toContain('Set up isolated workspace before starting');
-    expect(subagentDrivenSkill!.template).toContain('Set up the Warcraft-managed workspace before starting');
+    expect(subagentDrivenSkill!.template).not.toContain('REQUIRED: Set up');
+    expect(subagentDrivenSkill!.template).toContain('worktree mode only');
   });
 });
