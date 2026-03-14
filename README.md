@@ -565,7 +565,7 @@ opencode warcraft_feature_complete
 
 #### Merge & Batch
 
-- **`warcraft_merge`**: Merge task branch into main with optional verification
+- **`warcraft_merge`**: Integrate completed task work with optional verification
 - **`warcraft_batch_execute`**: Preview or execute multiple tasks in parallel
 
 ---
