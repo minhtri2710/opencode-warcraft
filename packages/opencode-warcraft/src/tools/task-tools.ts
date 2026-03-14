@@ -332,6 +332,14 @@ export class TaskTools {
         const planPath = planService.write(feature, planScaffold);
         featureService.patchMetadata(feature, { workflowPath: resultingWorkflowPath });
         const preview = taskService.previewSync(feature);
+        const remainingManualTasks = preview.manual;
+        const taskExpandArgs: { feature: string; tasks: string[]; mode: 'lightweight' | 'standard' } | null =
+          remainingManualTasks.length > 0
+            ? { feature, tasks: remainingManualTasks, mode: resultingWorkflowPath === 'standard' ? 'standard' : 'lightweight' }
+            : null;
+        const promotionFlow = taskExpandArgs
+          ? buildPendingManualPromotionFlow(taskExpandArgs, { feature }, { feature, mode: 'sync' })
+          : buildDraftPlanPromotionFlow({ feature }, { feature, mode: 'sync' });
 
         return toolSuccess({
           feature,
@@ -344,7 +352,9 @@ export class TaskTools {
           planWriteArgs: { feature, content: planScaffold },
           planApproveArgs: { feature },
           taskSyncArgs: { feature, mode: 'sync' },
-          promotionFlow: buildDraftPlanPromotionFlow({ feature }, { feature, mode: 'sync' }),
+          remainingManualTasks,
+          taskExpandArgs,
+          promotionFlow,
           syncPreview: {
             wouldCreate: preview.created,
             wouldRemove: preview.removed,
@@ -354,7 +364,9 @@ export class TaskTools {
           },
           message:
             `Expanded ${selectedTasks.length} pending manual task(s) into ${existingPlan ? 'the existing draft plan' : `a ${planScaffoldMode} reviewed plan`} at ${planPath}. ` +
-            'Review or refine the plan, then run warcraft_plan_approve and warcraft_tasks_sync to apply the previewed reconciliations.',
+            (remainingManualTasks.length > 0
+              ? `There are still ${remainingManualTasks.length} pending manual task(s) outside the draft plan. Use warcraft_task_expand again before approval so the reviewed plan stays complete.`
+              : 'Review or refine the plan, then run warcraft_plan_approve and warcraft_tasks_sync to apply the previewed reconciliations.'),
         });
       },
     });

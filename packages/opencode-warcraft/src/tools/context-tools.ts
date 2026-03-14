@@ -9,7 +9,7 @@ import type {
   TaskService,
   WorktreeService,
 } from 'warcraft-core';
-import { computeTrustMetrics } from 'warcraft-core';
+import { computeTrustMetrics, detectWorkflowPath } from 'warcraft-core';
 import type { BlockedResult } from '../types.js';
 import { toolError, toolSuccess } from '../types.js';
 import { buildPlanScaffold } from './manual-plan-scaffold.js';
@@ -358,7 +358,13 @@ export class ContextTools {
       runnableTasks: string[],
       workflowPath?: string,
       workflowRecommendation?: string,
+      pendingPromotionTasks: string[] = [],
     ): string => {
+      if (pendingPromotionTasks.length > 0 && planStatus === 'draft') {
+        return pendingPromotionTasks.length === 1
+          ? 'This draft plan still has a pending manual task outside the reviewed plan. Use warcraft_task_expand to merge it into the draft before approval.'
+          : 'This draft plan still has pending manual tasks outside the reviewed plan. Use warcraft_task_expand to merge them into the draft before approval.';
+      }
       if (taskList.length === 0) {
         if (workflowPath === 'instant' || workflowRecommendation === 'instant') {
           return 'Create a direct task with warcraft_task_create, include a self-contained description, then dispatch it with warcraft_worktree_create.';
@@ -429,10 +435,24 @@ export class ContextTools {
       : workflowPath === 'instant'
         ? 'instant'
         : 'none';
+    const draftPreviewManualTasks = (() => {
+      if (!plan || planStatus !== 'draft' || typeof taskService.previewSync !== 'function') return [] as string[];
+      try {
+        return taskService.previewSync(featureName).manual;
+      } catch {
+        return [] as string[];
+      }
+    })();
     const pendingManualTasks =
-      !plan && (workflowPath === 'instant' || workflowRecommendation === 'lightweight' || workflowRecommendation === 'standard')
+      (!plan && (workflowPath === 'instant' || workflowRecommendation === 'lightweight' || workflowRecommendation === 'standard')) ||
+      (planStatus === 'draft' && draftPreviewManualTasks.length > 0)
         ? tasks
-            .filter((task) => task.origin === 'manual' && task.status === 'pending')
+            .filter(
+              (task) =>
+                task.origin === 'manual' &&
+                task.status === 'pending' &&
+                (!plan || draftPreviewManualTasks.includes(task.folder)),
+            )
             .map((task) => {
               const rawStatus = taskService.getRawStatus(featureName, task.folder);
               return {
@@ -443,13 +463,17 @@ export class ContextTools {
             })
         : [];
     const planScaffoldMode: 'lightweight' | 'standard' | null =
-      pendingManualTasks.length > 2 || workflowRecommendation === 'standard'
-        ? 'standard'
-        : pendingManualTasks.length > 1 || workflowRecommendation === 'lightweight'
-          ? 'lightweight'
-          : null;
+      plan && planStatus === 'draft'
+        ? detectWorkflowPath(plan.content) === 'standard'
+          ? 'standard'
+          : 'lightweight'
+        : pendingManualTasks.length > 2 || workflowRecommendation === 'standard'
+          ? 'standard'
+          : pendingManualTasks.length > 1 || workflowRecommendation === 'lightweight'
+            ? 'lightweight'
+            : null;
     const planScaffold =
-      planScaffoldMode && pendingManualTasks.length > 0
+      !plan && planScaffoldMode && pendingManualTasks.length > 0
         ? buildPlanScaffold(featureName, planScaffoldMode, pendingManualTasks)
         : null;
     const planWriteArgs = planScaffold ? { feature: featureName, content: planScaffold } : null;
@@ -541,7 +565,14 @@ export class ContextTools {
       taskSyncArgs,
       taskExpandArgs,
       promotionFlow,
-      nextAction: getNextAction(planStatus, tasksSummary, runnable, workflowPath, workflowRecommendation),
+      nextAction: getNextAction(
+        planStatus,
+        tasksSummary,
+        runnable,
+        workflowPath,
+        workflowRecommendation,
+        pendingManualTasks.map((task) => task.folder),
+      ),
     };
   }
 

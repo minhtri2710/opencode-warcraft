@@ -442,6 +442,55 @@ describe('ContextTools', () => {
       ]);
     });
 
+    it('returns taskExpandArgs for pending manual tasks that still sit outside a draft plan', async () => {
+      const featureService = {
+        get: () => ({
+          name: 'test-feature',
+          status: 'planning',
+          workflowPath: 'lightweight',
+          ticket: null,
+          createdAt: '2025-01-01T00:00:00Z',
+        }),
+        list: () => ['test-feature'],
+      } as unknown as FeatureService;
+
+      const planService = {
+        read: () => ({ content: '# Plan\n\nWorkflow Path: lightweight\n\n## Tasks', status: 'planning' }),
+      } as unknown as PlanService;
+
+      const taskService = {
+        list: () => [
+          { folder: '01-tiny-fix', name: 'Tiny Fix', status: 'pending', origin: 'manual' },
+          { folder: '02-second-tiny-fix', name: 'Second Tiny Fix', status: 'pending', origin: 'manual' },
+        ],
+        previewSync: () => ({ created: [], removed: [], kept: [], reconciled: [], manual: ['01-tiny-fix'] }),
+        getRawStatus: (_feature: string, folder: string) => ({
+          planTitle: folder === '01-tiny-fix' ? 'Tiny Fix' : 'Second Tiny Fix',
+          brief: 'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
+        }),
+        computeRunnableStatus: () => ({ runnable: ['01-tiny-fix', '02-second-tiny-fix'], blocked: {} }),
+      } as unknown as TaskService;
+
+      const result = await getStatusHealth({ featureService, planService, taskService });
+
+      expect(result.success).toBe(true);
+      expect(result.data.planScaffold).toBeNull();
+      expect(result.data.taskExpandArgs).toEqual({
+        feature: 'test-feature',
+        tasks: ['01-tiny-fix'],
+        mode: 'lightweight',
+      });
+      expect(result.data.promotionFlow?.[0]).toEqual({
+        type: 'tool',
+        tool: 'warcraft_task_expand',
+        args: { feature: 'test-feature', tasks: ['01-tiny-fix'], mode: 'lightweight' },
+        purpose: 'Promote the pending manual tasks into a reviewed draft plan.',
+      });
+      expect(result.data.nextAction).toBe(
+        'This draft plan still has a pending manual task outside the reviewed plan. Use warcraft_task_expand to merge it into the draft before approval.',
+      );
+    });
+
     it('returns taskSyncArgs when an approved plan exists but tasks have not been generated yet', async () => {
       const featureService = {
         get: () => ({

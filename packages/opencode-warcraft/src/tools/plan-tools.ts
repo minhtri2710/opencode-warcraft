@@ -9,7 +9,7 @@ import {
 import type { ToolContext } from '../types.js';
 import { toolError, toolSuccess } from '../types.js';
 import { buildPlanScaffold } from './manual-plan-scaffold.js';
-import { buildApprovedPlanSyncFlow, buildDraftPlanPromotionFlow } from './promotion-flow.js';
+import { buildApprovedPlanSyncFlow, buildDraftPlanPromotionFlow, buildPendingManualPromotionFlow } from './promotion-flow.js';
 import { resolveFeatureInput } from './tool-input.js';
 export interface PlanToolsDependencies {
   featureService: FeatureService;
@@ -99,18 +99,32 @@ export class PlanTools {
 
         captureSession(feature, toolContext);
         const planPath = planService.write(feature, planContent);
+        const workflowPath = detectWorkflowPath(planContent);
         updateFeatureMetadata(feature, {
-          workflowPath: detectWorkflowPath(planContent),
+          workflowPath,
         });
+        const preview =
+          typeof taskService.previewSync === 'function'
+            ? taskService.previewSync(feature)
+            : { created: [], removed: [], kept: [], reconciled: [], manual: [] };
+        const remainingManualTasks = preview.manual;
+        const taskExpandArgs: { feature: string; tasks: string[]; mode: 'lightweight' | 'standard' } | null =
+          remainingManualTasks.length > 0
+            ? { feature, tasks: remainingManualTasks, mode: workflowPath === 'standard' ? 'standard' : 'lightweight' }
+            : null;
         return toolSuccess({
-          workflowPath: detectWorkflowPath(planContent),
+          workflowPath,
           generatedFromManualTasks,
           sourceTaskCount,
           planScaffoldMode: generatedFromManualTasks ? scaffoldMode : null,
           content: planContent,
           planApproveArgs: { feature },
           taskSyncArgs: { feature, mode: 'sync' },
-          promotionFlow: buildDraftPlanPromotionFlow({ feature }, { feature, mode: 'sync' }),
+          remainingManualTasks,
+          taskExpandArgs,
+          promotionFlow: taskExpandArgs
+            ? buildPendingManualPromotionFlow(taskExpandArgs, { feature }, { feature, mode: 'sync' })
+            : buildDraftPlanPromotionFlow({ feature }, { feature, mode: 'sync' }),
           message: `Plan written to ${planPath}.`,
         });
       },

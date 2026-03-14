@@ -683,13 +683,19 @@ describe('TaskTools', () => {
 
       expect(parsed.success).toBe(true);
       expect(parsed.data.mergedIntoExistingPlan).toBe(true);
+      expect(parsed.data.remainingManualTasks).toEqual(['01-tiny-fix']);
+      expect(parsed.data.taskExpandArgs).toEqual({
+        feature: 'test-feature',
+        tasks: ['01-tiny-fix'],
+        mode: 'lightweight',
+      });
       expect(parsed.data.planApproveArgs).toEqual({ feature: 'test-feature' });
       expect(parsed.data.taskSyncArgs).toEqual({ feature: 'test-feature', mode: 'sync' });
-      expect(parsed.data.promotionFlow?.[1]).toEqual({
+      expect(parsed.data.promotionFlow?.[0]).toEqual({
         type: 'tool',
-        tool: 'warcraft_plan_approve',
-        args: { feature: 'test-feature' },
-        purpose: 'Approve the reviewed plan once it is ready to execute.',
+        tool: 'warcraft_task_expand',
+        args: { feature: 'test-feature', tasks: ['01-tiny-fix'], mode: 'lightweight' },
+        purpose: 'Promote the pending manual tasks into a reviewed draft plan.',
       });
       expect(parsed.data.planScaffold).toContain('### 1. Existing Task');
       expect(parsed.data.planScaffold).toContain('### 2. Second Tiny Fix');

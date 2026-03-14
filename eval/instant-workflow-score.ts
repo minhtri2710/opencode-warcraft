@@ -828,6 +828,87 @@ async function checkStatusReturnsPromotionFlowForEscalatedInstantWork(): Promise
   };
 }
 
+async function checkStatusDraftPlanSurfacesRemainingManualPromotion(): Promise<CheckResult> {
+  const ctx = createWorkspace();
+  ctx.featureService.create('doc-tune');
+  ctx.planService.write(
+    'doc-tune',
+    [
+      '# doc-tune',
+      '',
+      'Workflow Path: lightweight',
+      '',
+      '## Discovery',
+      '',
+      'Impact: existing plan',
+      'Safety: low',
+      'Verify: tests',
+      'Rollback: revert',
+      '',
+      '## Non-Goals',
+      '',
+      '- Keep scope tight.',
+      '',
+      '## Ghost Diffs',
+      '',
+      '- Skip alternatives for now.',
+      '',
+      '## Tasks',
+      '',
+      '### 1. Existing Task',
+      '',
+      '**Depends on**: none',
+      '',
+      '**What to do**:',
+      '- Keep existing behavior.',
+      '',
+      '**References**:',
+      '- Existing context.',
+      '',
+      '**Verify**:',
+      '- [ ] Run tests',
+      '',
+    ].join('\n'),
+  );
+  const createTask = ctx.taskTools.createTaskTool((name?: string) => name || 'doc-tune');
+  await createTask.execute({
+    feature: 'doc-tune',
+    name: 'Tiny Fix',
+    priority: 3,
+    description:
+      'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
+  } as any);
+  await createTask.execute({
+    feature: 'doc-tune',
+    name: 'Second Tiny Fix',
+    priority: 3,
+    description:
+      'Background: second tiny change. Impact: help text only. Safety: low. Verify: prompt tests. Rollback: revert.',
+  } as any);
+  await ctx.taskTools.expandTaskTool((name?: string) => name || 'doc-tune').execute({
+    feature: 'doc-tune',
+    tasks: ['02-second-tiny-fix'],
+  } as any);
+
+  const raw = (await ctx.contextTools.getStatusTool((name?: string) => name || 'doc-tune').execute({
+    feature: 'doc-tune',
+  })) as string;
+  const parsed = parseToolResponse(raw);
+  const pass =
+    parsed.data?.taskExpandArgs?.feature === 'doc-tune' &&
+    JSON.stringify(parsed.data?.taskExpandArgs?.tasks) === JSON.stringify(['01-tiny-fix']) &&
+    parsed.data?.taskExpandArgs?.mode === 'lightweight' &&
+    matchesPendingManualPromotionFlow(parsed.data?.promotionFlow, 'doc-tune', ['01-tiny-fix'], 'lightweight') &&
+    /outside the reviewed plan/i.test(String(parsed.data?.nextAction || ''));
+  return {
+    id: 'status-draft-plan-remaining-manual-promotion',
+    pass,
+    detail: pass
+      ? 'status keeps steering draft plans toward expanding remaining manual tasks before approval'
+      : `status=${JSON.stringify(parsed.data ?? null)}`,
+  };
+}
+
 async function checkStatusReturnsTaskSyncArgsAfterApproval(): Promise<CheckResult> {
   const ctx = createWorkspace();
   ctx.featureService.create('doc-tune');
@@ -1182,6 +1263,84 @@ async function checkTaskExpandReturnsPromotionFlow(): Promise<CheckResult> {
   };
 }
 
+async function checkTaskExpandReturnsFollowUpExpansionForRemainingManualTasks(): Promise<CheckResult> {
+  const ctx = createWorkspace();
+  ctx.featureService.create('doc-tune');
+  ctx.planService.write(
+    'doc-tune',
+    [
+      '# doc-tune',
+      '',
+      'Workflow Path: lightweight',
+      '',
+      '## Discovery',
+      '',
+      'Impact: existing plan',
+      'Safety: low',
+      'Verify: tests',
+      'Rollback: revert',
+      '',
+      '## Non-Goals',
+      '',
+      '- Keep scope tight.',
+      '',
+      '## Ghost Diffs',
+      '',
+      '- Skip alternatives for now.',
+      '',
+      '## Tasks',
+      '',
+      '### 1. Existing Task',
+      '',
+      '**Depends on**: none',
+      '',
+      '**What to do**:',
+      '- Keep existing behavior.',
+      '',
+      '**References**:',
+      '- Existing context.',
+      '',
+      '**Verify**:',
+      '- [ ] Run tests',
+      '',
+    ].join('\n'),
+  );
+  const createTask = ctx.taskTools.createTaskTool((name?: string) => name || 'doc-tune');
+  await createTask.execute({
+    feature: 'doc-tune',
+    name: 'Tiny Fix',
+    priority: 3,
+    description:
+      'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
+  } as any);
+  await createTask.execute({
+    feature: 'doc-tune',
+    name: 'Second Tiny Fix',
+    priority: 3,
+    description:
+      'Background: second tiny change. Impact: help text only. Safety: low. Verify: prompt tests. Rollback: revert.',
+  } as any);
+
+  const raw = (await ctx.taskTools.expandTaskTool((name?: string) => name || 'doc-tune').execute({
+    feature: 'doc-tune',
+    tasks: ['02-second-tiny-fix'],
+  } as any)) as string;
+  const parsed = parseToolResponse(raw);
+  const pass =
+    JSON.stringify(parsed.data?.remainingManualTasks) === JSON.stringify(['01-tiny-fix']) &&
+    parsed.data?.taskExpandArgs?.feature === 'doc-tune' &&
+    JSON.stringify(parsed.data?.taskExpandArgs?.tasks) === JSON.stringify(['01-tiny-fix']) &&
+    parsed.data?.taskExpandArgs?.mode === 'lightweight' &&
+    matchesPendingManualPromotionFlow(parsed.data?.promotionFlow, 'doc-tune', ['01-tiny-fix'], 'lightweight');
+  return {
+    id: 'task-expand-follow-up-expansion',
+    pass,
+    detail: pass
+      ? 'warcraft_task_expand returns the next expansion step when manual tasks still remain outside the draft plan'
+      : `response=${JSON.stringify(parsed.data ?? null)}`,
+  };
+}
+
 async function checkTaskExpandCanMergeIntoDraftPlan(): Promise<CheckResult> {
   const ctx = createWorkspace();
   ctx.featureService.create('doc-tune');
@@ -1338,6 +1497,7 @@ async function main() {
     checkStatusReturnsPlanWriteArgsForEscalatedInstantWork(),
     checkStatusReturnsTaskExpandArgsForEscalatedInstantWork(),
     checkStatusReturnsPromotionFlowForEscalatedInstantWork(),
+    checkStatusDraftPlanSurfacesRemainingManualPromotion(),
     checkStatusReturnsTaskSyncArgsAfterApproval(),
     checkPlanApproveReturnsSyncFlow(),
     checkPlanWriteCanMaterializeLightweightScaffold(),
@@ -1346,6 +1506,7 @@ async function main() {
     checkScaffoldPromotionSyncsManualTasksIntoPlan(),
     checkTaskExpandWritesPlanAndPreviewsPromotion(),
     checkTaskExpandReturnsPromotionFlow(),
+    checkTaskExpandReturnsFollowUpExpansionForRemainingManualTasks(),
     checkTaskExpandCanMergeIntoDraftPlan(),
     checkPromptsMentionInstantPath(),
     checkBeadsModeManualBriefPersistence(),

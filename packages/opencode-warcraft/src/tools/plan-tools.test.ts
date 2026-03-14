@@ -131,6 +131,46 @@ describe('PlanTools', () => {
     expect(parsed.data.content).toContain('### 3. Third tiny fix');
   });
 
+  it('surfaces remaining manual tasks when a written draft plan does not cover all pending manual work', async () => {
+    const planService = new MockPlanService();
+    const tool = new PlanTools({
+      featureService: {
+        get: () => ({ name: 'test-feature', workflowRecommendation: 'lightweight' }),
+      } as unknown as FeatureService,
+      planService: planService as unknown as PlanService,
+      taskService: {
+        list: () => [{ folder: '01-follow-up', name: 'follow-up', status: 'pending', origin: 'manual' }],
+        previewSync: () => ({ created: [], removed: [], kept: [], reconciled: [], manual: ['01-follow-up'] }),
+      } as unknown as TaskService,
+      captureSession: () => {},
+      updateFeatureMetadata: () => {},
+      workflowGatesMode: 'warn',
+    }).writePlanTool((name) => name ?? 'test-feature');
+
+    const raw = await tool.execute(
+      {
+        feature: 'test-feature',
+        content: '# test-feature\n\nWorkflow Path: lightweight\n\n## Discovery\n\nImpact: docs\nSafety: low\nVerify: tests\nRollback: revert\n\n## Non-Goals\n\n- Keep scope tight.\n\n## Ghost Diffs\n\n- Skip alternatives for now.\n\n## Tasks\n\n### 1. Existing Task\n\n**Depends on**: none\n\n**What to do**:\n- Keep existing behavior.\n\n**References**:\n- Existing context.\n\n**Verify**:\n- [ ] Run tests\n',
+      } as any,
+      {} as any,
+    );
+    const parsed = JSON.parse(raw);
+
+    expect(parsed.success).toBe(true);
+    expect(parsed.data.remainingManualTasks).toEqual(['01-follow-up']);
+    expect(parsed.data.taskExpandArgs).toEqual({
+      feature: 'test-feature',
+      tasks: ['01-follow-up'],
+      mode: 'lightweight',
+    });
+    expect(parsed.data.promotionFlow?.[0]).toEqual({
+      type: 'tool',
+      tool: 'warcraft_task_expand',
+      args: { feature: 'test-feature', tasks: ['01-follow-up'], mode: 'lightweight' },
+      purpose: 'Promote the pending manual tasks into a reviewed draft plan.',
+    });
+  });
+
   it('returns sync follow-up args after plan approval', async () => {
     const approveCalls: string[] = [];
     const tool = new PlanTools({

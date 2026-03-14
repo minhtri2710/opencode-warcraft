@@ -1,1 +1,1 @@
-- Only if ordered `promotionFlow` handoffs still prove insufficient in practice, consider a narrowly-scoped executor/helper that can resume the reviewed promotion sequence step-by-step without hiding the explicit human review/approval checkpoint. Avoid adding it unless real friction remains.
+- Consider tightening `warcraft_plan_approve` so it warns or blocks when a draft plan still leaves unmatched manual tasks outside the reviewed plan. Only do this if the new `remainingManualTasks` / `taskExpandArgs` / `promotionFlow` guidance still allows too many incomplete approvals.
