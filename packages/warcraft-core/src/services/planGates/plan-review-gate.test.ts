@@ -36,4 +36,38 @@ describe('plan review gate', () => {
     expect(text).toContain('Plan review checklist is incomplete');
     expect(text).toContain('Scope and non-goals');
   });
+
+  test('accepts uppercase X in checked items', () => {
+    const content = `## Plan Review Checklist
+- [X] Discovery is complete and current
+- [X] Scope and non-goals are explicit
+- [X] Risks, rollout, and verification are defined
+- [X] Tasks and dependencies are actionable`;
+    const result = validatePlanReviewChecklist(content);
+    expect(result.ok).toBe(true);
+  });
+
+  test('fails when all items are unchecked', () => {
+    const content = `## Plan Review Checklist
+- [ ] Discovery is complete and current
+- [ ] Scope and non-goals are explicit
+- [ ] Risks, rollout, and verification are defined
+- [ ] Tasks and dependencies are actionable`;
+    const result = validatePlanReviewChecklist(content);
+    expect(result.ok).toBe(false);
+    expect(result.issues.length).toBe(4);
+  });
+
+  test('correctly scopes checklist to section boundary', () => {
+    const content = `## Plan Review Checklist
+- [x] Discovery is complete and current
+- [x] Scope and non-goals are explicit
+- [x] Risks, rollout, and verification are defined
+- [x] Tasks and dependencies are actionable
+
+## Next Section
+Some other content`;
+    const result = validatePlanReviewChecklist(content);
+    expect(result.ok).toBe(true);
+  });
 });

@@ -34,3 +34,5 @@
 {"run":33,"commit":"a22f92c","metric":1075,"metrics":{},"status":"keep","description":"Fix specFormatter rendering 'undefined' for completed tasks without summary - now omits colon+summary when summary is missing instead of printing literal 'undefined'","timestamp":1773477491279,"segment":0}
 {"run":34,"commit":"a22f92c","metric":1075,"metrics":{},"status":"discard","description":"Verify: 1075 tests passing across 45 files, all clean","timestamp":1773477601851,"segment":0}
 {"run":35,"commit":"a22f92c","metric":1075,"metrics":{},"status":"discard","description":"Verify: 1075 tests passing, comprehensive exploration complete","timestamp":1773477932907,"segment":0}
+{"run":36,"commit":"cfbc33d","metric":1085,"metrics":{},"status":"keep","description":"Add comprehensive FilesystemTaskStore tests - list ordering, getNextOrder, delete, save, writeReport, getRunnableTasks null return, and flush no-op","timestamp":1773478036692,"segment":0}
+{"run":37,"commit":"cfbc33d","metric":1085,"metrics":{},"status":"discard","description":"Verify: 1085 tests passing across 45 files - 10% improvement from baseline","timestamp":1773478091753,"segment":0}
