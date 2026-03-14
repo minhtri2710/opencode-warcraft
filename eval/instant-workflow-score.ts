@@ -12,6 +12,11 @@ import {
   PlanService,
   TaskService,
 } from '../packages/warcraft-core/src/index.ts';
+import {
+  decodeTaskState,
+  encodeTaskState,
+} from '../packages/warcraft-core/src/services/beads/artifactSchemas.ts';
+import { BeadsTaskStore } from '../packages/warcraft-core/src/services/state/beads-task-store.ts';
 import { buildKhadgarPrompt } from '../packages/opencode-warcraft/src/agents/khadgar.js';
 import { MIMIRON_PROMPT } from '../packages/opencode-warcraft/src/agents/mimiron.js';
 import { buildSaurfangPrompt } from '../packages/opencode-warcraft/src/agents/saurfang.js';
@@ -212,6 +217,52 @@ async function checkPromptsMentionInstantPath(): Promise<CheckResult> {
   };
 }
 
+async function checkBeadsModeManualBriefPersistence(): Promise<CheckResult> {
+  const projectRoot = mkdtempSync(path.join(os.tmpdir(), 'instant-workflow-beads-'));
+  const stateByBead = new Map<string, string>();
+  const repository = {
+    getEpicByFeatureName: () => ({ success: true, value: 'epic-1' }),
+    createTask: () => ({ success: true, value: 'task-1' }),
+    setTaskState: (beadId: string, state: Record<string, unknown>) => {
+      stateByBead.set(beadId, encodeTaskState(state as any));
+      return { success: true, value: undefined };
+    },
+    getTaskState: (beadId: string) => ({ success: true, value: decodeTaskState(stateByBead.get(beadId) ?? null) }),
+    flushArtifacts: () => ({ success: true, value: undefined }),
+  } as any;
+
+  const store = new BeadsTaskStore(projectRoot, repository);
+  const service = new TaskService(projectRoot, store, 'on');
+  const folder = service.create(
+    'quick-fix',
+    'Tighten prompt wording',
+    1,
+    3,
+    'Background: tiny fix. Impact: prompt text only. Safety: low. Verify: prompt tests. Rollback: revert.',
+  );
+  const spec = formatSpecContent(
+    service.buildSpecData({
+      featureName: 'quick-fix',
+      task: { folder, name: 'Tighten prompt wording', order: 1 },
+      dependsOn: [],
+      allTasks: [{ folder, name: 'Tighten prompt wording', order: 1 }],
+      planContent: null,
+      contextFiles: [],
+      completedTasks: [],
+    }),
+  );
+  rmSync(projectRoot, { recursive: true, force: true });
+
+  const pass = !spec.includes('_No plan section available._') && /Background: tiny fix\./.test(spec);
+  return {
+    id: 'beads-mode-manual-brief-persistence',
+    pass,
+    detail: pass
+      ? 'beads-backed manual tasks preserve the self-contained brief'
+      : 'beads-backed manual tasks still lose the instant-task brief during persistence/readback',
+  };
+}
+
 async function main() {
   const checks = await Promise.all([
     checkFeatureCreateMentionsInstantPath(),
@@ -219,6 +270,7 @@ async function main() {
     checkManualTaskSpecIsSelfContained(),
     checkStatusNextActionSupportsInstantPath(),
     checkPromptsMentionInstantPath(),
+    checkBeadsModeManualBriefPersistence(),
   ]);
 
   const score = checks.filter((check) => check.pass).length;

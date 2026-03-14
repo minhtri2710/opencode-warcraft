@@ -1,0 +1,2 @@
+- Add a dedicated `warcraft_workflow_analyze` helper that scores a request as `instant`, `lightweight`, or `standard` using file-count/risk/ambiguity heuristics plus explanatory rationale for the operator.
+- Add an optional `warcraft_task_expand` / plan-to-beads helper that can take a dense markdown brief and fan it into richer bead-style subtasks when a task stops being "instant" mid-flight.
