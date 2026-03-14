@@ -93,6 +93,8 @@ export interface TaskStateArtifact extends VersionedArtifact {
   preparedAt?: string;
   /** Task folder name (e.g., '01-setup'). Persisted for stable identity across reordering. */
   folder?: string;
+  /** Self-contained execution brief for manual/instant tasks when no formal plan exists. */
+  brief?: string;
   /** Learnings surfaced by the worker upon task completion (done tasks only). */
   learnings?: string[];
 }
@@ -116,6 +118,7 @@ interface LegacyTaskState {
   blocker?: unknown;
   preparedAt?: string;
   folder?: string;
+  brief?: string;
   learnings?: string[];
 }
 
@@ -166,6 +169,7 @@ export function decodeTaskState(raw: string | null): TaskStateArtifact | null {
       blocker: legacy.blocker as TaskStateArtifact['blocker'],
       preparedAt: legacy.preparedAt,
       folder: legacy.folder,
+      brief: legacy.brief,
       learnings: legacy.learnings,
     };
   } catch {
@@ -193,6 +197,7 @@ export function taskStateFromTaskStatus(taskStatus: TaskStatus): TaskStateArtifa
     blocker: taskStatus.blocker,
     preparedAt: taskStatus.preparedAt,
     folder: taskStatus.folder,
+    brief: taskStatus.brief,
     learnings: taskStatus.learnings,
   };
 }
@@ -217,6 +222,7 @@ export function taskStateToTaskStatus(artifact: TaskStateArtifact): TaskStatus {
     blocker: artifact.blocker,
     preparedAt: artifact.preparedAt,
     folder: artifact.folder,
+    brief: artifact.brief,
     learnings: artifact.learnings,
   };
 }

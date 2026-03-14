@@ -110,6 +110,22 @@ describe('artifactSchemas', () => {
       expect(decoded!.learnings).toEqual(['Use bun:test for testing', 'ESM requires .js extensions']);
     });
 
+    it('should round-trip brief for manual instant tasks', () => {
+      const original = {
+        schemaVersion: 1,
+        status: 'pending' as const,
+        origin: 'manual' as const,
+        planTitle: 'Tiny fix',
+        brief: 'Background: tiny fix. Impact: prompt text only. Safety: low. Verify: tests. Rollback: revert.',
+      };
+
+      const encoded = encodeTaskState(original);
+      const decoded = decodeTaskState(encoded);
+
+      expect(decoded).not.toBeNull();
+      expect(decoded!.brief).toBe(original.brief);
+    });
+
     it('should omit learnings when absent', () => {
       const original = {
         schemaVersion: 1,
@@ -153,6 +169,21 @@ describe('artifactSchemas', () => {
 
       const converted = taskStateToTaskStatus(artifact);
       expect(converted.learnings).toBeUndefined();
+    });
+
+    it('should preserve brief in TaskStatus conversion round-trip', () => {
+      const taskStatus: TaskStatus = {
+        schemaVersion: 1,
+        status: 'pending',
+        origin: 'manual',
+        brief: 'Background: tiny fix. Impact: prompt text only. Safety: low. Verify: tests. Rollback: revert.',
+      };
+
+      const artifact = taskStateFromTaskStatus(taskStatus);
+      expect(artifact.brief).toBe(taskStatus.brief);
+
+      const converted = taskStateToTaskStatus(artifact);
+      expect(converted.brief).toBe(taskStatus.brief);
     });
 
     it('should migrate legacy task state without learnings', () => {
