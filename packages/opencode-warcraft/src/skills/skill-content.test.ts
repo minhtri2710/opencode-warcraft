@@ -1,7 +1,24 @@
 import { describe, expect, it } from 'bun:test';
-import { BUILTIN_SKILLS } from './registry.generated.js';
+import { BUILTIN_SKILL_NAMES, BUILTIN_SKILLS } from './registry.generated.js';
 
 describe('skill content', () => {
+  it('includes context7-cli skill with CLI docs and skills references', () => {
+    expect(BUILTIN_SKILL_NAMES).toContain('context7-cli');
+
+    const skill = BUILTIN_SKILLS.find((entry) => entry.name === 'context7-cli');
+    expect(skill).toBeDefined();
+    expect(skill!.description).toContain('ctx7');
+    expect(skill!.template).toContain('ctx7 library');
+    expect(skill!.template).toContain('ctx7 docs');
+    expect(skill!.template).toContain('ctx7 skills install');
+    expect(skill!.template).toContain('ctx7 login');
+    expect(skill!.template).toContain('npm install -g ctx7@latest');
+    // References should be inlined
+    expect(skill!.template).toContain('Reference: docs');
+    expect(skill!.template).toContain('Reference: skills');
+    expect(skill!.template).toContain('Reference: setup');
+  });
+
   it('documents task() fan-out paths for parallel-exploration', () => {
     const skill = BUILTIN_SKILLS.find((entry) => entry.name === 'parallel-exploration');
 
