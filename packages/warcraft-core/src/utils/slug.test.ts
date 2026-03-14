@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { deriveTaskFolder, slugifyTaskName } from './slug.js';
+import { deriveDeterministicLocalId, deriveTaskFolder, slugifyIdentifierSegment, slugifyTaskName } from './slug.js';
 
 describe('slug utilities', () => {
   describe('slugifyTaskName', () => {
@@ -67,6 +67,59 @@ describe('slug utilities', () => {
     it('produces clean folder names from names with special characters', () => {
       expect(deriveTaskFolder(1, 'Hello -- World')).toBe('01-hello-world');
       expect(deriveTaskFolder(2, 'API (v2) Setup')).toBe('02-api-v2-setup');
+    });
+
+    it('zero-pads single digit orders', () => {
+      expect(deriveTaskFolder(1, 'test')).toBe('01-test');
+      expect(deriveTaskFolder(9, 'test')).toBe('09-test');
+    });
+
+    it('does not zero-pad two digit orders', () => {
+      expect(deriveTaskFolder(10, 'test')).toBe('10-test');
+      expect(deriveTaskFolder(99, 'test')).toBe('99-test');
+    });
+  });
+
+  describe('slugifyIdentifierSegment', () => {
+    it('lowercases and replaces spaces with hyphens', () => {
+      expect(slugifyIdentifierSegment('My Feature')).toBe('my-feature');
+    });
+
+    it('normalizes Unicode characters', () => {
+      expect(slugifyIdentifierSegment('Café')).toBe('cafe');
+    });
+
+    it('replaces non-alphanumeric characters with hyphens', () => {
+      expect(slugifyIdentifierSegment('hello@world!')).toBe('hello-world');
+    });
+
+    it('converts underscores to hyphens', () => {
+      expect(slugifyIdentifierSegment('hello_world')).toBe('hello-world');
+    });
+
+    it('collapses consecutive hyphens', () => {
+      expect(slugifyIdentifierSegment('a---b')).toBe('a-b');
+    });
+
+    it('falls back to hash for empty slug', () => {
+      const result = slugifyIdentifierSegment('!!!');
+      expect(result).toMatch(/^id-[a-f0-9]{8}$/);
+    });
+  });
+
+  describe('deriveDeterministicLocalId', () => {
+    it('creates local- prefixed ID from parts', () => {
+      expect(deriveDeterministicLocalId('my-feature', '01-setup')).toBe('local-my-feature-01-setup');
+    });
+
+    it('slugifies parts', () => {
+      expect(deriveDeterministicLocalId('My Feature', 'Setup Task')).toBe('local-my-feature-setup-task');
+    });
+
+    it('produces consistent IDs for same inputs', () => {
+      const a = deriveDeterministicLocalId('feat', 'task');
+      const b = deriveDeterministicLocalId('feat', 'task');
+      expect(a).toBe(b);
     });
   });
 });
