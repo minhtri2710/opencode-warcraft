@@ -1,0 +1,2 @@
+{"type":"config","name":"Warcraft instant simple workflow + beads-aligned manual tasks","metricName":"instant_workflow_score","metricUnit":"","bestDirection":"higher"}
+{"run":1,"commit":"d6f837f","metric":0,"metrics":{},"status":"crash","description":"Baseline setup attempt: added autoresearch harness and instant-workflow eval, but the benchmark crashed because eval/instant-workflow-score.ts imported warcraft-core via an unresolved package name.","timestamp":1773512338647,"segment":0}
