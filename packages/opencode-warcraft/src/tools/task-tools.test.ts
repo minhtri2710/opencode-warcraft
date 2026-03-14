@@ -83,6 +83,7 @@ class MockFeatureService implements Partial<FeatureService> {
     epicBeadId: string;
     status: 'planning' | 'approved' | 'executing' | 'completed';
     workflowPath?: 'standard' | 'lightweight' | 'instant';
+    workflowRecommendation?: 'standard' | 'lightweight' | 'instant';
     createdAt: string;
   } = {
     name: 'test-feature',
@@ -334,6 +335,30 @@ describe('TaskTools', () => {
       expect(parsed.data.message).toContain('Instant workflow activated');
       expect(mockFeatureService.updateStatusCalls).toContain('executing');
       expect(mockFeatureService.patchCalls).toContainEqual({ workflowPath: 'instant' });
+    });
+
+    it('records a lightweight recommendation when a direct task description no longer looks tiny', async () => {
+      mockFeatureService.feature = {
+        ...mockFeatureService.feature,
+        status: 'planning',
+      };
+      mockPlanService.planResult = null;
+
+      const tool = taskTools.createTaskTool(resolveFeature);
+      const raw = await tool.execute({
+        name: 'Refresh docs wording',
+        description:
+          'Background: update the README and docs wording for the instant workflow path. Impact: README plus docs text. Safety: keep behavior unchanged. Verify: docs tests or snapshots still pass. Rollback: revert.',
+        order: undefined,
+        feature: undefined,
+        priority: 3,
+      });
+      const parsed = JSON.parse(raw);
+
+      expect(parsed.success).toBe(true);
+      expect(parsed.data.workflowRecommendation).toBe('lightweight');
+      expect(parsed.data.message).toContain('Workflow Path: lightweight');
+      expect(mockFeatureService.patchCalls).toContainEqual({ workflowPath: 'instant', workflowRecommendation: 'lightweight' });
     });
 
     it('warns when instant work grows into multiple pending manual tasks', async () => {

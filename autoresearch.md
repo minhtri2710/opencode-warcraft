@@ -54,6 +54,7 @@ The benchmark should reward real workflow improvements, not just prompt edits. I
 - status guidance that respects a stored workflow recommendation before any plan/tasks exist
 - escalation guidance when an instant workflow grows beyond a single tiny task and should fall back to a lightweight plan
 - creation-time warnings so `warcraft_task_create` nudges the user back toward a lightweight plan once a no-plan feature accumulates multiple pending manual tasks
+- direct-task scope analysis so non-tiny manual briefs can immediately recommend lightweight/standard planning before dispatch
 
 ## What's Been Tried
 - Added an initial behavior-oriented eval harness and baseline targeted tests.
@@ -61,4 +62,4 @@ The benchmark should reward real workflow improvements, not just prompt edits. I
 - Fixed the beads-mode/manual-task gap by preserving `brief` through the task-state artifact encode/decode path and adding explicit artifact schema coverage.
 - Added request analysis in `warcraft_feature_create` via `analyzeWorkflowRequest`, returning `recommendedWorkflowPath` + rationale for instant vs lightweight vs standard.
 - Persisted `workflowRecommendation` on the feature so `warcraft_status` can guide the user toward the right next action (e.g. lightweight plan) even before a plan or task exists.
-- Latest direction in progress: when an instant/no-plan feature accumulates multiple pending manual tasks, the system should steer the user back to a lightweight reviewed plan instead of blindly dispatching more direct tasks — ideally both in `warcraft_status` and immediately in `warcraft_task_create` responses.
+- Latest direction in progress: complement the multi-task expansion warning with direct-task scope analysis, so a single manual brief that no longer looks tiny can immediately recommend the lightweight/standard path in both `warcraft_task_create` and `warcraft_status` before dispatch.

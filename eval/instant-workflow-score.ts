@@ -191,6 +191,28 @@ async function checkManualTaskWarnsWhenInstantWorkflowOutgrowsTinyPath(): Promis
   };
 }
 
+async function checkManualTaskCreatesLightweightRecommendationForNonTinyBrief(): Promise<CheckResult> {
+  const ctx = createWorkspace();
+  ctx.featureService.create('doc-tune');
+  const raw = (await ctx.taskTools.createTaskTool((name?: string) => name || 'doc-tune').execute({
+    feature: 'doc-tune',
+    name: 'Refresh docs wording',
+    priority: 3,
+    description:
+      'Background: update the README and docs wording for the instant workflow path. Impact: README plus docs text. Safety: keep behavior unchanged. Verify: docs tests or snapshots still pass. Rollback: revert.',
+  } as any)) as string;
+  const parsed = parseToolResponse(raw);
+  const pass =
+    parsed.data?.workflowRecommendation === 'lightweight' && /Workflow Path: lightweight/i.test(String(parsed.data?.message || ''));
+  return {
+    id: 'manual-task-lightweight-recommendation',
+    pass,
+    detail: pass
+      ? 'manual task creation steers non-tiny direct work back to a lightweight plan'
+      : `workflowRecommendation=${String(parsed.data?.workflowRecommendation || 'missing')}, message=${String(parsed.data?.message || '')}`,
+  };
+}
+
 async function checkManualTaskSpecIsSelfContained(): Promise<CheckResult> {
   const ctx = createWorkspace();
   ctx.featureService.create('quick-fix');
@@ -381,6 +403,7 @@ async function main() {
     checkFeatureCreateAnalyzesBroadRequest(),
     checkManualTaskCanPromoteInstantWorkflow(),
     checkManualTaskWarnsWhenInstantWorkflowOutgrowsTinyPath(),
+    checkManualTaskCreatesLightweightRecommendationForNonTinyBrief(),
     checkManualTaskSpecIsSelfContained(),
     checkStatusNextActionSupportsInstantPath(),
     checkStatusNextActionSupportsLightweightRecommendation(),

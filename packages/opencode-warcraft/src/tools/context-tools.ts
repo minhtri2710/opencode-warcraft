@@ -356,6 +356,14 @@ export class ContextTools {
         return `Continue work on task: ${inProgress.folder}`;
       }
       const pendingCount = taskList.filter((t) => t.status === 'pending').length;
+      if ((planStatus === 'instant' || planStatus === 'none' || !planStatus) && pendingCount > 0) {
+        if (workflowRecommendation === 'lightweight') {
+          return 'This task no longer looks tiny enough for direct execution. Write a short lightweight plan with warcraft_plan_write (include Workflow Path: lightweight), then approve it before dispatching work.';
+        }
+        if (workflowRecommendation === 'standard') {
+          return 'This task looks broad enough for the standard reviewed path. Write or revise plan with warcraft_plan_write, then get approval before dispatching work.';
+        }
+      }
       if (
         (workflowPath === 'instant' || workflowRecommendation === 'instant') &&
         (planStatus === 'instant' || planStatus === 'none' || !planStatus) &&

@@ -1,6 +1,7 @@
 import { type ToolDefinition, tool } from '@opencode-ai/plugin';
 import type { EventLogger, FeatureService, PlanService, TaskService, TaskStatusType } from 'warcraft-core';
 import {
+  analyzeWorkflowRequest,
   createChildSpan,
   createTraceContext,
   detectWorkflowPath,
@@ -22,6 +23,19 @@ export interface TaskToolsDependencies {
 /**
  * Task domain tools - Sync, create, and update tasks
  */
+function buildTaskWorkflowAnalysisInput(name: string, description?: string): string {
+  if (!description?.trim()) return name;
+
+  const condensed = description
+    .replace(/\r\n/g, '\n')
+    .split(/\b(?:Safety|Verify|Rollback)\s*:/i)[0]
+    .replace(/\b(?:Background|Impact|Reasoning|Scope)\s*:/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return `${name}. ${condensed}`.trim();
+}
+
 export class TaskTools {
   constructor(private readonly deps: TaskToolsDependencies) {}
 
@@ -137,9 +151,18 @@ export class TaskTools {
 
         const featureData = featureService.get(feature);
         const hasPlan = planService.read(feature) !== null;
+        const workflowAnalysis = !hasPlan && description?.trim()
+          ? analyzeWorkflowRequest(buildTaskWorkflowAnalysisInput(name, description))
+          : null;
+
         let instantWorkflowActivated = false;
         if (featureData && !hasPlan) {
-          featureService.patchMetadata(feature, { workflowPath: 'instant' });
+          featureService.patchMetadata(feature, {
+            workflowPath: 'instant',
+            ...(workflowAnalysis && workflowAnalysis.workflowPath !== 'instant'
+              ? { workflowRecommendation: workflowAnalysis.workflowPath }
+              : {}),
+          });
           if (featureData.status !== 'executing') {
             featureService.updateStatus(feature, 'executing');
           }
@@ -152,6 +175,12 @@ export class TaskTools {
               .filter((task) => task.origin === 'manual' && task.status === 'pending')
               .map((task) => task.folder)
           : [];
+        const recommendationWarning =
+          workflowAnalysis?.workflowPath === 'lightweight'
+            ? '\nThis manual task looks a bit larger than the tiny instant path. Prefer warcraft_plan_write with Workflow Path: lightweight before dispatching it.'
+            : workflowAnalysis?.workflowPath === 'standard'
+              ? '\nThis manual task looks broad enough that the standard reviewed plan path is safer. Prefer warcraft_plan_write before dispatching it.'
+              : '';
         const expansionWarning =
           pendingManualTasks.length > 1
             ? '\nThis feature now has multiple pending manual tasks and has likely outgrown the tiny-task path. Prefer warcraft_plan_write with Workflow Path: lightweight before dispatching more work.'
@@ -161,11 +190,13 @@ export class TaskTools {
           feature,
           task: folder,
           workflowPath: instantWorkflowActivated ? 'instant' : featureData?.workflowPath ?? 'standard',
+          workflowRecommendation: workflowAnalysis?.workflowPath,
+          workflowRationale: workflowAnalysis?.rationale ?? [],
           pendingManualTasks,
           message:
             instantWorkflowActivated
-              ? `Manual task created: ${folder}\nInstant workflow activated for feature "${feature}" (no formal plan required for this small task). Include enough detail in the task description to make it self-contained, then call warcraft_worktree_create and issue the returned task() call.${expansionWarning}`
-              : `Manual task created: ${folder}\nReminder: call warcraft_worktree_create to prepare the task workspace, then issue the returned task() call to start the worker in the assigned workspace.${expansionWarning}`,
+              ? `Manual task created: ${folder}\nInstant workflow activated for feature "${feature}" (no formal plan required for this small task). Include enough detail in the task description to make it self-contained, then call warcraft_worktree_create and issue the returned task() call.${recommendationWarning}${expansionWarning}`
+              : `Manual task created: ${folder}\nReminder: call warcraft_worktree_create to prepare the task workspace, then issue the returned task() call to start the worker in the assigned workspace.${recommendationWarning}${expansionWarning}`,
         });
       },
     });
