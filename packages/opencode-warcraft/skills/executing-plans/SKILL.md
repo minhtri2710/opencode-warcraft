@@ -36,7 +36,7 @@ Only `done` satisfies dependencies (not `blocked`, `failed`, `partial`, `cancell
 ### Step 3: Execute Batch
 
 For each task in the batch:
-1. Mark as in_progress via `warcraft_worktree_create()`
+1. Prepare workspace via `warcraft_worktree_create()`, then issue the returned `task()` call to launch the worker
 2. Follow each step exactly (plan has bite-sized steps)
 3. Run verifications as specified
 4. Mark as completed

@@ -80,3 +80,4 @@ Systematically explore the repository, trace execution flows across related impo
 - Fixed AGENTS.md stale count: 17 tools / 7 modules → 19 tools / 8 modules.
 - Fixed docs/troubleshooting.md blocked-resume: 'spawns in same worktree' → 'launched in same workspace' + task() call guidance.
 - Fixed docs/plan-authoring.md: 'Workers operate in isolated worktrees' → 'Workers operate in assigned workspaces'.
+- Fixed all 3 eval/scenarios (blocked-worker.md, parallel-batch.md, simple-feature.md): replaced stale 'spawned in worktree', 'changes committed to task branch' with mode-neutral workspace/delegation wording.
