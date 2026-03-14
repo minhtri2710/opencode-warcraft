@@ -1,13 +1,13 @@
 # Autoresearch Ideas — warcraft-core Bug Hunt
 
 ## Session Summary
-- **Baseline**: 987 tests → **Current**: 2600 tests (+163.4%) 🏆 2.63X THE ORIGINAL!
+- **Baseline**: 987 tests → **Current**: 2700 tests (+173.6%) 🏆 2.74X THE ORIGINAL!
 - **Bugs fixed**: 3 (bullet-point deps, dispatch_prepared mapping, undefined summary)
 - **Total bugs fixed across sessions**: 15+
-- **172 experiments completed**
-- **New test files created**: ~100+
+- **180 experiments completed**
+- **New test files created**: ~110+
 - **Test files expanded**: 15+
-- **164 test files total** (up from ~45)
+- **172 test files total** (up from ~45)
 
 ## Completed ✅ (all sessions)
 - All bug fixes from prior sessions (15+)
