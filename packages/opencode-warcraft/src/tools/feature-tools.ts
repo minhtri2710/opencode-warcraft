@@ -1,6 +1,6 @@
 import { type ToolDefinition, tool } from '@opencode-ai/plugin';
 import type { FeatureService } from 'warcraft-core';
-import { isUsable } from 'warcraft-core';
+import { analyzeWorkflowRequest, isUsable } from 'warcraft-core';
 import { toolError, toolSuccess } from '../types.js';
 import { resolveFeatureInput } from './tool-input.js';
 
@@ -25,9 +25,13 @@ export class FeatureTools {
       args: {
         name: tool.schema.string().describe('Feature name'),
         ticket: tool.schema.string().optional().describe('Ticket reference'),
+        request: tool.schema
+          .string()
+          .optional()
+          .describe('Optional user request/summary used to recommend instant vs lightweight vs standard workflow'),
         priority: tool.schema.number().optional().describe('Priority (1-5, default: 3)'),
       },
-      async execute({ name, ticket, priority }) {
+      async execute({ name, ticket, request, priority }) {
         const priorityValue = priority ?? 3;
         if (!Number.isInteger(priorityValue) || priorityValue < 1 || priorityValue > 5) {
           return toolError(`Priority must be an integer between 1 and 5 (inclusive), got: ${priorityValue}`);
@@ -38,9 +42,17 @@ export class FeatureTools {
         }
         const feature = outcome.value;
         const epicBeadId = (feature as { epicBeadId?: string }).epicBeadId;
+        const workflowAnalysis = request?.trim() ? analyzeWorkflowRequest(request) : null;
+        const workflowRecommendation = workflowAnalysis?.workflowPath;
+        const workflowRecommendationBlock = workflowAnalysis
+          ? `\n## Recommended path for this request\n- **Recommended workflow:** ${workflowAnalysis.workflowPath}\n${workflowAnalysis.rationale
+              .map((line) => `- ${line}`)
+              .join('\n')}\n`
+          : '';
         return toolSuccess({
-          message: `Feature "${feature.name}" created (epic: ${epicBeadId || 'unknown'}).
-
+          recommendedWorkflowPath: workflowRecommendation,
+          workflowRationale: workflowAnalysis?.rationale ?? [],
+          message: `Feature "${feature.name}" created (epic: ${epicBeadId || 'unknown'}).${workflowRecommendationBlock}
 ## Choose a workflow path
 
 ### Standard / beads-aligned path (default)

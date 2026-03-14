@@ -187,6 +187,36 @@ describe('FeatureTools', () => {
       const parsed = JSON.parse(result);
       expect(parsed.error).toContain('0');
     });
+
+    it('returns an instant recommendation for tiny wording-only requests', async () => {
+      const tool = featureTools.createFeatureTool();
+      const raw = await tool.execute({
+        name: 'test-feature',
+        request: 'Fix the wording in the feature-create prompt message.',
+        ticket: undefined,
+        priority: 3,
+      });
+      const parsed = JSON.parse(raw);
+
+      expect(parsed.success).toBe(true);
+      expect(parsed.data.recommendedWorkflowPath).toBe('instant');
+      expect(parsed.data.message).toContain('**Recommended workflow:** instant');
+    });
+
+    it('returns a standard recommendation for broad cross-cutting requests', async () => {
+      const tool = featureTools.createFeatureTool();
+      const raw = await tool.execute({
+        name: 'test-feature',
+        request: 'Design a new workflow across packages, add a new tool, update beads integration, and refactor orchestration prompts.',
+        ticket: undefined,
+        priority: 3,
+      });
+      const parsed = JSON.parse(raw);
+
+      expect(parsed.success).toBe(true);
+      expect(parsed.data.recommendedWorkflowPath).toBe('standard');
+      expect(parsed.data.message).toContain('**Recommended workflow:** standard');
+    });
   });
   describe('completeFeatureTool', () => {
     it('returns a tool error for invalid explicit feature input instead of throwing', async () => {

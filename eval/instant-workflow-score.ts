@@ -104,6 +104,40 @@ async function checkFeatureCreateMentionsInstantPath(): Promise<CheckResult> {
   };
 }
 
+async function checkFeatureCreateAnalyzesTinyRequest(): Promise<CheckResult> {
+  const { featureTools } = createWorkspace();
+  const raw = (await featureTools.createFeatureTool().execute({
+    name: 'quick-fix',
+    request: 'Fix the wording in the feature-create prompt message.',
+  } as any)) as string;
+  const parsed = parseToolResponse(raw);
+  const pass = parsed.data?.recommendedWorkflowPath === 'instant';
+  return {
+    id: 'feature-create-analyzes-tiny-request',
+    pass,
+    detail: pass
+      ? 'feature creation recommends the instant path for tiny wording fixes'
+      : `recommendedWorkflowPath=${String(parsed.data?.recommendedWorkflowPath || 'missing')}`,
+  };
+}
+
+async function checkFeatureCreateAnalyzesBroadRequest(): Promise<CheckResult> {
+  const { featureTools } = createWorkspace();
+  const raw = (await featureTools.createFeatureTool().execute({
+    name: 'big-change',
+    request: 'Design a new workflow across packages, add a new tool, update beads integration, and refactor orchestration prompts.',
+  } as any)) as string;
+  const parsed = parseToolResponse(raw);
+  const pass = parsed.data?.recommendedWorkflowPath === 'standard';
+  return {
+    id: 'feature-create-analyzes-broad-request',
+    pass,
+    detail: pass
+      ? 'feature creation recommends the standard path for cross-cutting work'
+      : `recommendedWorkflowPath=${String(parsed.data?.recommendedWorkflowPath || 'missing')}`,
+  };
+}
+
 async function checkManualTaskCanPromoteInstantWorkflow(): Promise<CheckResult> {
   const ctx = createWorkspace();
   ctx.featureService.create('quick-fix');
@@ -266,6 +300,8 @@ async function checkBeadsModeManualBriefPersistence(): Promise<CheckResult> {
 async function main() {
   const checks = await Promise.all([
     checkFeatureCreateMentionsInstantPath(),
+    checkFeatureCreateAnalyzesTinyRequest(),
+    checkFeatureCreateAnalyzesBroadRequest(),
     checkManualTaskCanPromoteInstantWorkflow(),
     checkManualTaskSpecIsSelfContained(),
     checkStatusNextActionSupportsInstantPath(),

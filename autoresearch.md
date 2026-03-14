@@ -50,8 +50,10 @@ The benchmark should reward real workflow improvements, not just prompt edits. I
 - status guidance for no-plan execution
 - agent/system guidance for when to use instant vs plan-first paths
 - beads-mode persistence so instant/manual task briefs survive the canonical beads-backed path too
+- request analysis so the system can recommend instant vs lightweight vs standard before the user commits to a workflow
 
 ## What's Been Tried
 - Added an initial behavior-oriented eval harness and baseline targeted tests.
 - Implemented an instant workflow path for tiny/no-plan tasks: `warcraft_task_create` accepts self-contained descriptions, no-plan features auto-promote to `workflowPath=instant`, specs fall back to the task brief, and prompts/docs/status explain the path.
-- Current gap to investigate: beads-backed/manual task state may still drop the instant-task brief because the bead artifact schema and decode path were originally plan-centric.
+- Fixed the beads-mode/manual-task gap by preserving `brief` through the task-state artifact encode/decode path and adding explicit artifact schema coverage.
+- Current promising direction: add lightweight request analysis at feature creation time so the system can recommend `instant`, `lightweight`, or `standard` based on scope/risk signals instead of relying only on prompt guidance.

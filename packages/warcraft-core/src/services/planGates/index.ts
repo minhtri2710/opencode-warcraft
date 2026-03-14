@@ -4,6 +4,8 @@ export {
   formatPlanReviewChecklistIssues,
   validatePlanReviewChecklist,
 } from './plan-review-gate.js';
+export type { WorkflowRecommendation } from './workflow-analysis.js';
+export { analyzeWorkflowRequest } from './workflow-analysis.js';
 export type { WorkflowPath } from './workflow-path.js';
 export {
   countPlanTasks,
