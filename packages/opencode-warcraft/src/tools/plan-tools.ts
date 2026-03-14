@@ -9,6 +9,7 @@ import {
 import type { ToolContext } from '../types.js';
 import { toolError, toolSuccess } from '../types.js';
 import { buildPlanScaffold } from './manual-plan-scaffold.js';
+import { buildApprovedPlanSyncFlow, buildDraftPlanPromotionFlow } from './promotion-flow.js';
 import { resolveFeatureInput } from './tool-input.js';
 export interface PlanToolsDependencies {
   featureService: FeatureService;
@@ -109,6 +110,7 @@ export class PlanTools {
           content: planContent,
           planApproveArgs: { feature },
           taskSyncArgs: { feature, mode: 'sync' },
+          promotionFlow: buildDraftPlanPromotionFlow({ feature }, { feature, mode: 'sync' }),
           message: `Plan written to ${planPath}.`,
         });
       },
@@ -176,11 +178,17 @@ export class PlanTools {
 
         if (!checklistResult.ok && workflowGatesMode === 'warn') {
           return toolSuccess({
+            taskSyncArgs: { feature, mode: 'sync' },
+            promotionFlow: buildApprovedPlanSyncFlow({ feature, mode: 'sync' }),
             message: `Plan approved with warning (mode=${workflowGatesMode}).\n${formatPlanReviewChecklistIssues(checklistResult.issues)}\n\nRun warcraft_tasks_sync to generate tasks.`,
           });
         }
 
-        return toolSuccess({ message: 'Plan approved. Run warcraft_tasks_sync to generate tasks.' });
+        return toolSuccess({
+          taskSyncArgs: { feature, mode: 'sync' },
+          promotionFlow: buildApprovedPlanSyncFlow({ feature, mode: 'sync' }),
+          message: 'Plan approved. Run warcraft_tasks_sync to generate tasks.',
+        });
       },
     });
   }

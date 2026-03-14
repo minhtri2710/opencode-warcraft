@@ -46,6 +46,54 @@ function parseToolResponse(raw: string): { success: boolean; data?: any; error?:
   return JSON.parse(raw) as { success: boolean; data?: any; error?: string };
 }
 
+function matchesPendingManualPromotionFlow(flow: unknown, feature: string, tasks: string[], mode: 'lightweight' | 'standard'): boolean {
+  return (
+    Array.isArray(flow) &&
+    flow.length === 4 &&
+    flow[0]?.type === 'tool' &&
+    flow[0]?.tool === 'warcraft_task_expand' &&
+    flow[0]?.args?.feature === feature &&
+    flow[0]?.args?.mode === mode &&
+    JSON.stringify(flow[0]?.args?.tasks) === JSON.stringify(tasks) &&
+    flow[1]?.type === 'review' &&
+    /review or refine/i.test(String(flow[1]?.message || '')) &&
+    flow[2]?.type === 'tool' &&
+    flow[2]?.tool === 'warcraft_plan_approve' &&
+    flow[2]?.args?.feature === feature &&
+    flow[3]?.type === 'tool' &&
+    flow[3]?.tool === 'warcraft_tasks_sync' &&
+    flow[3]?.args?.feature === feature &&
+    flow[3]?.args?.mode === 'sync'
+  );
+}
+
+function matchesDraftPlanPromotionFlow(flow: unknown, feature: string): boolean {
+  return (
+    Array.isArray(flow) &&
+    flow.length === 3 &&
+    flow[0]?.type === 'review' &&
+    /review or refine/i.test(String(flow[0]?.message || '')) &&
+    flow[1]?.type === 'tool' &&
+    flow[1]?.tool === 'warcraft_plan_approve' &&
+    flow[1]?.args?.feature === feature &&
+    flow[2]?.type === 'tool' &&
+    flow[2]?.tool === 'warcraft_tasks_sync' &&
+    flow[2]?.args?.feature === feature &&
+    flow[2]?.args?.mode === 'sync'
+  );
+}
+
+function matchesApprovedSyncFlow(flow: unknown, feature: string): boolean {
+  return (
+    Array.isArray(flow) &&
+    flow.length === 1 &&
+    flow[0]?.type === 'tool' &&
+    flow[0]?.tool === 'warcraft_tasks_sync' &&
+    flow[0]?.args?.feature === feature &&
+    flow[0]?.args?.mode === 'sync'
+  );
+}
+
 function createWorkspace() {
   const projectRoot = mkdtempSync(path.join(os.tmpdir(), 'instant-workflow-score-'));
   const featureStore = new FilesystemFeatureStore(projectRoot);
@@ -295,6 +343,32 @@ async function checkManualTaskReturnsTaskExpandArgsWhenItNeedsReview(): Promise<
   };
 }
 
+async function checkManualTaskReturnsPromotionFlowWhenItNeedsReview(): Promise<CheckResult> {
+  const ctx = createWorkspace();
+  ctx.featureService.create('doc-tune');
+  const raw = (await ctx.taskTools.createTaskTool((name?: string) => name || 'doc-tune').execute({
+    feature: 'doc-tune',
+    name: 'Refresh docs wording',
+    priority: 3,
+    description:
+      'Background: update the README and docs wording for the instant workflow path. Impact: README plus docs text. Safety: keep behavior unchanged. Verify: docs tests or snapshots still pass. Rollback: revert.',
+  } as any)) as string;
+  const parsed = parseToolResponse(raw);
+  const pass = matchesPendingManualPromotionFlow(
+    parsed.data?.promotionFlow,
+    'doc-tune',
+    ['01-refresh-docs-wording'],
+    'lightweight',
+  );
+  return {
+    id: 'manual-task-promotion-flow',
+    pass,
+    detail: pass
+      ? 'manual task creation returns an ordered promotion flow for reviewed fallback'
+      : `promotionFlow=${JSON.stringify(parsed.data?.promotionFlow ?? null)}`,
+  };
+}
+
 async function checkManualTaskSpecIsSelfContained(): Promise<CheckResult> {
   const ctx = createWorkspace();
   ctx.featureService.create('quick-fix');
@@ -438,6 +512,65 @@ async function checkStatusReturnsPlanApproveArgsForDraftPlan(): Promise<CheckRes
     id: 'status-plan-approve-args',
     pass,
     detail: pass ? 'status returns ready-to-use warcraft_plan_approve args for draft plans' : `planApproveArgs=${JSON.stringify(parsed.data?.planApproveArgs ?? null)}`,
+  };
+}
+
+async function checkStatusReturnsDraftPlanPromotionFlow(): Promise<CheckResult> {
+  const ctx = createWorkspace();
+  ctx.featureService.create('doc-tune');
+  await ctx.planTools.writePlanTool((name?: string) => name || 'doc-tune').execute(
+    {
+      feature: 'doc-tune',
+      content: [
+        '# doc-tune',
+        '',
+        'Workflow Path: lightweight',
+        '',
+        '## Discovery',
+        '',
+        'Impact: docs text only',
+        'Safety: low',
+        'Verify: docs tests',
+        'Rollback: revert',
+        '',
+        '## Non-Goals',
+        '',
+        '- Keep scope tight.',
+        '',
+        '## Ghost Diffs',
+        '',
+        '- Skip alternatives for now.',
+        '',
+        '## Tasks',
+        '',
+        '### 1. Refresh docs wording',
+        '',
+        '**Depends on**: none',
+        '',
+        '**What to do**:',
+        '- Update docs wording.',
+        '',
+        '**References**:',
+        '- Existing context.',
+        '',
+        '**Verify**:',
+        '- [ ] docs tests',
+        '',
+      ].join('\n'),
+    } as any,
+    {} as any,
+  );
+  const raw = (await ctx.contextTools.getStatusTool((name?: string) => name || 'doc-tune').execute({
+    feature: 'doc-tune',
+  })) as string;
+  const parsed = parseToolResponse(raw);
+  const pass = matchesDraftPlanPromotionFlow(parsed.data?.promotionFlow, 'doc-tune');
+  return {
+    id: 'status-draft-plan-promotion-flow',
+    pass,
+    detail: pass
+      ? 'status returns the remaining review/approve/sync flow for draft plans'
+      : `promotionFlow=${JSON.stringify(parsed.data?.promotionFlow ?? null)}`,
   };
 }
 
@@ -650,6 +783,51 @@ async function checkStatusReturnsTaskExpandArgsForEscalatedInstantWork(): Promis
   };
 }
 
+async function checkStatusReturnsPromotionFlowForEscalatedInstantWork(): Promise<CheckResult> {
+  const ctx = createWorkspace();
+  ctx.featureService.create('quick-fix');
+  const createTask = ctx.taskTools.createTaskTool((name?: string) => name || 'quick-fix');
+  await createTask.execute({
+    feature: 'quick-fix',
+    name: 'Tighten prompt wording',
+    priority: 3,
+    description:
+      'Background: tiny wording fix. Impact: prompt text only. Safety: low risk. Verify: prompt tests. Rollback: revert.',
+  } as any);
+  await createTask.execute({
+    feature: 'quick-fix',
+    name: 'Refresh help text',
+    priority: 3,
+    description:
+      'Background: second tiny wording fix. Impact: prompt/help text only. Safety: low risk. Verify: prompt tests. Rollback: revert.',
+  } as any);
+  await createTask.execute({
+    feature: 'quick-fix',
+    name: 'Polish status wording',
+    priority: 3,
+    description:
+      'Background: third tiny wording fix. Impact: another prompt/status text tweak. Safety: low risk. Verify: prompt tests. Rollback: revert.',
+  } as any);
+
+  const raw = (await ctx.contextTools.getStatusTool((name?: string) => name || 'quick-fix').execute({
+    feature: 'quick-fix',
+  })) as string;
+  const parsed = parseToolResponse(raw);
+  const pass = matchesPendingManualPromotionFlow(
+    parsed.data?.promotionFlow,
+    'quick-fix',
+    ['01-tighten-prompt-wording', '02-refresh-help-text', '03-polish-status-wording'],
+    'standard',
+  );
+  return {
+    id: 'status-promotion-flow',
+    pass,
+    detail: pass
+      ? 'status returns an ordered promotion flow for outgrown instant work'
+      : `promotionFlow=${JSON.stringify(parsed.data?.promotionFlow ?? null)}`,
+  };
+}
+
 async function checkStatusReturnsTaskSyncArgsAfterApproval(): Promise<CheckResult> {
   const ctx = createWorkspace();
   ctx.featureService.create('doc-tune');
@@ -708,6 +886,69 @@ async function checkStatusReturnsTaskSyncArgsAfterApproval(): Promise<CheckResul
   };
 }
 
+async function checkPlanApproveReturnsSyncFlow(): Promise<CheckResult> {
+  const ctx = createWorkspace();
+  ctx.featureService.create('doc-tune');
+  await ctx.planTools.writePlanTool((name?: string) => name || 'doc-tune').execute(
+    {
+      feature: 'doc-tune',
+      content: [
+        '# doc-tune',
+        '',
+        'Workflow Path: lightweight',
+        '',
+        '## Discovery',
+        '',
+        'Impact: docs text only',
+        'Safety: low',
+        'Verify: docs tests',
+        'Rollback: revert',
+        '',
+        '## Non-Goals',
+        '',
+        '- Keep scope tight.',
+        '',
+        '## Ghost Diffs',
+        '',
+        '- Skip alternatives for now.',
+        '',
+        '## Tasks',
+        '',
+        '### 1. Refresh docs wording',
+        '',
+        '**Depends on**: none',
+        '',
+        '**What to do**:',
+        '- Update docs wording.',
+        '',
+        '**References**:',
+        '- Existing context.',
+        '',
+        '**Verify**:',
+        '- [ ] docs tests',
+        '',
+      ].join('\n'),
+    } as any,
+    {} as any,
+  );
+  const raw = (await ctx.planTools.approvePlanTool((name?: string) => name || 'doc-tune').execute(
+    { feature: 'doc-tune' } as any,
+    {} as any,
+  )) as string;
+  const parsed = parseToolResponse(raw);
+  const pass =
+    parsed.data?.taskSyncArgs?.feature === 'doc-tune' &&
+    parsed.data?.taskSyncArgs?.mode === 'sync' &&
+    matchesApprovedSyncFlow(parsed.data?.promotionFlow, 'doc-tune');
+  return {
+    id: 'plan-approve-sync-flow',
+    pass,
+    detail: pass
+      ? 'warcraft_plan_approve returns the remaining sync flow once review is complete'
+      : `response=${JSON.stringify(parsed.data ?? null)}`,
+  };
+}
+
 async function checkPlanWriteCanMaterializeLightweightScaffold(): Promise<CheckResult> {
   const ctx = createWorkspace();
   ctx.featureService.create('doc-tune');
@@ -738,6 +979,32 @@ async function checkPlanWriteCanMaterializeLightweightScaffold(): Promise<CheckR
     id: 'plan-write-use-scaffold-lightweight',
     pass,
     detail: pass ? 'warcraft_plan_write can materialize a lightweight scaffold from pending manual tasks' : `writtenPlan=${String(writtenPlan?.content || '')}`,
+  };
+}
+
+async function checkPlanWriteReturnsPromotionFlow(): Promise<CheckResult> {
+  const ctx = createWorkspace();
+  ctx.featureService.create('doc-tune');
+  await ctx.taskTools.createTaskTool((name?: string) => name || 'doc-tune').execute({
+    feature: 'doc-tune',
+    name: 'Refresh docs wording',
+    priority: 3,
+    description:
+      'Background: update the README and docs wording for the instant workflow path. Impact: README plus docs text. Safety: keep behavior unchanged. Verify: docs tests or snapshots still pass. Rollback: revert.',
+  } as any);
+
+  const raw = (await ctx.planTools.writePlanTool((name?: string) => name || 'doc-tune').execute({
+    feature: 'doc-tune',
+    useScaffold: true,
+  } as any, {} as any)) as string;
+  const parsed = parseToolResponse(raw);
+  const pass = matchesDraftPlanPromotionFlow(parsed.data?.promotionFlow, 'doc-tune');
+  return {
+    id: 'plan-write-promotion-flow',
+    pass,
+    detail: pass
+      ? 'warcraft_plan_write(useScaffold) returns the remaining review/approve/sync flow'
+      : `promotionFlow=${JSON.stringify(parsed.data?.promotionFlow ?? null)}`,
   };
 }
 
@@ -879,6 +1146,39 @@ async function checkTaskExpandWritesPlanAndPreviewsPromotion(): Promise<CheckRes
     detail: pass
       ? 'warcraft_task_expand writes the scaffolded plan and previews the sync reconciliation'
       : `response=${JSON.stringify(parsed.data ?? null)} writtenPlan=${String(writtenPlan?.content || '')}`,
+  };
+}
+
+async function checkTaskExpandReturnsPromotionFlow(): Promise<CheckResult> {
+  const ctx = createWorkspace();
+  ctx.featureService.create('doc-tune');
+  const createTask = ctx.taskTools.createTaskTool((name?: string) => name || 'doc-tune');
+  await createTask.execute({
+    feature: 'doc-tune',
+    name: 'Refresh docs wording',
+    priority: 3,
+    description:
+      'Background: update the README wording for the instant workflow path. Impact: README text only. Safety: keep behavior unchanged. Verify: docs tests still pass. Rollback: revert.',
+  } as any);
+  await createTask.execute({
+    feature: 'doc-tune',
+    name: 'Refresh help text',
+    priority: 3,
+    description:
+      'Background: update inline help text for the instant workflow path. Impact: help text only. Safety: keep behavior unchanged. Verify: docs tests still pass. Rollback: revert.',
+  } as any);
+
+  const raw = (await ctx.taskTools.expandTaskTool((name?: string) => name || 'doc-tune').execute({
+    feature: 'doc-tune',
+  } as any)) as string;
+  const parsed = parseToolResponse(raw);
+  const pass = matchesDraftPlanPromotionFlow(parsed.data?.promotionFlow, 'doc-tune');
+  return {
+    id: 'task-expand-promotion-flow',
+    pass,
+    detail: pass
+      ? 'warcraft_task_expand returns the remaining review/approve/sync flow after writing the draft plan'
+      : `promotionFlow=${JSON.stringify(parsed.data?.promotionFlow ?? null)}`,
   };
 }
 
@@ -1026,20 +1326,26 @@ async function main() {
     checkManualTaskReturnsPlanScaffoldWhenItNeedsReview(),
     checkManualTaskReturnsPlanWriteArgsWhenItNeedsReview(),
     checkManualTaskReturnsTaskExpandArgsWhenItNeedsReview(),
+    checkManualTaskReturnsPromotionFlowWhenItNeedsReview(),
     checkManualTaskSpecIsSelfContained(),
     checkStatusNextActionSupportsInstantPath(),
     checkStatusNextActionSupportsLightweightRecommendation(),
     checkStatusReturnsPlanApproveArgsForDraftPlan(),
+    checkStatusReturnsDraftPlanPromotionFlow(),
     checkInstantWorkflowExpansionGuidance(),
     checkInstantWorkflowEscalatesPastLightweightTaskLimit(),
     checkStatusReturnsPlanScaffoldForEscalatedInstantWork(),
     checkStatusReturnsPlanWriteArgsForEscalatedInstantWork(),
     checkStatusReturnsTaskExpandArgsForEscalatedInstantWork(),
+    checkStatusReturnsPromotionFlowForEscalatedInstantWork(),
     checkStatusReturnsTaskSyncArgsAfterApproval(),
+    checkPlanApproveReturnsSyncFlow(),
     checkPlanWriteCanMaterializeLightweightScaffold(),
+    checkPlanWriteReturnsPromotionFlow(),
     checkPlanWriteCanMaterializeStandardScaffold(),
     checkScaffoldPromotionSyncsManualTasksIntoPlan(),
     checkTaskExpandWritesPlanAndPreviewsPromotion(),
+    checkTaskExpandReturnsPromotionFlow(),
     checkTaskExpandCanMergeIntoDraftPlan(),
     checkPromptsMentionInstantPath(),
     checkBeadsModeManualBriefPersistence(),

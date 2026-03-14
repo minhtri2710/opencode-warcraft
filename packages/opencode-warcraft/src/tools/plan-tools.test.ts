@@ -68,6 +68,24 @@ describe('PlanTools', () => {
     expect(parsed.data.content).toContain('### 1. Refresh docs wording');
     expect(parsed.data.planApproveArgs).toEqual({ feature: 'test-feature' });
     expect(parsed.data.taskSyncArgs).toEqual({ feature: 'test-feature', mode: 'sync' });
+    expect(parsed.data.promotionFlow).toEqual([
+      {
+        type: 'review',
+        message: 'Review or refine the drafted plan before approval so the reviewed path stays intentional.',
+      },
+      {
+        type: 'tool',
+        tool: 'warcraft_plan_approve',
+        args: { feature: 'test-feature' },
+        purpose: 'Approve the reviewed plan once it is ready to execute.',
+      },
+      {
+        type: 'tool',
+        tool: 'warcraft_tasks_sync',
+        args: { feature: 'test-feature', mode: 'sync' },
+        purpose: 'Generate or reconcile canonical tasks from the approved plan.',
+      },
+    ]);
     expect(planService.getLastWrite()).toEqual({ feature: 'test-feature', content: parsed.data.content });
     expect(updateCalls).toContainEqual({ workflowPath: 'lightweight' });
   });
@@ -103,7 +121,46 @@ describe('PlanTools', () => {
     expect(parsed.data.planScaffoldMode).toBe('standard');
     expect(parsed.data.planApproveArgs).toEqual({ feature: 'test-feature' });
     expect(parsed.data.taskSyncArgs).toEqual({ feature: 'test-feature', mode: 'sync' });
+    expect(parsed.data.promotionFlow?.[2]).toEqual({
+      type: 'tool',
+      tool: 'warcraft_tasks_sync',
+      args: { feature: 'test-feature', mode: 'sync' },
+      purpose: 'Generate or reconcile canonical tasks from the approved plan.',
+    });
     expect(parsed.data.content).not.toContain('Workflow Path: lightweight');
     expect(parsed.data.content).toContain('### 3. Third tiny fix');
+  });
+
+  it('returns sync follow-up args after plan approval', async () => {
+    const approveCalls: string[] = [];
+    const tool = new PlanTools({
+      featureService: {} as unknown as FeatureService,
+      planService: {
+        read: () => ({ content: '# Plan\n\n## Plan Review', status: 'planning' }),
+        approve: (feature: string) => {
+          approveCalls.push(feature);
+          return { severity: 'ok', diagnostics: [] };
+        },
+      } as unknown as PlanService,
+      taskService: {} as unknown as TaskService,
+      captureSession: () => {},
+      updateFeatureMetadata: () => {},
+      workflowGatesMode: 'warn',
+    }).approvePlanTool((name) => name ?? 'test-feature');
+
+    const raw = await tool.execute({ feature: 'test-feature' } as any, {} as any);
+    const parsed = JSON.parse(raw);
+
+    expect(parsed.success).toBe(true);
+    expect(approveCalls).toEqual(['test-feature']);
+    expect(parsed.data.taskSyncArgs).toEqual({ feature: 'test-feature', mode: 'sync' });
+    expect(parsed.data.promotionFlow).toEqual([
+      {
+        type: 'tool',
+        tool: 'warcraft_tasks_sync',
+        args: { feature: 'test-feature', mode: 'sync' },
+        purpose: 'Generate or reconcile canonical tasks from the approved plan.',
+      },
+    ]);
   });
 });

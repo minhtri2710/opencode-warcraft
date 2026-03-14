@@ -13,6 +13,12 @@ import { computeTrustMetrics } from 'warcraft-core';
 import type { BlockedResult } from '../types.js';
 import { toolError, toolSuccess } from '../types.js';
 import { buildPlanScaffold } from './manual-plan-scaffold.js';
+import {
+  buildApprovedPlanSyncFlow,
+  buildDraftPlanPromotionFlow,
+  buildPendingManualPromotionFlow,
+  type PromotionFlowStep,
+} from './promotion-flow.js';
 import { resolveFeatureInput, validatePathSegment } from './tool-input.js';
 
 export interface ContextToolsDependencies {
@@ -97,6 +103,7 @@ interface StatusResponseData {
   planApproveArgs: { feature: string } | null;
   taskSyncArgs: { feature: string; mode: 'sync' } | null;
   taskExpandArgs: { feature: string; tasks: string[]; mode: 'lightweight' | 'standard' } | null;
+  promotionFlow: PromotionFlowStep[] | null;
   nextAction: string;
 }
 
@@ -202,7 +209,14 @@ export class ContextTools {
 
   private static async buildStatusResponseData(
     deps: ContextToolsDependencies,
-    featureData: { name: string; status: string; ticket?: string | null; createdAt: string },
+    featureData: {
+      name: string;
+      status: string;
+      ticket?: string | null;
+      createdAt: string;
+      workflowPath?: string;
+      workflowRecommendation?: string;
+    },
     blockedResult: BlockedResult,
   ): Promise<StatusResponseData> {
     const { planService, taskService, contextService, worktreeService, bvTriageService, projectRoot } = deps;
@@ -428,7 +442,7 @@ export class ContextTools {
               };
             })
         : [];
-    const planScaffoldMode =
+    const planScaffoldMode: 'lightweight' | 'standard' | null =
       pendingManualTasks.length > 2 || workflowRecommendation === 'standard'
         ? 'standard'
         : pendingManualTasks.length > 1 || workflowRecommendation === 'lightweight'
@@ -438,6 +452,20 @@ export class ContextTools {
       planScaffoldMode && pendingManualTasks.length > 0
         ? buildPlanScaffold(featureName, planScaffoldMode, pendingManualTasks)
         : null;
+    const planWriteArgs = planScaffold ? { feature: featureName, content: planScaffold } : null;
+    const planApproveArgs = plan && planStatus === 'draft' ? { feature: featureName } : null;
+    const taskSyncArgs = plan && planStatus === 'approved' && tasks.length === 0 ? { feature: featureName, mode: 'sync' as const } : null;
+    const taskExpandArgs =
+      planScaffoldMode && pendingManualTasks.length > 0
+        ? { feature: featureName, tasks: pendingManualTasks.map((task) => task.folder), mode: planScaffoldMode }
+        : null;
+    const promotionFlow = taskExpandArgs
+      ? buildPendingManualPromotionFlow(taskExpandArgs, { feature: featureName }, { feature: featureName, mode: 'sync' })
+      : planApproveArgs
+        ? buildDraftPlanPromotionFlow(planApproveArgs, { feature: featureName, mode: 'sync' })
+        : taskSyncArgs
+          ? buildApprovedPlanSyncFlow(taskSyncArgs)
+          : null;
 
     let trustMetrics: {
       reopenRate: number;
@@ -508,13 +536,11 @@ export class ContextTools {
         blockedMttrMs: trustMetrics.blockedMttrMs,
       },
       planScaffold,
-      planWriteArgs: planScaffold ? { feature: featureName, content: planScaffold } : null,
-      planApproveArgs: plan && planStatus === 'draft' ? { feature: featureName } : null,
-      taskSyncArgs: plan && planStatus === 'approved' && tasks.length === 0 ? { feature: featureName, mode: 'sync' } : null,
-      taskExpandArgs:
-        planScaffoldMode && pendingManualTasks.length > 0
-          ? { feature: featureName, tasks: pendingManualTasks.map((task) => task.folder), mode: planScaffoldMode }
-          : null,
+      planWriteArgs,
+      planApproveArgs,
+      taskSyncArgs,
+      taskExpandArgs,
+      promotionFlow,
       nextAction: getNextAction(planStatus, tasksSummary, runnable, workflowPath, workflowRecommendation),
     };
   }

@@ -101,6 +101,12 @@ async function getStatusHealth(overrides: Partial<Record<string, unknown>> = {})
     planApproveArgs: { feature: string } | null;
     taskSyncArgs: { feature: string; mode: 'sync' } | null;
     taskExpandArgs: { feature: string; tasks: string[]; mode: 'lightweight' | 'standard' } | null;
+    promotionFlow:
+      | Array<
+          | { type: 'tool'; tool: string; args: Record<string, unknown>; purpose: string }
+          | { type: 'review'; message: string }
+        >
+      | null;
     nextAction: string;
   };
 }> {
@@ -164,7 +170,7 @@ describe('ContextTools', () => {
       expect(result.data.health.blockedMttrMs).toBeNull();
     });
 
-    it('health is sibling of feature, plan, tasks, context, worktreeHygiene, planScaffold, planWriteArgs, planApproveArgs, taskSyncArgs, taskExpandArgs, nextAction', async () => {
+    it('health is sibling of feature, plan, tasks, context, worktreeHygiene, planScaffold, planWriteArgs, planApproveArgs, taskSyncArgs, taskExpandArgs, promotionFlow, nextAction', async () => {
       const result = await getStatusHealth();
 
       expect(result.success).toBe(true);
@@ -179,6 +185,7 @@ describe('ContextTools', () => {
       expect(dataKeys).toContain('planApproveArgs');
       expect(dataKeys).toContain('taskSyncArgs');
       expect(dataKeys).toContain('taskExpandArgs');
+      expect(dataKeys).toContain('promotionFlow');
       expect(dataKeys).toContain('nextAction');
       expect(dataKeys).toContain('health');
     });
@@ -290,6 +297,30 @@ describe('ContextTools', () => {
         tasks: ['01-task', '02-task'],
         mode: 'lightweight',
       });
+      expect(result.data.promotionFlow).toEqual([
+        {
+          type: 'tool',
+          tool: 'warcraft_task_expand',
+          args: { feature: 'test-feature', tasks: ['01-task', '02-task'], mode: 'lightweight' },
+          purpose: 'Promote the pending manual tasks into a reviewed draft plan.',
+        },
+        {
+          type: 'review',
+          message: 'Review or refine the drafted plan before approval so the reviewed path stays intentional.',
+        },
+        {
+          type: 'tool',
+          tool: 'warcraft_plan_approve',
+          args: { feature: 'test-feature' },
+          purpose: 'Approve the reviewed plan once it is ready to execute.',
+        },
+        {
+          type: 'tool',
+          tool: 'warcraft_tasks_sync',
+          args: { feature: 'test-feature', mode: 'sync' },
+          purpose: 'Generate or reconcile canonical tasks from the approved plan.',
+        },
+      ]);
       expect(result.data.nextAction).toBe(
         'This instant workflow now has multiple pending tasks and has likely outgrown the tiny-task path. Use warcraft_task_expand to promote the pending manual tasks into a lightweight plan, then approve it before dispatching more work.',
       );
@@ -334,6 +365,12 @@ describe('ContextTools', () => {
         feature: 'test-feature',
         tasks: ['01-task', '02-task', '03-task'],
         mode: 'standard',
+      });
+      expect(result.data.promotionFlow?.[0]).toEqual({
+        type: 'tool',
+        tool: 'warcraft_task_expand',
+        args: { feature: 'test-feature', tasks: ['01-task', '02-task', '03-task'], mode: 'standard' },
+        purpose: 'Promote the pending manual tasks into a reviewed draft plan.',
       });
       expect(result.data.nextAction).toBe(
         'This instant workflow now has more than two pending tasks, so the lightweight path is no longer a good fit. Use warcraft_task_expand to promote the pending manual tasks into a reviewed standard plan, then approve it before dispatching more work.',
@@ -385,6 +422,24 @@ describe('ContextTools', () => {
       expect(result.success).toBe(true);
       expect(result.data.planApproveArgs).toEqual({ feature: 'test-feature' });
       expect(result.data.taskSyncArgs).toBeNull();
+      expect(result.data.promotionFlow).toEqual([
+        {
+          type: 'review',
+          message: 'Review or refine the drafted plan before approval so the reviewed path stays intentional.',
+        },
+        {
+          type: 'tool',
+          tool: 'warcraft_plan_approve',
+          args: { feature: 'test-feature' },
+          purpose: 'Approve the reviewed plan once it is ready to execute.',
+        },
+        {
+          type: 'tool',
+          tool: 'warcraft_tasks_sync',
+          args: { feature: 'test-feature', mode: 'sync' },
+          purpose: 'Generate or reconcile canonical tasks from the approved plan.',
+        },
+      ]);
     });
 
     it('returns taskSyncArgs when an approved plan exists but tasks have not been generated yet', async () => {
@@ -414,6 +469,14 @@ describe('ContextTools', () => {
       expect(result.success).toBe(true);
       expect(result.data.planApproveArgs).toBeNull();
       expect(result.data.taskSyncArgs).toEqual({ feature: 'test-feature', mode: 'sync' });
+      expect(result.data.promotionFlow).toEqual([
+        {
+          type: 'tool',
+          tool: 'warcraft_tasks_sync',
+          args: { feature: 'test-feature', mode: 'sync' },
+          purpose: 'Generate or reconcile canonical tasks from the approved plan.',
+        },
+      ]);
     });
 
     it('suggests a lightweight plan before dispatch when a pending instant task is marked as no longer tiny', async () => {
@@ -451,6 +514,12 @@ describe('ContextTools', () => {
         feature: 'test-feature',
         tasks: ['01-task'],
         mode: 'lightweight',
+      });
+      expect(result.data.promotionFlow?.[0]).toEqual({
+        type: 'tool',
+        tool: 'warcraft_task_expand',
+        args: { feature: 'test-feature', tasks: ['01-task'], mode: 'lightweight' },
+        purpose: 'Promote the pending manual tasks into a reviewed draft plan.',
       });
       expect(result.data.nextAction).toBe(
         'This task no longer looks tiny enough for direct execution. Use warcraft_task_expand to promote the pending manual task into a lightweight plan, then approve it before dispatching work.',

@@ -11,6 +11,7 @@ import {
 } from 'warcraft-core';
 import { toolError, toolSuccess } from '../types.js';
 import { appendTasksToPlanScaffold, buildPlanScaffold } from './manual-plan-scaffold.js';
+import { buildDraftPlanPromotionFlow, buildPendingManualPromotionFlow } from './promotion-flow.js';
 import { resolveFeatureInput, validateTaskInput } from './tool-input.js';
 
 export interface TaskToolsDependencies {
@@ -181,7 +182,7 @@ export class TaskTools {
           instantWorkflowActivated = true;
         }
 
-        const planScaffoldMode =
+        const planScaffoldMode: 'lightweight' | 'standard' | null =
           effectiveWorkflowRecommendation === 'standard'
             ? 'standard'
             : effectiveWorkflowRecommendation === 'lightweight'
@@ -202,6 +203,13 @@ export class TaskTools {
           : [];
         const planScaffold =
           planScaffoldMode && planScaffoldTasks.length > 0 ? buildPlanScaffold(feature, planScaffoldMode, planScaffoldTasks) : null;
+        const taskExpandArgs =
+          planScaffoldMode && pendingManualTasks.length > 0
+            ? { feature, tasks: pendingManualTasks, mode: planScaffoldMode }
+            : null;
+        const promotionFlow = taskExpandArgs
+          ? buildPendingManualPromotionFlow(taskExpandArgs, { feature }, { feature, mode: 'sync' })
+          : null;
         const recommendationWarning =
           expansionRecommendation === 'standard'
             ? '\nThis feature now has more than two pending manual tasks, so the lightweight path is no longer a good fit. Prefer the standard reviewed plan path with warcraft_plan_write before dispatching more work.'
@@ -225,10 +233,8 @@ export class TaskTools {
           pendingManualTasks,
           planScaffold,
           planWriteArgs: planScaffold ? { feature, content: planScaffold } : null,
-          taskExpandArgs:
-            planScaffoldMode && pendingManualTasks.length > 0
-              ? { feature, tasks: pendingManualTasks, mode: planScaffoldMode }
-              : null,
+          taskExpandArgs,
+          promotionFlow,
           message:
             instantWorkflowActivated
               ? `Manual task created: ${folder}\nInstant workflow activated for feature "${feature}" (no formal plan required for this small task). Include enough detail in the task description to make it self-contained, then call warcraft_worktree_create and issue the returned task() call.${recommendationWarning}${scaffoldHint}`
@@ -338,6 +344,7 @@ export class TaskTools {
           planWriteArgs: { feature, content: planScaffold },
           planApproveArgs: { feature },
           taskSyncArgs: { feature, mode: 'sync' },
+          promotionFlow: buildDraftPlanPromotionFlow({ feature }, { feature, mode: 'sync' }),
           syncPreview: {
             wouldCreate: preview.created,
             wouldRemove: preview.removed,

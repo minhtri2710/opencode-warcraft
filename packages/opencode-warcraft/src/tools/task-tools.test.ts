@@ -389,6 +389,30 @@ describe('TaskTools', () => {
         tasks: ['01-refresh-docs-wording'],
         mode: 'lightweight',
       });
+      expect(parsed.data.promotionFlow).toEqual([
+        {
+          type: 'tool',
+          tool: 'warcraft_task_expand',
+          args: { feature: 'test-feature', tasks: ['01-refresh-docs-wording'], mode: 'lightweight' },
+          purpose: 'Promote the pending manual tasks into a reviewed draft plan.',
+        },
+        {
+          type: 'review',
+          message: 'Review or refine the drafted plan before approval so the reviewed path stays intentional.',
+        },
+        {
+          type: 'tool',
+          tool: 'warcraft_plan_approve',
+          args: { feature: 'test-feature' },
+          purpose: 'Approve the reviewed plan once it is ready to execute.',
+        },
+        {
+          type: 'tool',
+          tool: 'warcraft_tasks_sync',
+          args: { feature: 'test-feature', mode: 'sync' },
+          purpose: 'Generate or reconcile canonical tasks from the approved plan.',
+        },
+      ]);
       expect(parsed.data.message).toContain('Workflow Path: lightweight');
       expect(parsed.data.message).toContain('warcraft_task_expand');
       expect(parsed.data.message).toContain('warcraft_plan_write({ useScaffold: true })');
@@ -526,6 +550,24 @@ describe('TaskTools', () => {
       expect(parsed.data.planPath).toBe('/tmp/test-feature/plan.md');
       expect(parsed.data.planApproveArgs).toEqual({ feature: 'test-feature' });
       expect(parsed.data.taskSyncArgs).toEqual({ feature: 'test-feature', mode: 'sync' });
+      expect(parsed.data.promotionFlow).toEqual([
+        {
+          type: 'review',
+          message: 'Review or refine the drafted plan before approval so the reviewed path stays intentional.',
+        },
+        {
+          type: 'tool',
+          tool: 'warcraft_plan_approve',
+          args: { feature: 'test-feature' },
+          purpose: 'Approve the reviewed plan once it is ready to execute.',
+        },
+        {
+          type: 'tool',
+          tool: 'warcraft_tasks_sync',
+          args: { feature: 'test-feature', mode: 'sync' },
+          purpose: 'Generate or reconcile canonical tasks from the approved plan.',
+        },
+      ]);
       expect(parsed.data.syncPreview.wouldReconcile).toEqual([
         { from: '01-tiny-fix', to: '01-tiny-fix', planTitle: 'Tiny Fix', beadId: 'task-1' },
       ]);
@@ -643,6 +685,12 @@ describe('TaskTools', () => {
       expect(parsed.data.mergedIntoExistingPlan).toBe(true);
       expect(parsed.data.planApproveArgs).toEqual({ feature: 'test-feature' });
       expect(parsed.data.taskSyncArgs).toEqual({ feature: 'test-feature', mode: 'sync' });
+      expect(parsed.data.promotionFlow?.[1]).toEqual({
+        type: 'tool',
+        tool: 'warcraft_plan_approve',
+        args: { feature: 'test-feature' },
+        purpose: 'Approve the reviewed plan once it is ready to execute.',
+      });
       expect(parsed.data.planScaffold).toContain('### 1. Existing Task');
       expect(parsed.data.planScaffold).toContain('### 2. Second Tiny Fix');
       expect(parsed.data.syncPreview.wouldReconcile).toEqual([
