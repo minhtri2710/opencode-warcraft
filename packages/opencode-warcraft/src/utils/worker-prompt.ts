@@ -274,6 +274,7 @@ After 3 failed attempts at same fix: STOP and report blocker.
 - \`warcraft_worktree_commit\` - Signal task done/blocked/failed
 - \`warcraft_plan_read\` - Re-read plan if needed
 - \`warcraft_context_write\` - Save learnings for future tasks
+- \`warcraft_skill\` - Load skill guidance when a task matches a skill description
 
 **You do NOT have access to (or should not use):**
 - \`question\` - Escalate via blocker protocol instead
