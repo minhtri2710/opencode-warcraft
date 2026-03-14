@@ -1,22 +1,48 @@
 import { describe, expect, it } from 'bun:test';
+import type { GitClient, StatusResult, BranchResult, CommitResult, LogResult } from './git-client.js';
 
-describe('GitClient Interface Contract', () => {
-  // This test validates that the GitClient interface covers all operations
-  // needed by WorktreeService. It documents the contract, not implementation.
-
-  it('should have the GitClient interface defined', () => {
-    // This is a compile-time test. If the interface is missing,
-    // the import will fail and TypeScript will error.
-    expect(() => {
-      import('./git-client.js');
-    }).not.toThrow();
+describe('git-client types', () => {
+  it('StatusResult has clean property', () => {
+    const result: StatusResult = { isClean: true, files: [] };
+    expect(result.isClean).toBe(true);
   });
 
-  it('should export all required git operations', async () => {
-    const module = await import('./git-client.js');
+  it('StatusResult with files', () => {
+    const result: StatusResult = {
+      isClean: false,
+      files: [{ path: 'test.ts', index: 'M', working_dir: ' ' }],
+    };
+    expect(result.files).toHaveLength(1);
+  });
 
-    // The module should export the GitClient interface
-    // This is validated at compile time by TypeScript
-    expect(module).toBeDefined();
+  it('BranchResult has current', () => {
+    const result: BranchResult = { current: 'main', all: ['main', 'develop'] };
+    expect(result.current).toBe('main');
+  });
+
+  it('CommitResult has hash', () => {
+    const result: CommitResult = { hash: 'abc1234', message: 'test commit' };
+    expect(result.hash).toBe('abc1234');
+  });
+
+  it('LogResult has entries', () => {
+    const result: LogResult = {
+      all: [{ hash: 'abc', message: 'commit', date: '2024-01-01' }],
+    };
+    expect(result.all).toHaveLength(1);
+  });
+
+  it('GitClient interface shape', () => {
+    const client: GitClient = {
+      status: async () => ({ isClean: true, files: [] }),
+      branch: async () => ({ current: 'main', all: ['main'] }),
+      log: async () => ({ all: [] }),
+      add: async () => {},
+      commit: async () => ({ hash: '', message: '' }),
+      diff: async () => '',
+      merge: async () => ({ result: 'success' }),
+    };
+    expect(typeof client.status).toBe('function');
+    expect(typeof client.branch).toBe('function');
   });
 });
