@@ -213,7 +213,7 @@ export function computeTrustMetrics(projectRoot: string): TrustMetrics {
         if (blockedAt.has(taskKey) && event.timestamp) {
           const blockedTime = new Date(blockedAt.get(taskKey)!).getTime();
           const resolvedTime = new Date(event.timestamp).getTime();
-          if (!Number.isNaN(blockedTime) && !Number.isNaN(resolvedTime)) {
+          if (!Number.isNaN(blockedTime) && !Number.isNaN(resolvedTime) && resolvedTime >= blockedTime) {
             mttrValues.push(resolvedTime - blockedTime);
           }
           blockedAt.delete(taskKey);

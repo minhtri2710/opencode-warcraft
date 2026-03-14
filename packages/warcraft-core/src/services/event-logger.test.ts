@@ -312,6 +312,29 @@ describe('EventLogger', () => {
       expect(metrics.blockedMttrMs).toBe(900000);
     });
 
+    it('ignores negative MTTR values from clock skew', () => {
+      const logger = createEventLogger(TEST_DIR);
+
+      // Blocked event has a LATER timestamp than the resolve (clock skew)
+      logger.emit({
+        type: 'blocked',
+        feature: 'feat',
+        task: '01-task',
+        timestamp: '2026-03-06T11:00:00.000Z',
+      });
+      logger.emit({
+        type: 'commit',
+        feature: 'feat',
+        task: '01-task',
+        timestamp: '2026-03-06T10:00:00.000Z', // Earlier than blocked!
+        details: { status: 'completed' },
+      });
+
+      const metrics = computeTrustMetrics(TEST_DIR);
+      // Negative duration should be filtered out, resulting in null MTTR
+      expect(metrics.blockedMttrMs).toBeNull();
+    });
+
     it('counts duplicate dispatch prevented events', () => {
       const logger = createEventLogger(TEST_DIR);
 
