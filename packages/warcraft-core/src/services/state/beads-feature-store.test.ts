@@ -88,4 +88,78 @@ describe('BeadsFeatureStore lifecycle', () => {
     expect(saved.status).toBe('executing');
     expect(saved.approvedAt).toBe('2026-03-01T00:00:00.000Z');
   });
+
+  it('complete() writes feature.json and closes the epic bead', () => {
+    const projectRoot = createTempProjectRoot();
+    const closeCalls: string[] = [];
+    const repository = {
+      closeBead: (beadId: string) => {
+        closeCalls.push(beadId);
+        return { success: true as const, value: undefined };
+      },
+    };
+
+    const store = new BeadsFeatureStore(projectRoot, repository as any);
+    const feature: FeatureJson = {
+      name: 'test-feature',
+      epicBeadId: 'epic-2',
+      status: 'completed',
+      createdAt: new Date().toISOString(),
+    };
+
+    store.complete(feature);
+    expect(closeCalls).toEqual(['epic-2']);
+  });
+
+  it('exists() returns false for non-existent feature', () => {
+    const store = new BeadsFeatureStore(createTempProjectRoot(), {} as any);
+    expect(store.exists('nonexistent')).toBe(false);
+  });
+
+  it('exists() returns true after save()', () => {
+    const projectRoot = createTempProjectRoot();
+    const store = new BeadsFeatureStore(projectRoot, {} as any);
+    const feature: FeatureJson = {
+      name: 'test-feature',
+      epicBeadId: 'epic-1',
+      status: 'planning',
+      createdAt: new Date().toISOString(),
+    };
+
+    // Create the feature directory structure first
+    const featurePath = path.join(projectRoot, '.beads', 'artifacts', 'test-feature');
+    fs.mkdirSync(featurePath, { recursive: true });
+
+    store.save(feature);
+    expect(store.exists('test-feature')).toBe(true);
+  });
+
+  it('list() returns sorted feature names from epic listing', () => {
+    const repository = {
+      listEpics: () => ({
+        success: true as const,
+        value: [
+          { title: 'zebra-feature', id: 'e3' },
+          { title: 'alpha-feature', id: 'e1' },
+          { title: 'middle-feature', id: 'e2' },
+        ],
+      }),
+    };
+
+    const store = new BeadsFeatureStore(createTempProjectRoot(), repository as any);
+    const result = store.list();
+    expect(result).toEqual(['alpha-feature', 'middle-feature', 'zebra-feature']);
+  });
+
+  it('list() returns empty array when repository fails', () => {
+    const repository = {
+      listEpics: () => ({
+        success: false as const,
+        error: new RepositoryError('gateway_error', 'Generic failure'),
+      }),
+    };
+
+    const store = new BeadsFeatureStore(createTempProjectRoot(), repository as any);
+    expect(store.list()).toEqual([]);
+  });
 });
