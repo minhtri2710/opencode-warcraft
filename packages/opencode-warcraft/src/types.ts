@@ -42,6 +42,14 @@ export function toolSuccess<T>(data: T): string {
 }
 
 /** Helper to create an error ToolResult JSON string. */
-export function toolError(error: string, hints?: string[]): string {
-  return JSON.stringify({ success: false, error, hints } satisfies ToolResult, null, 2);
+export function toolError<T = unknown>(
+  error: string,
+  hints?: string[],
+  options?: { data?: T; warnings?: ToolWarning[] },
+): string {
+  return JSON.stringify(
+    { success: false, error, hints, data: options?.data, warnings: options?.warnings } satisfies ToolResult<T>,
+    null,
+    2,
+  );
 }

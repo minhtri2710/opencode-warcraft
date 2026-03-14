@@ -203,6 +203,21 @@ describe('PlanTools', () => {
       'Run warcraft_task_expand with {"feature":"test-feature","tasks":["01-follow-up"],"mode":"lightweight"} to merge the remaining manual tasks into the draft plan.',
       'After expansion succeeds, review the updated draft and retry warcraft_plan_approve.',
     ]);
+    expect(parsed.data).toEqual({
+      blockedReason: 'manual_tasks_outside_plan',
+      remainingManualTasks: ['01-follow-up'],
+      taskExpandArgs: { feature: 'test-feature', tasks: ['01-follow-up'], mode: 'lightweight' },
+      retryArgs: { feature: 'test-feature' },
+    });
+    expect(parsed.warnings).toEqual([
+      {
+        type: 'manual_tasks_outside_plan',
+        severity: 'error',
+        message: 'Pending manual tasks still sit outside the reviewed draft plan.',
+        affected: '01-follow-up',
+        count: 1,
+      },
+    ]);
     expect(approveCalls).toEqual([]);
   });
 

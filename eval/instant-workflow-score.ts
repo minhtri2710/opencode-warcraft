@@ -1094,12 +1094,95 @@ async function checkPlanApproveRejectsRemainingManualTasks(): Promise<CheckResul
     /warcraft_task_expand/.test(String(parsed.error || '')) &&
     Array.isArray((parsed as any).hints) &&
     /warcraft_task_expand/.test(String((parsed as any).hints?.[0] || '')) &&
-    /retry warcraft_plan_approve/i.test(String((parsed as any).hints?.[1] || ''));
+    /retry warcraft_plan_approve/i.test(String((parsed as any).hints?.[1] || '')) &&
+    (parsed as any).data?.blockedReason === 'manual_tasks_outside_plan' &&
+    JSON.stringify((parsed as any).data?.remainingManualTasks) === JSON.stringify(['01-tiny-fix']) &&
+    (parsed as any).data?.taskExpandArgs?.feature === 'doc-tune' &&
+    JSON.stringify((parsed as any).data?.taskExpandArgs?.tasks) === JSON.stringify(['01-tiny-fix']) &&
+    (parsed as any).data?.retryArgs?.feature === 'doc-tune' &&
+    Array.isArray((parsed as any).warnings) &&
+    (parsed as any).warnings?.[0]?.type === 'manual_tasks_outside_plan';
   return {
     id: 'plan-approve-blocked-by-remaining-manual-tasks',
     pass,
     detail: pass
       ? 'warcraft_plan_approve blocks incomplete drafts that still leave manual tasks outside the reviewed plan'
+      : `response=${JSON.stringify(parsed)}`,
+  };
+}
+
+async function checkPlanApproveReturnsStructuredBlockedRecovery(): Promise<CheckResult> {
+  const ctx = createWorkspace();
+  ctx.featureService.create('doc-tune');
+  ctx.planService.write(
+    'doc-tune',
+    [
+      '# doc-tune',
+      '',
+      'Workflow Path: lightweight',
+      '',
+      '## Discovery',
+      '',
+      'Impact: existing plan',
+      'Safety: low',
+      'Verify: tests',
+      'Rollback: revert',
+      '',
+      '## Non-Goals',
+      '',
+      '- Keep scope tight.',
+      '',
+      '## Ghost Diffs',
+      '',
+      '- Skip alternatives for now.',
+      '',
+      '## Tasks',
+      '',
+      '### 1. Existing Task',
+      '',
+      '**Depends on**: none',
+      '',
+      '**What to do**:',
+      '- Keep existing behavior.',
+      '',
+      '**References**:',
+      '- Existing context.',
+      '',
+      '**Verify**:',
+      '- [ ] Run tests',
+      '',
+    ].join('\n'),
+  );
+  const createTask = ctx.taskTools.createTaskTool((name?: string) => name || 'doc-tune');
+  await createTask.execute({
+    feature: 'doc-tune',
+    name: 'Tiny Fix',
+    priority: 3,
+    description:
+      'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
+  } as any);
+
+  const raw = (await ctx.planTools.approvePlanTool((name?: string) => name || 'doc-tune').execute(
+    { feature: 'doc-tune' } as any,
+    {} as any,
+  )) as string;
+  const parsed = parseToolResponse(raw) as any;
+  const pass =
+    parsed.success === false &&
+    parsed.data?.blockedReason === 'manual_tasks_outside_plan' &&
+    JSON.stringify(parsed.data?.remainingManualTasks) === JSON.stringify(['01-tiny-fix']) &&
+    parsed.data?.taskExpandArgs?.feature === 'doc-tune' &&
+    JSON.stringify(parsed.data?.taskExpandArgs?.tasks) === JSON.stringify(['01-tiny-fix']) &&
+    parsed.data?.taskExpandArgs?.mode === 'lightweight' &&
+    parsed.data?.retryArgs?.feature === 'doc-tune' &&
+    Array.isArray(parsed.warnings) &&
+    parsed.warnings[0]?.type === 'manual_tasks_outside_plan' &&
+    parsed.warnings[0]?.count === 1;
+  return {
+    id: 'plan-approve-blocked-structured-recovery',
+    pass,
+    detail: pass
+      ? 'warcraft_plan_approve returns structured recovery metadata when approval is blocked'
       : `response=${JSON.stringify(parsed)}`,
   };
 }
@@ -1577,6 +1660,7 @@ async function main() {
     checkStatusReturnsTaskSyncArgsAfterApproval(),
     checkPlanApproveReturnsSyncFlow(),
     checkPlanApproveRejectsRemainingManualTasks(),
+    checkPlanApproveReturnsStructuredBlockedRecovery(),
     checkPlanWriteCanMaterializeLightweightScaffold(),
     checkPlanWriteReturnsPromotionFlow(),
     checkPlanWriteCanMaterializeStandardScaffold(),

@@ -83,4 +83,5 @@ The benchmark should reward real workflow improvements, not just prompt edits. I
 - Tightened the handoff so incomplete draft-plan states no longer advertise premature `planApproveArgs` / `taskSyncArgs`; those args are withheld until remaining manual tasks have actually been merged into the reviewed draft.
 - Tightened `warcraft_plan_approve` itself so incomplete drafts now fail approval when unmatched manual tasks still sit outside the reviewed plan, with an error that points back to `warcraft_task_expand` and the exact remaining task folders.
 - Added explicit blocked-approval hints so that failure path now returns a ready-to-run recovery command plus a retry hint, not just prose about what went wrong.
-- Latest direction in progress: if recovery friction remains, consider richer structured error metadata for blocked promotion steps instead of adding more workflow branches.
+- Added structured failure metadata on blocked plan approval (`blockedReason`, `remainingManualTasks`, `taskExpandArgs`, `retryArgs`, warning metadata) so agents can recover exact next-step args from the failure response itself, not just from free-form hint strings.
+- Latest direction in progress: if recovery friction remains, extend that structured blocked-step metadata more consistently across other promotion failures instead of adding more workflow branches.

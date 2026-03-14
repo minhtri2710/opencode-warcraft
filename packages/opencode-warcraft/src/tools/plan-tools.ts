@@ -197,6 +197,23 @@ export class PlanTools {
                 `Run warcraft_task_expand with ${JSON.stringify(taskExpandArgs)} to merge the remaining manual tasks into the draft plan.`,
                 'After expansion succeeds, review the updated draft and retry warcraft_plan_approve.',
               ],
+              {
+                data: {
+                  blockedReason: 'manual_tasks_outside_plan',
+                  remainingManualTasks: preview.manual,
+                  taskExpandArgs,
+                  retryArgs: { feature },
+                },
+                warnings: [
+                  {
+                    type: 'manual_tasks_outside_plan',
+                    severity: 'error',
+                    message: 'Pending manual tasks still sit outside the reviewed draft plan.',
+                    affected: preview.manual.join(', '),
+                    count: preview.manual.length,
+                  },
+                ],
+              },
             );
           }
         }
