@@ -85,7 +85,7 @@ NEXT: Ask your first clarifying question about this feature.`,
     // Capture deps in closure to avoid 'this' binding issues
     const { featureService } = this.deps;
     return tool({
-      description: 'Mark feature as completed (irreversible)',
+      description: 'Mark feature as completed (may be auto-reopened if task statuses change)',
       args: {
         name: tool.schema.string().optional().describe('Feature name (defaults to active)'),
       },

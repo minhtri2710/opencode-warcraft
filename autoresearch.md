@@ -71,3 +71,5 @@ Systematically explore the repository, trace execution flows across related impo
 - Fixed missing warcraft_doctor in WARCRAFT_TOOL_IDS: the doctor tool was registered at runtime (19 tools) but absent from tool-permissions.ts (18 entries), so it bypassed the per-agent allow/deny permission system entirely.
 - Fixed the index.test.ts stale tool count: claimed '18 warcraft tools' but 19 exist at runtime (warcraft_doctor was missing from the registration check).
 - Fixed the turn-termination fragment: 'Worker delegation (warcraft_worktree_create)' now includes the returned task() call, since stopping at just warcraft_worktree_create is an incomplete delegation turn.
+- Fixed warcraft_worktree_discard tool description: said 'discard changes, reset status' but direct mode does NOT discard file changes. Now says 'Abort task and reset status (reverts changes only in worktree mode)'.
+- Fixed the system prompt Workflow quick-reference: 'Merge task branch into main' → 'Integrate completed task work'; 'commits changes to task branch' → 'finalizes work'. Removed worktree-only 'Worktrees persist until manually removed' note.

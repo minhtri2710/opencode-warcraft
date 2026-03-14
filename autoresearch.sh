@@ -85,3 +85,4 @@ echo "METRIC audit_runtime_ms=${RUNTIME_MS}"
 # the number of failing audit assertions. Correctness backpressure comes from
 # autoresearch.checks.sh, which runs after passing benchmark executions.
 exit 0
+bun test eval/feature-complete-irreversible.audit.test.ts --no-cache 2>&1
