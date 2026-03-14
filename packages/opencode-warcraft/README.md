@@ -424,7 +424,7 @@ Plan approval uses **SHA-256 content hashing** to detect plan modifications:
 | `dispatching-parallel-agents` | Use when facing 2+ independent tasks that can be worked on without shared state or sequential dependencies. |
 | `docker-mastery` | Use when working with Docker containers: debugging failures, writing Dockerfiles, docker-compose, image optimization, or deploying containerized apps. |
 | `executing-plans` | Use when you have a written implementation plan to execute in a separate session with review checkpoints. |
-| `finishing-a-development-branch` | Use when implementation is complete and you need to choose how to integrate, preserve, or discard worktree changes safely. |
+| `finishing-a-development-branch` | Use when implementation is complete and you need to choose how to integrate, preserve, or discard workspace changes safely. |
 | `parallel-exploration` | Use when you need parallel, read-only exploration with task() (Brann fan-out). |
 | `receiving-code-review` | Use when review feedback arrives and you must evaluate, clarify, and apply it with technical rigor. |
 | `requesting-code-review` | Use when finishing a task or milestone and you need an explicit review pass before merge or handoff. |
