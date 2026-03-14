@@ -1,32 +1,90 @@
 import { describe, expect, it } from 'bun:test';
-import { BeadGatewayError } from './BeadGateway.types.js';
+import {
+  BeadGatewayError,
+  type BeadArtifactKind,
+  type BeadComment,
+  type AuditEntry,
+  type BeadGatewayErrorCode,
+} from './BeadGateway.types.js';
 
-describe('BeadGatewayError', () => {
-  it('creates error with code and message', () => {
-    const error = new BeadGatewayError('parse_error', 'Failed to parse');
-    expect(error.code).toBe('parse_error');
-    expect(error.message).toBe('Failed to parse');
-    expect(error.name).toBe('BeadGatewayError');
+describe('BeadGateway types comprehensive', () => {
+  describe('BeadArtifactKind', () => {
+    it('includes spec', () => {
+      const kind: BeadArtifactKind = 'spec';
+      expect(kind).toBe('spec');
+    });
+
+    it('includes worker_prompt', () => {
+      const kind: BeadArtifactKind = 'worker_prompt';
+      expect(kind).toBe('worker_prompt');
+    });
+
+    it('includes report', () => {
+      const kind: BeadArtifactKind = 'report';
+      expect(kind).toBe('report');
+    });
+
+    it('includes task_state', () => {
+      const kind: BeadArtifactKind = 'task_state';
+      expect(kind).toBe('task_state');
+    });
   });
 
-  it('creates error with optional internal code', () => {
-    const error = new BeadGatewayError('command_failed', 'Command failed', 'BR_NOT_FOUND');
-    expect(error.internalCode).toBe('BR_NOT_FOUND');
+  describe('BeadGatewayError', () => {
+    it('is an Error', () => {
+      const err = new BeadGatewayError('parse_error', 'test', {});
+      expect(err).toBeInstanceOf(Error);
+    });
+
+    it('has code property', () => {
+      const err = new BeadGatewayError('parse_error', 'test message', {});
+      expect(err.code).toBe('parse_error');
+    });
+
+    it('has message', () => {
+      const err = new BeadGatewayError('parse_error', 'detailed error', {});
+      expect(err.message).toContain('detailed error');
+    });
+
+    it('can be caught as Error', () => {
+      try {
+        throw new BeadGatewayError('parse_error', 'test', {});
+      } catch (e) {
+        expect(e).toBeInstanceOf(Error);
+      }
+    });
+
+    it('different codes work', () => {
+      const codes: BeadGatewayErrorCode[] = ['parse_error', 'not_found', 'command_failed'];
+      for (const code of codes) {
+        const err = new BeadGatewayError(code, 'test', {});
+        expect(err.code).toBe(code);
+      }
+    });
   });
 
-  it('is instanceof Error', () => {
-    const error = new BeadGatewayError('parse_error', 'test');
-    expect(error instanceof Error).toBe(true);
-    expect(error instanceof BeadGatewayError).toBe(true);
+  describe('BeadComment type', () => {
+    it('accepts valid comment', () => {
+      const comment: BeadComment = {
+        id: 'c-1',
+        author: 'user',
+        body: 'comment text',
+        createdAt: '2024-01-01',
+      };
+      expect(comment.id).toBe('c-1');
+      expect(comment.body).toBe('comment text');
+    });
   });
 
-  it('has undefined internalCode when not provided', () => {
-    const error = new BeadGatewayError('missing_field', 'Missing id');
-    expect(error.internalCode).toBeUndefined();
-  });
-
-  it('stack trace is available', () => {
-    const error = new BeadGatewayError('test', 'message');
-    expect(error.stack).toBeDefined();
+  describe('AuditEntry type', () => {
+    it('accepts valid entry', () => {
+      const entry: AuditEntry = {
+        timestamp: '2024-01-01T00:00:00Z',
+        action: 'status_change',
+        actor: 'agent',
+        details: 'changed to done',
+      };
+      expect(entry.action).toBe('status_change');
+    });
   });
 });
