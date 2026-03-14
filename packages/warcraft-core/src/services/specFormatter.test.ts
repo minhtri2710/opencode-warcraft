@@ -51,3 +51,66 @@ describe('formatSpecContent context rendering', () => {
     expect(formatted).toContain('## research-notes\n\n## Operator Notes\n\n- Keep the rollout sequential');
   });
 });
+
+describe('formatSpecContent structure', () => {
+  it('includes task header, feature name, and dependencies section', () => {
+    const formatted = formatSpecContent(createSpecData());
+    expect(formatted).toContain('# Task: 01-test-task');
+    expect(formatted).toContain('## Feature: test-feature');
+    expect(formatted).toContain('## Dependencies');
+    expect(formatted).toContain('_None_');
+  });
+
+  it('renders dependency list with task details', () => {
+    const specData = createSpecData({
+      dependsOn: ['01-setup'],
+      allTasks: [
+        { folder: '01-setup', name: 'Setup', order: 1 },
+        { folder: '02-build', name: 'Build', order: 2 },
+      ],
+    });
+
+    const formatted = formatSpecContent(specData);
+    expect(formatted).toContain('**1. Setup** (01-setup)');
+  });
+
+  it('renders plan section content', () => {
+    const specData = createSpecData({
+      planSection: '### 1. Test task\n\nImplement the feature.',
+    });
+
+    const formatted = formatSpecContent(specData);
+    expect(formatted).toContain('## Plan Section');
+    expect(formatted).toContain('Implement the feature.');
+  });
+
+  it('renders completed tasks section', () => {
+    const specData = createSpecData({
+      completedTasks: [{ name: 'Setup', summary: 'Created project skeleton' }],
+    });
+
+    const formatted = formatSpecContent(specData);
+    expect(formatted).toContain('## Completed Tasks');
+    expect(formatted).toContain('- Setup: Created project skeleton');
+  });
+
+  it('infers testing task type from plan section', () => {
+    const specData = createSpecData({
+      planSection: '- Test: src/utils.test.ts',
+    });
+
+    const formatted = formatSpecContent(specData);
+    expect(formatted).toContain('## Task Type');
+    expect(formatted).toContain('testing');
+  });
+
+  it('infers testing task type from task name when no plan section', () => {
+    const specData = createSpecData({
+      task: { folder: '01-test-utils', name: 'Test utils', order: 1 },
+    });
+
+    const formatted = formatSpecContent(specData);
+    expect(formatted).toContain('## Task Type');
+    expect(formatted).toContain('testing');
+  });
+});
