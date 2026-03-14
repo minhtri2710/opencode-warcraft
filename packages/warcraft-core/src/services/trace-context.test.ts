@@ -29,4 +29,14 @@ describe('createChildSpan', () => {
     expect(child.spanId).toMatch(/^[0-9a-f-]{36}$/i);
     expect(child.spanId).not.toBe(parent.spanId);
   });
+
+  it('chains multiple child spans', () => {
+    const root = createTraceContext('trace-1');
+    const child1 = createChildSpan(root);
+    const child2 = createChildSpan(child1);
+
+    expect(child2.traceId).toBe('trace-1');
+    expect(child2.parentSpanId).toBe(child1.spanId);
+    expect(child2.spanId).not.toBe(child1.spanId);
+  });
 });
