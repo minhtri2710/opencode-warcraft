@@ -432,8 +432,9 @@ If "Revise Plan":
 ### Task Failed
 
 ```
-warcraft_worktree_discard({ task })  # Discard
-warcraft_worktree_create({ task })   # Fresh start
+warcraft_worktree_discard({ task })  # Discard and reset status
+warcraft_worktree_create({ task })   # Prepare fresh workspace
+# Issue the returned task() call to launch a new worker
 ```
 
 ### After 3 Failures
