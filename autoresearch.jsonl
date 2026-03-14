@@ -1,3 +1,4 @@
 {"type":"config","name":"Bug hunting in warcraft-core","metricName":"tests_passing","metricUnit":"","bestDirection":"higher"}
 {"run":1,"commit":"23c1f34","metric":987,"metrics":{},"status":"keep","description":"Baseline: 987 tests passing, 0 failing across 41 files in warcraft-core","timestamp":1773473218645,"segment":0}
 {"run":2,"commit":"66670e6","metric":990,"metrics":{},"status":"keep","description":"Fix slugifyTaskName consecutive hyphens, remove redundant double-slugification in parseTasksFromPlan, remove redundant buildEffectiveDependencies in computeRunnableStatus, filter undefined from worktreeService conflict arrays","timestamp":1773473747242,"segment":0}
+{"run":3,"commit":"60e3c83","metric":990,"metrics":{},"status":"keep","description":"Guard FilesystemPlanStore.approve and revokeApproval against missing feature.json to prevent writing corrupt empty objects","timestamp":1773473913641,"segment":0}

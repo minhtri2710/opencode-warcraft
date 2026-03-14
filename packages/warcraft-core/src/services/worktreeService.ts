@@ -765,7 +765,10 @@ export class WorktreeService {
       const result = await git.merge(branchName, { noFastForward: true, message: `warcraft: merge ${step}` });
       const head = await git.revparse(['HEAD']);
       const filesChanged = head === beforeHead ? [] : await this.listChangedFiles(git, `${beforeHead}..${head}`);
-      const conflicts = result.conflicts?.map((conflict) => conflict.file ?? conflict.reason).filter((f): f is string => f !== undefined && f !== null) ?? [];
+      const conflicts =
+        result.conflicts
+          ?.map((conflict) => conflict.file ?? conflict.reason)
+          .filter((f): f is string => f !== undefined && f !== null) ?? [];
 
       if (result.failed) {
         return {
@@ -789,7 +792,10 @@ export class WorktreeService {
       };
     } catch (error: unknown) {
       const err = error as { message?: string; git?: SimpleGitMergeResult };
-      const gitConflicts = err.git?.conflicts?.map((conflict) => conflict.file ?? conflict.reason).filter((f): f is string => f !== undefined && f !== null) ?? [];
+      const gitConflicts =
+        err.git?.conflicts
+          ?.map((conflict) => conflict.file ?? conflict.reason)
+          .filter((f): f is string => f !== undefined && f !== null) ?? [];
       const conflicts = gitConflicts.length > 0 ? gitConflicts : this.parseConflictsFromError(err.message || '');
       const filesChanged = err.git?.files ?? [];
 
