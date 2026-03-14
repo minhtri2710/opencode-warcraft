@@ -373,6 +373,8 @@ describe('TaskTools', () => {
       expect(parsed.success).toBe(true);
       expect(parsed.data.workflowRecommendation).toBe('lightweight');
       expect(parsed.data.planScaffold).toContain('Workflow Path: lightweight');
+      expect(parsed.data.planScaffold).toContain('## Non-Goals');
+      expect(parsed.data.planScaffold).toContain('## Ghost Diffs');
       expect(parsed.data.planScaffold).toContain('### 1. Refresh docs wording');
       expect(parsed.data.planWriteArgs).toEqual({ feature: 'test-feature', content: parsed.data.planScaffold });
       expect(parsed.data.message).toContain('Workflow Path: lightweight');
@@ -407,6 +409,8 @@ describe('TaskTools', () => {
       expect(parsed.data.pendingManualTasks).toEqual(['01-tiny-fix', '02-second-tiny-fix']);
       expect(parsed.data.workflowRecommendation).toBe('lightweight');
       expect(parsed.data.planScaffold).toContain('Workflow Path: lightweight');
+      expect(parsed.data.planScaffold).toContain('## Non-Goals');
+      expect(parsed.data.planScaffold).toContain('## Ghost Diffs');
       expect(parsed.data.planScaffold).toContain('### 1. Tiny Fix');
       expect(parsed.data.planScaffold).toContain('### 2. Second Tiny Fix');
       expect(parsed.data.planWriteArgs).toEqual({ feature: 'test-feature', content: parsed.data.planScaffold });
@@ -449,6 +453,8 @@ describe('TaskTools', () => {
       expect(parsed.data.pendingManualTasks).toEqual(['01-tiny-fix', '02-second-tiny-fix', '03-third-tiny-fix']);
       expect(parsed.data.workflowRecommendation).toBe('standard');
       expect(parsed.data.planScaffold).toContain('# test-feature');
+      expect(parsed.data.planScaffold).toContain('## Non-Goals');
+      expect(parsed.data.planScaffold).toContain('## Ghost Diffs');
       expect(parsed.data.planScaffold).not.toContain('Workflow Path: lightweight');
       expect(parsed.data.planScaffold).toContain('### 3. Third Tiny Fix');
       expect(parsed.data.planWriteArgs).toEqual({ feature: 'test-feature', content: parsed.data.planScaffold });

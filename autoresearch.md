@@ -58,6 +58,7 @@ The benchmark should reward real workflow improvements, not just prompt edits. I
 - fallback guidance that respects the lightweight path's own max-2-task constraint, escalating outgrown instant workflows to the standard path once they exceed that limit
 - draft plan scaffolds in tool/status responses so agents can convert outgrown instant/manual work into reviewed plans without starting from a blank page
 - ready-to-use `warcraft_plan_write` arguments alongside those scaffolds so agents can promote work into planning with minimal manual rewriting
+- scaffold structure that remains beads-aligned by including planning guardrail sections such as `## Non-Goals` and `## Ghost Diffs`, not just Discovery + Tasks
 
 ## What's Been Tried
 - Added an initial behavior-oriented eval harness and baseline targeted tests.
@@ -65,4 +66,4 @@ The benchmark should reward real workflow improvements, not just prompt edits. I
 - Fixed the beads-mode/manual-task gap by preserving `brief` through the task-state artifact encode/decode path and adding explicit artifact schema coverage.
 - Added request analysis in `warcraft_feature_create` via `analyzeWorkflowRequest`, returning `recommendedWorkflowPath` + rationale for instant vs lightweight vs standard.
 - Persisted `workflowRecommendation` on the feature so `warcraft_status` can guide the user toward the right next action (e.g. lightweight plan) even before a plan or task exists.
-- Latest direction in progress: reduce the remaining manual friction in the instant→plan fallback further by returning ready-to-use `warcraft_plan_write` inputs alongside the reviewed-plan scaffold, so agents can promote work without re-wrapping the scaffold by hand.
+- Latest direction in progress: make the returned reviewed-plan scaffold more approval-ready and beads-aligned by carrying not just Discovery/Tasks but also plan guardrail sections like `## Non-Goals` and `## Ghost Diffs`.

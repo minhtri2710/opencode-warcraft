@@ -225,7 +225,11 @@ async function checkManualTaskReturnsPlanScaffoldWhenItNeedsReview(): Promise<Ch
   } as any)) as string;
   const parsed = parseToolResponse(raw);
   const scaffold = String(parsed.data?.planScaffold || '');
-  const pass = /Workflow Path: lightweight/i.test(scaffold) && /### 1\. Refresh docs wording/.test(scaffold);
+  const pass =
+    /Workflow Path: lightweight/i.test(scaffold) &&
+    /## Non-Goals/.test(scaffold) &&
+    /## Ghost Diffs/.test(scaffold) &&
+    /### 1\. Refresh docs wording/.test(scaffold);
   return {
     id: 'manual-task-plan-scaffold',
     pass,
@@ -453,7 +457,12 @@ async function checkStatusReturnsPlanScaffoldForEscalatedInstantWork(): Promise<
   })) as string;
   const statusParsed = parseToolResponse(statusRaw);
   const scaffold = String(statusParsed.data?.planScaffold || '');
-  const pass = /# quick-fix/.test(scaffold) && /### 3\. Polish status wording/.test(scaffold) && !/Workflow Path: lightweight/i.test(scaffold);
+  const pass =
+    /# quick-fix/.test(scaffold) &&
+    /## Non-Goals/.test(scaffold) &&
+    /## Ghost Diffs/.test(scaffold) &&
+    /### 3\. Polish status wording/.test(scaffold) &&
+    !/Workflow Path: lightweight/i.test(scaffold);
   return {
     id: 'status-plan-scaffold',
     pass,

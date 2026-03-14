@@ -274,6 +274,8 @@ describe('ContextTools', () => {
 
       expect(result.success).toBe(true);
       expect(result.data.planScaffold).toContain('Workflow Path: lightweight');
+      expect(result.data.planScaffold).toContain('## Non-Goals');
+      expect(result.data.planScaffold).toContain('## Ghost Diffs');
       expect(result.data.planScaffold).toContain('### 1. First tiny task');
       expect(result.data.planScaffold).toContain('### 2. Second tiny task');
       expect(result.data.planWriteArgs).toEqual({ feature: 'test-feature', content: result.data.planScaffold });
@@ -312,6 +314,8 @@ describe('ContextTools', () => {
 
       expect(result.success).toBe(true);
       expect(result.data.planScaffold).toContain('# test-feature');
+      expect(result.data.planScaffold).toContain('## Non-Goals');
+      expect(result.data.planScaffold).toContain('## Ghost Diffs');
       expect(result.data.planScaffold).not.toContain('Workflow Path: lightweight');
       expect(result.data.planScaffold).toContain('### 3. Third tiny task');
       expect(result.data.planWriteArgs).toEqual({ feature: 'test-feature', content: result.data.planScaffold });
@@ -371,6 +375,8 @@ describe('ContextTools', () => {
 
       expect(result.success).toBe(true);
       expect(result.data.planScaffold).toContain('Workflow Path: lightweight');
+      expect(result.data.planScaffold).toContain('## Non-Goals');
+      expect(result.data.planScaffold).toContain('## Ghost Diffs');
       expect(result.data.planScaffold).toContain('### 1. Refresh docs wording');
       expect(result.data.planWriteArgs).toEqual({ feature: 'test-feature', content: result.data.planScaffold });
       expect(result.data.nextAction).toBe(
