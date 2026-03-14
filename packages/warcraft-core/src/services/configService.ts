@@ -103,7 +103,9 @@ export class ConfigService {
         configPath: this.configPath,
         reason,
       });
-      return { ...DEFAULT_WARCRAFT_CONFIG };
+      const result = { ...DEFAULT_WARCRAFT_CONFIG };
+      this.cachedConfig = result;
+      return result;
     }
   }
 
