@@ -6,7 +6,7 @@
 | Tool | Purpose |
 |------|---------|
 | `warcraft_feature_create` | Create new feature, set as active |
-| `warcraft_feature_complete` | Mark feature completed (irreversible) |
+| `warcraft_feature_complete` | Mark feature completed (may be auto-reopened if task statuses change) |
 
 ### Plan Management (3 tools)
 | Tool | Purpose |

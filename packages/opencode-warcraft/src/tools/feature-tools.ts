@@ -79,7 +79,7 @@ NEXT: Ask your first clarifying question about this feature.`,
   }
 
   /**
-   * Mark feature as completed (irreversible)
+   * Mark feature as completed (may be auto-reopened if task statuses change)
    */
   completeFeatureTool(resolveFeature: (name?: string) => string | null): ToolDefinition {
     // Capture deps in closure to avoid 'this' binding issues
