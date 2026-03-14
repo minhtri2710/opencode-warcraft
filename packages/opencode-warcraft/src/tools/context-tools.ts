@@ -362,14 +362,14 @@ export class ContextTools {
       if ((planStatus === 'instant' || planStatus === 'none' || !planStatus) && pendingCount > 0) {
         if (workflowRecommendation === 'standard' || pendingCount > 2) {
           return pendingCount > 2
-            ? 'This instant workflow now has more than two pending tasks, so the lightweight path is no longer a good fit. Write or revise plan with warcraft_plan_write, then get approval before dispatching more work.'
-            : 'This task looks broad enough for the standard reviewed path. Write or revise plan with warcraft_plan_write, then get approval before dispatching work.';
+            ? 'This instant workflow now has more than two pending tasks, so the lightweight path is no longer a good fit. Use warcraft_plan_write({ useScaffold: true }) to promote the pending manual tasks into a reviewed standard plan, then approve it before dispatching more work.'
+            : 'This task looks broad enough for the standard reviewed path. Use warcraft_plan_write({ useScaffold: true }) to promote the pending manual task into a reviewed plan, then approve it before dispatching work.';
         }
         if ((workflowPath === 'instant' || workflowRecommendation === 'instant') && pendingCount > 1) {
-          return 'This instant workflow now has multiple pending tasks and has likely outgrown the tiny-task path. Write a short lightweight plan with warcraft_plan_write (include Workflow Path: lightweight), then approve it before dispatching more work.';
+          return 'This instant workflow now has multiple pending tasks and has likely outgrown the tiny-task path. Use warcraft_plan_write({ useScaffold: true }) to promote the pending manual tasks into a lightweight plan, then approve it before dispatching more work.';
         }
         if (workflowRecommendation === 'lightweight') {
-          return 'This task no longer looks tiny enough for direct execution. Write a short lightweight plan with warcraft_plan_write (include Workflow Path: lightweight), then approve it before dispatching work.';
+          return 'This task no longer looks tiny enough for direct execution. Use warcraft_plan_write({ useScaffold: true }) to promote the pending manual task into a lightweight plan, then approve it before dispatching work.';
         }
       }
       if (runnableTasks.length > 1) {

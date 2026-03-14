@@ -211,7 +211,9 @@ export class TaskTools {
                 : effectiveWorkflowRecommendation === 'standard'
                   ? '\nThis manual task looks broad enough that the standard reviewed plan path is safer. Prefer warcraft_plan_write before dispatching it.'
                   : '';
-        const scaffoldHint = planScaffold ? '\nA draft reviewed-plan scaffold is included in `planScaffold`.' : '';
+        const scaffoldHint = planScaffold
+          ? '\nA draft reviewed-plan scaffold is included in `planScaffold`. You can materialize it directly with warcraft_plan_write({ useScaffold: true }).'
+          : '';
 
         return toolSuccess({
           feature,

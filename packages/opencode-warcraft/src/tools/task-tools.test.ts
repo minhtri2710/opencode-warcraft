@@ -378,6 +378,7 @@ describe('TaskTools', () => {
       expect(parsed.data.planScaffold).toContain('### 1. Refresh docs wording');
       expect(parsed.data.planWriteArgs).toEqual({ feature: 'test-feature', content: parsed.data.planScaffold });
       expect(parsed.data.message).toContain('Workflow Path: lightweight');
+      expect(parsed.data.message).toContain('warcraft_plan_write({ useScaffold: true })');
       expect(mockFeatureService.patchCalls).toContainEqual({ workflowPath: 'instant', workflowRecommendation: 'lightweight' });
     });
 
@@ -415,6 +416,7 @@ describe('TaskTools', () => {
       expect(parsed.data.planScaffold).toContain('### 2. Second Tiny Fix');
       expect(parsed.data.planWriteArgs).toEqual({ feature: 'test-feature', content: parsed.data.planScaffold });
       expect(parsed.data.message).toContain('multiple pending manual tasks');
+      expect(parsed.data.message).toContain('warcraft_plan_write({ useScaffold: true })');
       expect(parsed.data.message).toContain('Workflow Path: lightweight');
     });
 
@@ -459,6 +461,7 @@ describe('TaskTools', () => {
       expect(parsed.data.planScaffold).toContain('### 3. Third Tiny Fix');
       expect(parsed.data.planWriteArgs).toEqual({ feature: 'test-feature', content: parsed.data.planScaffold });
       expect(parsed.data.message).toContain('more than two pending manual tasks');
+      expect(parsed.data.message).toContain('warcraft_plan_write({ useScaffold: true })');
       expect(parsed.data.message).toContain('standard reviewed plan path');
     });
   });

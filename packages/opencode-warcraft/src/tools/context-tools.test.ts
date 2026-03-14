@@ -280,7 +280,7 @@ describe('ContextTools', () => {
       expect(result.data.planScaffold).toContain('### 2. Second tiny task');
       expect(result.data.planWriteArgs).toEqual({ feature: 'test-feature', content: result.data.planScaffold });
       expect(result.data.nextAction).toBe(
-        'This instant workflow now has multiple pending tasks and has likely outgrown the tiny-task path. Write a short lightweight plan with warcraft_plan_write (include Workflow Path: lightweight), then approve it before dispatching more work.',
+        'This instant workflow now has multiple pending tasks and has likely outgrown the tiny-task path. Use warcraft_plan_write({ useScaffold: true }) to promote the pending manual tasks into a lightweight plan, then approve it before dispatching more work.',
       );
     });
 
@@ -320,7 +320,7 @@ describe('ContextTools', () => {
       expect(result.data.planScaffold).toContain('### 3. Third tiny task');
       expect(result.data.planWriteArgs).toEqual({ feature: 'test-feature', content: result.data.planScaffold });
       expect(result.data.nextAction).toBe(
-        'This instant workflow now has more than two pending tasks, so the lightweight path is no longer a good fit. Write or revise plan with warcraft_plan_write, then get approval before dispatching more work.',
+        'This instant workflow now has more than two pending tasks, so the lightweight path is no longer a good fit. Use warcraft_plan_write({ useScaffold: true }) to promote the pending manual tasks into a reviewed standard plan, then approve it before dispatching more work.',
       );
     });
 
@@ -380,7 +380,7 @@ describe('ContextTools', () => {
       expect(result.data.planScaffold).toContain('### 1. Refresh docs wording');
       expect(result.data.planWriteArgs).toEqual({ feature: 'test-feature', content: result.data.planScaffold });
       expect(result.data.nextAction).toBe(
-        'This task no longer looks tiny enough for direct execution. Write a short lightweight plan with warcraft_plan_write (include Workflow Path: lightweight), then approve it before dispatching work.',
+        'This task no longer looks tiny enough for direct execution. Use warcraft_plan_write({ useScaffold: true }) to promote the pending manual task into a lightweight plan, then approve it before dispatching work.',
       );
     });
 
