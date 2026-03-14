@@ -804,11 +804,15 @@ export class WorktreeService {
         await git.rebaseAbort().catch(() => {});
         await git.cherryPickAbort().catch(() => {});
 
+        // Read actual HEAD after abort — partial cherry-picks in rebase strategy
+        // may have advanced HEAD beyond beforeHead
+        const currentHead = await git.revparse(['HEAD']).catch(() => beforeHead);
+
         return {
           success: false,
           outcome: 'conflicted',
           strategy,
-          sha: beforeHead,
+          sha: currentHead,
           filesChanged,
           conflicts,
           error: 'Merge conflicts detected',
