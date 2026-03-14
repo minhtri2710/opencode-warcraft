@@ -87,3 +87,4 @@ echo "METRIC audit_runtime_ms=${RUNTIME_MS}"
 exit 0
 bun test eval/feature-complete-irreversible.audit.test.ts --no-cache 2>&1
 bun test eval/warcraft-tools-docs-completeness.audit.test.ts --no-cache 2>&1
+bun test eval/readme-tool-completeness.audit.test.ts --no-cache 2>&1

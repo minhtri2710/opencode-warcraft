@@ -120,7 +120,7 @@ This separation allows:
 - Plugin to handle presentation concerns (markdown formatting, CLI output)
 - Better testability with clear contracts between layers
 
-## Tools (17 total)
+## Tools (19 total)
 
 ### Feature Management
 | Tool | Description |
@@ -145,14 +145,15 @@ This separation allows:
 ### Worktree
 | Tool | Description |
 |------|-------------|
-| `warcraft_worktree_create` | Start work on task (creates worktree) |
-| `warcraft_worktree_commit` | Complete task and write report (does not merge) |
-| `warcraft_worktree_discard` | Abort task and discard changes |
+| `warcraft_worktree_create` | Prepare workspace and return task() delegation payload |
+| `warcraft_worktree_commit` | Finalize task work and write report (does not merge) |
+| `warcraft_worktree_discard` | Abort task and reset status (reverts changes only in worktree mode) |
+| `warcraft_worktree_prune` | Prune stale worktrees (safe by default via dryRun=true) |
 
 ### Merge
 | Tool | Description |
 |------|-------------|
-| `warcraft_merge` | Merge task branch into main branch |
+| `warcraft_merge` | Integrate completed task work |
 
 ### Batch
 | Tool | Description |
@@ -171,7 +172,12 @@ This separation allows:
 | `warcraft_skill` | Load registered Warcraft skills by ID |
 | `warcraft_agents_md` | Read/append/replace AGENTS.md guidance |
 
-Warcraft tools use per-agent allowlists. Not every agent has access to every tool. Khadgar has access to all 17 tools; Mekkatorque can only commit, read plans, write context, and load skills. See [WARCRAFT-TOOLS.md](docs/WARCRAFT-TOOLS.md) for the full permission matrix.
+### Diagnostics
+| Tool | Description |
+|------|-------------|
+| `warcraft_doctor` | Run project diagnostics (feature inventory, stale worktrees, config) |
+
+Warcraft tools use per-agent allowlists. Not every agent has access to every tool. Khadgar has access to all 19 tools; Mekkatorque can only commit, read plans, write context, and load skills. See [WARCRAFT-TOOLS.md](docs/WARCRAFT-TOOLS.md) for the full permission matrix.
 
 ## Prompt Budgeting & Observability
 
