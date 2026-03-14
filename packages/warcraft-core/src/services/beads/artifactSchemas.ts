@@ -89,6 +89,8 @@ export interface TaskStateArtifact extends VersionedArtifact {
     reason: string;
     detail?: string;
   };
+  /** ISO timestamp when the task transitioned to dispatch_prepared. Used for stale dispatch detection. */
+  preparedAt?: string;
   /** Task folder name (e.g., '01-setup'). Persisted for stable identity across reordering. */
   folder?: string;
   /** Learnings surfaced by the worker upon task completion (done tasks only). */
@@ -112,6 +114,7 @@ interface LegacyTaskState {
   beadId?: string;
   dependsOn?: string[];
   blocker?: unknown;
+  preparedAt?: string;
   folder?: string;
   learnings?: string[];
 }
@@ -161,6 +164,7 @@ export function decodeTaskState(raw: string | null): TaskStateArtifact | null {
       beadId: legacy.beadId,
       dependsOn: legacy.dependsOn,
       blocker: legacy.blocker as TaskStateArtifact['blocker'],
+      preparedAt: legacy.preparedAt,
       folder: legacy.folder,
       learnings: legacy.learnings,
     };
@@ -187,6 +191,7 @@ export function taskStateFromTaskStatus(taskStatus: TaskStatus): TaskStateArtifa
     beadId: taskStatus.beadId,
     dependsOn: taskStatus.dependsOn,
     blocker: taskStatus.blocker,
+    preparedAt: taskStatus.preparedAt,
     folder: taskStatus.folder,
     learnings: taskStatus.learnings,
   };
@@ -210,6 +215,7 @@ export function taskStateToTaskStatus(artifact: TaskStateArtifact): TaskStatus {
     beadId: artifact.beadId,
     dependsOn: artifact.dependsOn,
     blocker: artifact.blocker,
+    preparedAt: artifact.preparedAt,
     folder: artifact.folder,
     learnings: artifact.learnings,
   };

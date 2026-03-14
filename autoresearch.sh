@@ -83,6 +83,7 @@ bun test \
   ./eval/docs-delegation-wording.audit.test.ts \
   ./eval/scenarios-wording.audit.test.ts \
   ./eval/task-preparedat-central-stamp.audit.test.ts \
+  ./eval/artifact-schema-preparedat.audit.test.ts \
   packages/opencode-warcraft/src/index.test.ts \
   >"$TMP_OUTPUT" 2>&1
 STATUS=$?
