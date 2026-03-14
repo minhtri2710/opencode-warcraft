@@ -9,7 +9,7 @@ It wires Warcraft prompts, tools, hooks, skills, and MCP integrations into runti
 
 - `src/agents/`: role prompts and role-specific tests (`khadgar`, `mimiron`, `saurfang`, `brann`, `mekkatorque`, `algalon`)
 - `src/hooks/`: runtime hook behavior (variant/system prompt shaping)
-- `src/mcp/`: built-in MCP provider wiring (`websearch`, `context7`, `grep-app`)
+- `src/mcp/`: built-in MCP provider wiring (`websearch`, `grep-app`)
 - `src/skills/`: skill registry, loading, filtering, and generated registry integration
 - `src/utils/`: prompt assembly, workflow gates, observability, formatting helpers
 - `src/e2e/`: runtime/plugin smoke, integration, and end-to-end tests
