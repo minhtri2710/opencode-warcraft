@@ -117,7 +117,8 @@ export class DockerSandboxService {
     const task = parts[worktreeIdx + 2];
     const full = `warcraft-${feature}-${task}`.replace(/[^a-z0-9-]/gi, '-').toLowerCase();
     const hash = createHash('sha256').update(full).digest('hex').slice(0, 7);
-    return `${full.slice(0, 55)}-${hash}`;
+    const prefix = full.slice(0, 55).replace(/-+$/, '');
+    return `${prefix}-${hash}`;
   }
 
   /**

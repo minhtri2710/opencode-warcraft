@@ -209,6 +209,14 @@ describe('DockerSandboxService', () => {
       const result = DockerSandboxService.containerName(worktreePath);
       expect(result.length).toBeLessThanOrEqual(63);
     });
+
+    test('does not produce double hyphens when truncation cuts at hyphen boundary', () => {
+      // Craft a path that when truncated at 55 chars would leave a trailing hyphen
+      const worktreePath =
+        '/repo/.beads/artifacts/.worktrees/feature-with-exact-length-name/01-task-that-causes-cut';
+      const result = DockerSandboxService.containerName(worktreePath);
+      expect(result).not.toMatch(/--/);
+    });
   });
 
   test('produces different names for long similar paths', () => {
