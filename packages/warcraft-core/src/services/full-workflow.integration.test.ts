@@ -1,15 +1,15 @@
-import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
-import { FeatureService } from './featureService.js';
-import { PlanService } from './planService.js';
-import { TaskService } from './taskService.js';
-import { FilesystemFeatureStore } from './state/fs-feature-store.js';
-import { FilesystemPlanStore } from './state/fs-plan-store.js';
-import { FilesystemTaskStore } from './state/fs-task-store.js';
-import { createNoopLogger } from '../utils/logger.js';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { createNoopLogger } from '../utils/logger.js';
 import { getWarcraftPath } from '../utils/paths.js';
+import { FeatureService } from './featureService.js';
+import { PlanService } from './planService.js';
+import { FilesystemFeatureStore } from './state/fs-feature-store.js';
+import { FilesystemPlanStore } from './state/fs-plan-store.js';
+import { FilesystemTaskStore } from './state/fs-task-store.js';
+import { TaskService } from './taskService.js';
 
 describe('Feature → Plan → Task full workflow', () => {
   let tempDir: string;
@@ -103,7 +103,9 @@ Depends on: 2
 
   it('task dependency resolution blocks downstream tasks', () => {
     featureService.create('dep-test');
-    planService.write('dep-test', `# Plan
+    planService.write(
+      'dep-test',
+      `# Plan
 
 ### 1. First
 Start here
@@ -117,7 +119,8 @@ After first
 Depends on: 2
 
 After second
-`);
+`,
+    );
     taskService.sync('dep-test');
 
     const runnable = taskService.getRunnableTasks('dep-test');
@@ -127,14 +130,17 @@ After second
 
   it('feature stays open when tasks not all done', () => {
     featureService.create('partial');
-    planService.write('partial', `# Plan
+    planService.write(
+      'partial',
+      `# Plan
 
 ### 1. Done Task
 Finished
 
 ### 2. Pending Task
 Not started
-`);
+`,
+    );
     taskService.sync('partial');
     const tasks = taskService.list('partial');
     taskService.update('partial', tasks[0].folder, { status: 'done', summary: 'Done' });

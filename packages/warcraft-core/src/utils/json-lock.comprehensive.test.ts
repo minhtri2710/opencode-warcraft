@@ -1,8 +1,8 @@
-import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
-import { acquireLock, acquireLockSync } from './json-lock.js';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { acquireLock, acquireLockSync } from './json-lock.js';
 
 describe('json-lock comprehensive', () => {
   let tempDir: string;

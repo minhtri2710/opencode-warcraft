@@ -71,10 +71,7 @@ describe('TransitionJournal extra edge cases', () => {
     const { mkdirSync } = require('fs');
     const { dirname } = require('path');
     mkdirSync(dirname(journal.getPath()), { recursive: true });
-    writeFileSync(
-      journal.getPath(),
-      `{"seq":999,"beadId":"a","from":"p","to":"ip","timestamp":"t"}\n`,
-    );
+    writeFileSync(journal.getPath(), `{"seq":999,"beadId":"a","from":"p","to":"ip","timestamp":"t"}\n`);
     const freshJournal = new TransitionJournal(tempDir);
     const e = freshJournal.append({ beadId: 'b', from: 'p', to: 'ip', timestamp: 't' });
     expect(e.seq).toBe(1000);

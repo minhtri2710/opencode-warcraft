@@ -1,11 +1,11 @@
-import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
-import { FilesystemPlanStore } from './fs-plan-store.js';
-import { FilesystemFeatureStore } from './fs-feature-store.js';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { getPlanPath, getWarcraftPath } from '../../utils/paths.js';
 import { writeText } from '../../utils/fs.js';
+import { getPlanPath, getWarcraftPath } from '../../utils/paths.js';
+import { FilesystemFeatureStore } from './fs-feature-store.js';
+import { FilesystemPlanStore } from './fs-plan-store.js';
 
 describe('FilesystemPlanStore lifecycle', () => {
   let tempDir: string;

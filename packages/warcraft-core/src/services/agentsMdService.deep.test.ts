@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'bun:test';
-import { AgentsMdService } from './agentsMdService.js';
-import { createNoopLogger } from '../utils/logger.js';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { createNoopLogger } from '../utils/logger.js';
+import { AgentsMdService } from './agentsMdService.js';
 
 describe('agentsMdService deep scenarios', () => {
   describe('apply', () => {
@@ -61,10 +61,13 @@ Monorepo with packages: core, web, cli
     it('generates content for a minimal project', async () => {
       const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agents-init-'));
       try {
-        fs.writeFileSync(path.join(tempDir, 'package.json'), JSON.stringify({
-          name: 'test-project',
-          scripts: { test: 'jest' },
-        }));
+        fs.writeFileSync(
+          path.join(tempDir, 'package.json'),
+          JSON.stringify({
+            name: 'test-project',
+            scripts: { test: 'jest' },
+          }),
+        );
         const service = new AgentsMdService(tempDir, createNoopLogger());
         const result = await service.init();
         expect(result).toBeDefined();

@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'bun:test';
 import {
+  collectOutcomes,
+  degraded,
+  diagnostic,
+  fatal,
+  fromError,
+  isUsable,
   ok,
   okVoid,
-  degraded,
-  fatal,
-  diagnostic,
-  isUsable,
-  worstSeverity,
   withDiagnostics,
-  fromError,
-  collectOutcomes,
+  worstSeverity,
 } from './outcomes.js';
 
 describe('outcomes combinatorial', () => {
@@ -43,11 +43,7 @@ describe('outcomes combinatorial', () => {
       for (const s2 of SEVERITIES) {
         for (const s3 of SEVERITIES) {
           it(`worst of ${s1},${s2},${s3}`, () => {
-            const diags = [
-              diagnostic('a', 'a', s1),
-              diagnostic('b', 'b', s2),
-              diagnostic('c', 'c', s3),
-            ];
+            const diags = [diagnostic('a', 'a', s1), diagnostic('b', 'b', s2), diagnostic('c', 'c', s3)];
             const worst = worstSeverity(diags);
             if (s1 === 'fatal' || s2 === 'fatal' || s3 === 'fatal') {
               expect(worst).toBe('fatal');

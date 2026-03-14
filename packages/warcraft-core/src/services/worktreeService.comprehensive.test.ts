@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import { WorktreeService, createWorktreeService } from './worktreeService.js';
-import type { MergeStrategy, MergeOutcome } from './worktreeService.js';
+import type { MergeOutcome, MergeStrategy } from './worktreeService.js';
+import { createWorktreeService, WorktreeService } from './worktreeService.js';
 
 describe('WorktreeService types', () => {
   it('MergeStrategy values', () => {

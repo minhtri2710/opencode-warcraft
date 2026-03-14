@@ -4,8 +4,14 @@ import { ALLOWED_TRANSITIONS, isTransitionAllowed } from './task-state-machine.j
 
 describe('task-state-machine comprehensive coverage', () => {
   const ALL_STATUSES: TaskStatusType[] = [
-    'pending', 'in_progress', 'dispatch_prepared', 'done',
-    'cancelled', 'blocked', 'failed', 'partial',
+    'pending',
+    'in_progress',
+    'dispatch_prepared',
+    'done',
+    'cancelled',
+    'blocked',
+    'failed',
+    'partial',
   ];
 
   it('every status has at least one outgoing transition', () => {

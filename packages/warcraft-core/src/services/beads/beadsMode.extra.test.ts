@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import { isBeadsEnabled, requireBeadsEnabled } from './beadsMode.js';
 import type { BeadsModeProvider } from '../../types.js';
+import { isBeadsEnabled, requireBeadsEnabled } from './beadsMode.js';
 
 function onProvider(): BeadsModeProvider {
   return { getBeadsMode: () => 'on' };

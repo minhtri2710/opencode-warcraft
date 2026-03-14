@@ -3,9 +3,9 @@ import {
   getFeaturePath,
   getPlanPath,
   getTaskPath,
+  getTaskReportPath,
   getTaskStatusPath,
   getTasksPath,
-  getTaskReportPath,
   getWarcraftPath,
   sanitizeName,
 } from './paths.js';

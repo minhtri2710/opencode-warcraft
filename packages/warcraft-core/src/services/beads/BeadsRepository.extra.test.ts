@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'bun:test';
+import { BeadGatewayError } from './BeadGateway.types.js';
 import {
-  RepositoryError,
   getRepositoryInternalCode,
   isRepositoryInitFailure,
+  RepositoryError,
   throwIfInitFailure,
 } from './BeadsRepository.js';
-import { BeadGatewayError } from './BeadGateway.types.js';
 
 describe('BeadsRepository error utilities extra', () => {
   describe('RepositoryError', () => {
@@ -37,7 +37,14 @@ describe('BeadsRepository error utilities extra', () => {
     });
 
     it('all error codes can be used', () => {
-      const codes = ['beads_disabled', 'epic_not_found', 'task_not_found', 'sync_failed', 'invalid_artifact', 'gateway_error'] as const;
+      const codes = [
+        'beads_disabled',
+        'epic_not_found',
+        'task_not_found',
+        'sync_failed',
+        'invalid_artifact',
+        'gateway_error',
+      ] as const;
       for (const code of codes) {
         const err = new RepositoryError(code, `msg for ${code}`);
         expect(err.code).toBe(code);
@@ -104,7 +111,9 @@ describe('BeadsRepository error utilities extra', () => {
     });
 
     it('does not throw for non-init failure', () => {
-      expect(() => throwIfInitFailure(new BeadGatewayError('command_error', 'x', 'BR_COMMAND_FAILED'), 'ctx')).not.toThrow();
+      expect(() =>
+        throwIfInitFailure(new BeadGatewayError('command_error', 'x', 'BR_COMMAND_FAILED'), 'ctx'),
+      ).not.toThrow();
     });
 
     it('does not throw for plain errors without BR codes', () => {

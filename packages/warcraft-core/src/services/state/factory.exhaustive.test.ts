@@ -23,7 +23,21 @@ describe('createStores exhaustive off mode', () => {
   });
 
   describe('taskStore methods', () => {
-    const methods = ['createTask', 'get', 'getRawStatus', 'list', 'getNextOrder', 'save', 'patchBackground', 'delete', 'writeArtifact', 'readArtifact', 'writeReport', 'getRunnableTasks', 'flush'];
+    const methods = [
+      'createTask',
+      'get',
+      'getRawStatus',
+      'list',
+      'getNextOrder',
+      'save',
+      'patchBackground',
+      'delete',
+      'writeArtifact',
+      'readArtifact',
+      'writeReport',
+      'getRunnableTasks',
+      'flush',
+    ];
     for (const method of methods) {
       it(`has ${method} method`, () => {
         expect(typeof (stores.taskStore as any)[method]).toBe('function');

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import type { MergeStrategy, MergeSuccessOutcome, MergeFailureOutcome, MergeOutcome } from './worktreeService.js';
+import type { MergeFailureOutcome, MergeOutcome, MergeStrategy, MergeSuccessOutcome } from './worktreeService.js';
 
 describe('worktreeService types', () => {
   it('MergeStrategy includes merge', () => {

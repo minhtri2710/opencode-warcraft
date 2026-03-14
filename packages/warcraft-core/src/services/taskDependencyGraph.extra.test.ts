@@ -69,18 +69,14 @@ describe('computeRunnableAndBlocked edge cases', () => {
 
 describe('buildEffectiveDependencies edge cases', () => {
   it('tasks with non-numeric prefix get empty dependencies', () => {
-    const tasks: TaskWithDeps[] = [
-      { folder: 'no-number', status: 'pending', dependsOn: undefined },
-    ];
+    const tasks: TaskWithDeps[] = [{ folder: 'no-number', status: 'pending', dependsOn: undefined }];
 
     const deps = buildEffectiveDependencies(tasks);
     expect(deps.get('no-number')).toEqual([]);
   });
 
   it('task with order 0 has no implicit dependency', () => {
-    const tasks: TaskWithDeps[] = [
-      { folder: '00-init', status: 'pending', dependsOn: undefined },
-    ];
+    const tasks: TaskWithDeps[] = [{ folder: '00-init', status: 'pending', dependsOn: undefined }];
 
     const deps = buildEffectiveDependencies(tasks);
     expect(deps.get('00-init')).toEqual([]);

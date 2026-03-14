@@ -3,8 +3,13 @@ import { DockerSandboxService } from './dockerSandboxService.js';
 
 describe('DockerSandboxService exhaustive', () => {
   const VALID_IMAGES = [
-    'ubuntu:latest', 'node:20', 'alpine', 'python:3.12',
-    'golang:1.22', 'rust:latest', 'ruby:3.3',
+    'ubuntu:latest',
+    'node:20',
+    'alpine',
+    'python:3.12',
+    'golang:1.22',
+    'rust:latest',
+    'ruby:3.3',
     'docker.io/library/ubuntu:22.04',
   ];
 

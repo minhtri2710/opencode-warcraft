@@ -1,10 +1,10 @@
-import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { FilesystemTaskStore } from './fs-task-store.js';
 import { FilesystemFeatureStore } from './fs-feature-store.js';
 import { FilesystemPlanStore } from './fs-plan-store.js';
+import { FilesystemTaskStore } from './fs-task-store.js';
 
 describe('state stores integration', () => {
   let tempDir: string;

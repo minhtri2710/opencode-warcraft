@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import {
-  detectWorkflowPath,
   countPlanTasks,
+  detectWorkflowPath,
   hasLightweightMiniRecord,
   validateLightweightPlan,
 } from './workflow-path.js';

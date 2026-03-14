@@ -25,7 +25,8 @@ describe('index comprehensive export validation', () => {
   // Slug
   it('exports slugifyTaskName', () => expect(typeof warcraftCore.slugifyTaskName).toBe('function'));
   it('exports slugifyIdentifierSegment', () => expect(typeof warcraftCore.slugifyIdentifierSegment).toBe('function'));
-  it('exports deriveDeterministicLocalId', () => expect(typeof warcraftCore.deriveDeterministicLocalId).toBe('function'));
+  it('exports deriveDeterministicLocalId', () =>
+    expect(typeof warcraftCore.deriveDeterministicLocalId).toBe('function'));
   it('exports deriveTaskFolder', () => expect(typeof warcraftCore.deriveTaskFolder).toBe('function'));
 
   // Shell

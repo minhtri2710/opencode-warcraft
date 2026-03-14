@@ -52,7 +52,7 @@ describe('ContextService more edge cases', () => {
     service.write('list-test', 'alpha', 'A');
     service.write('list-test', 'bravo', 'B');
     const list = service.list('list-test');
-    const names = list.map(f => f.name).sort();
+    const names = list.map((f) => f.name).sort();
     expect(names).toEqual(['alpha', 'bravo', 'charlie']);
     expect(list).toHaveLength(3);
   });

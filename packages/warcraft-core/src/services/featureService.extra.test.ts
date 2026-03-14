@@ -59,9 +59,7 @@ describe('FeatureService.getInfo', () => {
 
   it('returns feature info with tasks and hasPlan', () => {
     const feature: FeatureJson = { name: 'info-test', epicBeadId: 'e', status: 'executing', createdAt: '2024-01-01' };
-    const tasks: TaskInfo[] = [
-      { folder: '01-setup', name: 'setup', status: 'done', origin: 'plan' },
-    ];
+    const tasks: TaskInfo[] = [{ folder: '01-setup', name: 'setup', status: 'done', origin: 'plan' }];
     const store = createStoreStub([feature]);
     const service = new FeatureService('/tmp', store, 'off', { list: () => tasks });
     const info = service.getInfo('info-test');
@@ -97,11 +95,19 @@ describe('FeatureService.syncCompletionFromTasks edge cases', () => {
   });
 
   it('does not re-complete an already completed feature', () => {
-    const feature: FeatureJson = { name: 'already-done', epicBeadId: 'e', status: 'completed', createdAt: '2024-01-01', completedAt: '2024-01-02' };
+    const feature: FeatureJson = {
+      name: 'already-done',
+      epicBeadId: 'e',
+      status: 'completed',
+      createdAt: '2024-01-01',
+      completedAt: '2024-01-02',
+    };
     const tasks: TaskInfo[] = [{ folder: '01-a', name: 'a', status: 'done', origin: 'plan' }];
     let completeCalled = false;
     const store = createStoreStub([feature], {
-      complete: () => { completeCalled = true; },
+      complete: () => {
+        completeCalled = true;
+      },
     });
     const service = new FeatureService('/tmp', store, 'off', { list: () => tasks });
     const result = service.syncCompletionFromTasks('already-done');
@@ -185,8 +191,11 @@ describe('FeatureService.updateStatus', () => {
 
   it('does not override existing approvedAt', () => {
     const feature: FeatureJson = {
-      name: 'keep-approved', epicBeadId: 'e', status: 'approved',
-      createdAt: '2024-01-01', approvedAt: '2024-01-05T00:00:00Z',
+      name: 'keep-approved',
+      epicBeadId: 'e',
+      status: 'approved',
+      createdAt: '2024-01-01',
+      approvedAt: '2024-01-05T00:00:00Z',
     };
     const store = createStoreStub([feature]);
     const service = new FeatureService('/tmp', store, 'off');

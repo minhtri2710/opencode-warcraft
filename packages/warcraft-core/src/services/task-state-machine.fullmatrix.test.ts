@@ -1,11 +1,22 @@
 import { describe, expect, it } from 'bun:test';
-import { validateTransition, isTransitionAllowed, ALLOWED_TRANSITIONS, InvalidTransitionError } from './task-state-machine.js';
 import type { TaskStatusType } from '../types.js';
+import {
+  ALLOWED_TRANSITIONS,
+  InvalidTransitionError,
+  isTransitionAllowed,
+  validateTransition,
+} from './task-state-machine.js';
 
 describe('task-state-machine full matrix', () => {
   const ALL_STATUSES: TaskStatusType[] = [
-    'pending', 'in_progress', 'dispatch_prepared', 'done',
-    'cancelled', 'blocked', 'failed', 'partial',
+    'pending',
+    'in_progress',
+    'dispatch_prepared',
+    'done',
+    'cancelled',
+    'blocked',
+    'failed',
+    'partial',
   ];
 
   describe('isTransitionAllowed matrix (8×8 = 64)', () => {
@@ -14,7 +25,7 @@ describe('task-state-machine full matrix', () => {
         it(`${from} → ${to}`, () => {
           const allowed = isTransitionAllowed(from, to);
           expect(typeof allowed).toBe('boolean');
-          
+
           // Self-transitions are always allowed
           if (from === to) {
             expect(allowed).toBe(true);

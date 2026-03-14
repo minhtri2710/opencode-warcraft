@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { createTraceContext, createChildSpan } from './trace-context.js';
+import { createChildSpan, createTraceContext } from './trace-context.js';
 
 describe('trace-context extra edge cases', () => {
   it('createTraceContext generates unique traceIds', () => {

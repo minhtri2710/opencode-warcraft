@@ -15,7 +15,7 @@ function createStoreStub(features: FeatureJson[] = [], overrides: Partial<Featur
       featureMap.set(f.name, f);
       return f;
     },
-    get: (name) => featureMap.get(name) ? { ...featureMap.get(name)! } : null,
+    get: (name) => (featureMap.get(name) ? { ...featureMap.get(name)! } : null),
     list: () => Array.from(featureMap.keys()).sort(),
     save: (f) => featureMap.set(f.name, { ...f }),
     complete: (f) => featureMap.set(f.name, { ...f }),
@@ -89,7 +89,9 @@ describe('FeatureService more edge cases', () => {
     const feature: FeatureJson = { name: 'exec', epicBeadId: 'e', status: 'planning', createdAt: '2024-01-01' };
     let savedFeature: FeatureJson | null = null;
     const store = createStoreStub([feature], {
-      save: (f) => { savedFeature = f; },
+      save: (f) => {
+        savedFeature = f;
+      },
     });
     const service = new FeatureService('/tmp', store, 'off');
     const updated = service.updateStatus('exec', 'executing');

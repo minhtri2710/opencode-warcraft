@@ -1,9 +1,9 @@
-import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
-import { ContextService } from './contextService.js';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { getWarcraftPath } from '../utils/paths.js';
+import { ContextService } from './contextService.js';
 
 describe('ContextService integration', () => {
   let tempDir: string;

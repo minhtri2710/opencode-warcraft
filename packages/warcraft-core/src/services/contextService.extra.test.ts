@@ -15,10 +15,7 @@ function cleanup() {
 
 function setupFeature(name: string): void {
   fs.mkdirSync(path.join(TEST_DIR, 'docs', name), { recursive: true });
-  fs.writeFileSync(
-    path.join(TEST_DIR, 'docs', name, 'feature.json'),
-    JSON.stringify({ name, status: 'planning' }),
-  );
+  fs.writeFileSync(path.join(TEST_DIR, 'docs', name, 'feature.json'), JSON.stringify({ name, status: 'planning' }));
 }
 
 describe('ContextService beadsMode off', () => {

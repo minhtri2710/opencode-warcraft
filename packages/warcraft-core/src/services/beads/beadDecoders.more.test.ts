@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import {
-  decodeListItems,
-  decodeIdFromJson,
-  extractBeadContent,
-} from './beadDecoders.js';
+import { decodeIdFromJson, decodeListItems, extractBeadContent } from './beadDecoders.js';
 
 describe('beadDecoders more scenarios', () => {
   describe('decodeListItems', () => {

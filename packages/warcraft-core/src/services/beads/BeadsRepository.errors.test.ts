@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'bun:test';
+import { BeadGatewayError } from './BeadGateway.types.js';
 import {
-  RepositoryError,
   getRepositoryInternalCode,
   isRepositoryInitFailure,
+  RepositoryError,
   throwIfInitFailure,
 } from './BeadsRepository.js';
-import { BeadGatewayError } from './BeadGateway.types.js';
 
 describe('BeadsRepository error handling', () => {
   describe('RepositoryError', () => {

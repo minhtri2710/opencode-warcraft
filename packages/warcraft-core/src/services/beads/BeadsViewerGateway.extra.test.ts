@@ -21,9 +21,7 @@ describe('BeadsViewerGateway extra', () => {
   it('extracts unblocks from both track and item level', () => {
     const planData = {
       plan: {
-        tracks: [
-          { track_id: '1', tasks: ['bd-1'], unblocks: ['bd-5'], items: [{ id: 'bd-1', unblocks: ['bd-6'] }] },
-        ],
+        tracks: [{ track_id: '1', tasks: ['bd-1'], unblocks: ['bd-5'], items: [{ id: 'bd-1', unblocks: ['bd-6'] }] }],
       },
     };
     const gw = new BeadsViewerGateway('/tmp', true, createMockExecutor(planData));
@@ -71,7 +69,12 @@ describe('BeadsViewerGateway extra', () => {
 
   it('skips tracks with empty track_id', () => {
     const planData = {
-      plan: { tracks: [{ track_id: '', tasks: ['bd-1'] }, { track_id: '2', tasks: ['bd-2'] }] },
+      plan: {
+        tracks: [
+          { track_id: '', tasks: ['bd-1'] },
+          { track_id: '2', tasks: ['bd-2'] },
+        ],
+      },
     };
     const gw = new BeadsViewerGateway('/tmp', true, createMockExecutor(planData));
     const result = gw.getRobotPlan();

@@ -1,24 +1,30 @@
 import { describe, expect, it } from 'bun:test';
 import type {
-  TaskStatusType,
-  FeatureStatusType,
-  BeadsMode,
-  TaskStatus,
-  TaskInfo,
-  FeatureJson,
-  FeatureInfo,
-  WarcraftConfig,
   AgentModelConfig,
-  WorkerSession,
-  SpecData,
+  BeadsMode,
+  FeatureInfo,
+  FeatureJson,
+  FeatureStatusType,
   PlanReadResult,
+  SpecData,
+  TaskInfo,
+  TaskStatus,
+  TaskStatusType,
+  WarcraftConfig,
+  WorkerSession,
 } from './types.js';
 
 describe('types runtime validation', () => {
   describe('TaskStatusType values', () => {
     const VALID_STATUSES: TaskStatusType[] = [
-      'pending', 'in_progress', 'dispatch_prepared', 'done',
-      'cancelled', 'blocked', 'failed', 'partial',
+      'pending',
+      'in_progress',
+      'dispatch_prepared',
+      'done',
+      'cancelled',
+      'blocked',
+      'failed',
+      'partial',
     ];
 
     for (const status of VALID_STATUSES) {
@@ -30,9 +36,7 @@ describe('types runtime validation', () => {
   });
 
   describe('FeatureStatusType values', () => {
-    const VALID_STATUSES: FeatureStatusType[] = [
-      'planning', 'approved', 'executing', 'completed',
-    ];
+    const VALID_STATUSES: FeatureStatusType[] = ['planning', 'approved', 'executing', 'completed'];
 
     for (const status of VALID_STATUSES) {
       it(`"${status}" is assignable`, () => {

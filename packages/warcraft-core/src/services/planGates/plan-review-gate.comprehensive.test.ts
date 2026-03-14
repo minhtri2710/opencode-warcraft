@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import {
-  validatePlanReviewChecklist,
-  formatPlanReviewChecklistIssues,
-} from './plan-review-gate.js';
+import { formatPlanReviewChecklistIssues, validatePlanReviewChecklist } from './plan-review-gate.js';
 
 describe('plan-review-gate comprehensive', () => {
   const PLANS = {

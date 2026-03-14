@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'bun:test';
 import {
-  getWarcraftDir,
-  getWarcraftPath,
+  getContextPath,
   getFeaturePath,
   getPlanPath,
-  getTasksPath,
   getTaskPath,
-  getTaskStatusPath,
   getTaskReportPath,
-  getContextPath,
+  getTaskStatusPath,
+  getTasksPath,
+  getWarcraftDir,
+  getWarcraftPath,
   sanitizeName,
 } from './paths.js';
 

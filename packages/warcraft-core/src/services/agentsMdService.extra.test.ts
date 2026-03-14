@@ -70,19 +70,13 @@ describe('AgentsMdService additional edge cases', () => {
     });
 
     test('detects vitest framework', async () => {
-      fs.writeFileSync(
-        path.join(testDir, 'package.json'),
-        JSON.stringify({ devDependencies: { vitest: '^1.0.0' } }),
-      );
+      fs.writeFileSync(path.join(testDir, 'package.json'), JSON.stringify({ devDependencies: { vitest: '^1.0.0' } }));
       const result = await service.init();
       expect(result.content).toContain('vitest');
     });
 
     test('detects jest framework', async () => {
-      fs.writeFileSync(
-        path.join(testDir, 'package.json'),
-        JSON.stringify({ devDependencies: { jest: '^29.0.0' } }),
-      );
+      fs.writeFileSync(path.join(testDir, 'package.json'), JSON.stringify({ devDependencies: { jest: '^29.0.0' } }));
       const result = await service.init();
       expect(result.content).toContain('jest');
     });

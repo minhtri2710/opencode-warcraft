@@ -50,7 +50,16 @@ describe('getTaskBeadActions extra edge cases', () => {
   });
 
   it('each status produces exactly one action', () => {
-    const statuses = ['done', 'in_progress', 'pending', 'dispatch_prepared', 'blocked', 'failed', 'partial', 'cancelled'];
+    const statuses = [
+      'done',
+      'in_progress',
+      'pending',
+      'dispatch_prepared',
+      'blocked',
+      'failed',
+      'partial',
+      'cancelled',
+    ];
     for (const status of statuses) {
       const actions = getTaskBeadActions(status as any);
       expect(actions).toHaveLength(1);

@@ -1,19 +1,28 @@
 import { describe, expect, it } from 'bun:test';
 import {
-  encodeTaskState,
+  decodeTaskReport,
   decodeTaskState,
-  encodeWorkerPrompt,
   decodeWorkerPrompt,
   encodeTaskReport,
-  decodeTaskReport,
+  encodeTaskState,
+  encodeWorkerPrompt,
+  type TaskReportArtifact,
   type TaskStateArtifact,
   type WorkerPromptArtifact,
-  type TaskReportArtifact,
 } from './artifactSchemas.js';
 
 describe('artifactSchemas edge cases', () => {
   describe('TaskState with all status values round-trip', () => {
-    const STATUSES = ['pending', 'in_progress', 'dispatch_prepared', 'done', 'cancelled', 'blocked', 'failed', 'partial'] as const;
+    const STATUSES = [
+      'pending',
+      'in_progress',
+      'dispatch_prepared',
+      'done',
+      'cancelled',
+      'blocked',
+      'failed',
+      'partial',
+    ] as const;
     const ORIGINS = ['plan', 'manual'] as const;
 
     for (const status of STATUSES) {
@@ -76,7 +85,7 @@ describe('artifactSchemas edge cases', () => {
 
   describe('decode null/empty/invalid', () => {
     const INVALIDS = [null, '', '{}', '[]', 'true', '42', '"string"'];
-    
+
     for (const input of INVALIDS) {
       const label = input === null ? 'null' : `"${input}"`;
       it(`decodeTaskState(${label})`, () => {

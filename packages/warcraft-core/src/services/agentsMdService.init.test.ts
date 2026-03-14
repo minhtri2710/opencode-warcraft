@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'bun:test';
-import { AgentsMdService } from './agentsMdService.js';
-import { createNoopLogger } from '../utils/logger.js';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { createNoopLogger } from '../utils/logger.js';
+import { AgentsMdService } from './agentsMdService.js';
 
 describe('agentsMdService init variations', () => {
   function createProject(files: Record<string, string>): string {

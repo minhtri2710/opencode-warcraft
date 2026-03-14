@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import type { FeatureJson, TaskStatus, TaskStatusType, BeadsMode } from './types.js';
+import type { BeadsMode, FeatureJson, TaskStatus, TaskStatusType } from './types.js';
 
 describe('types validation', () => {
   it('FeatureJson requires name and status', () => {
@@ -32,8 +32,14 @@ describe('types validation', () => {
 
   it('all TaskStatusType values are valid', () => {
     const statuses: TaskStatusType[] = [
-      'pending', 'in_progress', 'dispatch_prepared', 'done',
-      'cancelled', 'blocked', 'failed', 'partial',
+      'pending',
+      'in_progress',
+      'dispatch_prepared',
+      'done',
+      'cancelled',
+      'blocked',
+      'failed',
+      'partial',
     ];
     expect(statuses).toHaveLength(8);
     for (const s of statuses) {

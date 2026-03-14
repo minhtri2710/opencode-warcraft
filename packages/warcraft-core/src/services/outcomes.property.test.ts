@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { ok, okVoid, degraded, fatal, diagnostic, isUsable, worstSeverity, collectOutcomes } from './outcomes.js';
+import { collectOutcomes, degraded, diagnostic, fatal, isUsable, ok, okVoid, worstSeverity } from './outcomes.js';
 
 describe('outcomes property-based validation', () => {
   describe('isUsable is consistent with severity', () => {

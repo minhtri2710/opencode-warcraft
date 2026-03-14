@@ -50,19 +50,13 @@ describe('taskDependencyGraph more scenarios', () => {
   });
 
   it('in_progress tasks are not in runnable', () => {
-    const result = computeRunnableAndBlocked([
-      task('01-a', 'in_progress'),
-      task('02-b', 'pending', ['01-a']),
-    ]);
+    const result = computeRunnableAndBlocked([task('01-a', 'in_progress'), task('02-b', 'pending', ['01-a'])]);
     expect(result.runnable).not.toContain('01-a');
     expect(result.blocked['02-b']).toBeDefined();
   });
 
   it('cancelled tasks do not satisfy dependencies', () => {
-    const result = computeRunnableAndBlocked([
-      task('01-a', 'cancelled'),
-      task('02-b', 'pending', ['01-a']),
-    ]);
+    const result = computeRunnableAndBlocked([task('01-a', 'cancelled'), task('02-b', 'pending', ['01-a'])]);
     expect(result.blocked['02-b']).toBeDefined();
   });
 
@@ -73,18 +67,13 @@ describe('taskDependencyGraph more scenarios', () => {
   });
 
   it('non-existent dep blocks task', () => {
-    const result = computeRunnableAndBlocked([
-      task('01-a', 'pending', ['99-ghost']),
-    ]);
+    const result = computeRunnableAndBlocked([task('01-a', 'pending', ['99-ghost'])]);
     expect(result.blocked['01-a']).toBeDefined();
     expect(result.blocked['01-a']).toContain('99-ghost');
   });
 
   it('all done means nothing runnable or blocked', () => {
-    const result = computeRunnableAndBlocked([
-      task('01-a', 'done'),
-      task('02-b', 'done', ['01-a']),
-    ]);
+    const result = computeRunnableAndBlocked([task('01-a', 'done'), task('02-b', 'done', ['01-a'])]);
     expect(result.runnable).toEqual([]);
     expect(Object.keys(result.blocked)).toHaveLength(0);
   });

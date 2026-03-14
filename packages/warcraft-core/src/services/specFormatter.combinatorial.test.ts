@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import { formatSpecContent } from './specFormatter.js';
 import type { SpecData } from '../types.js';
+import { formatSpecContent } from './specFormatter.js';
 
 function makeSpec(overrides: Partial<SpecData> = {}): SpecData {
   return {
@@ -26,19 +26,21 @@ describe('specFormatter combinatorial', () => {
   const CONTEXT_FILES = [
     [],
     [{ name: 'decisions', content: 'Decision A' }],
-    [{ name: 'a', content: 'A' }, { name: 'b', content: 'B' }],
+    [
+      { name: 'a', content: 'A' },
+      { name: 'b', content: 'B' },
+    ],
   ];
 
-  const DEPS = [
-    [],
-    ['00-init'],
-    ['00-a', '00-b', '00-c'],
-  ];
+  const DEPS = [[], ['00-init'], ['00-a', '00-b', '00-c']];
 
   const COMPLETED = [
     [],
     [{ name: 'Init', summary: 'Done init' }],
-    [{ name: 'A', summary: 'Did A' }, { name: 'B', summary: 'Did B' }],
+    [
+      { name: 'A', summary: 'Did A' },
+      { name: 'B', summary: 'Did B' },
+    ],
   ];
 
   for (const plan of PLAN_SECTIONS) {
@@ -47,12 +49,14 @@ describe('specFormatter combinatorial', () => {
         for (const comp of COMPLETED) {
           const desc = `plan=${plan ? 'yes' : 'null'} ctx=${ctx.length} deps=${deps.length} comp=${comp.length}`;
           it(desc, () => {
-            const result = formatSpecContent(makeSpec({
-              planSection: plan,
-              contextFiles: ctx,
-              dependsOn: deps,
-              completedTasks: comp,
-            }));
+            const result = formatSpecContent(
+              makeSpec({
+                planSection: plan,
+                contextFiles: ctx,
+                dependsOn: deps,
+                completedTasks: comp,
+              }),
+            );
             expect(result).toBeDefined();
             expect(result.length).toBeGreaterThan(0);
             expect(result).toContain('test-feature');

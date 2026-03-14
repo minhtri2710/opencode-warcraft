@@ -1,10 +1,10 @@
-import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
-import { FeatureService } from './featureService.js';
-import { FilesystemFeatureStore } from './state/fs-feature-store.js';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { getWarcraftPath } from '../utils/paths.js';
+import { FeatureService } from './featureService.js';
+import { FilesystemFeatureStore } from './state/fs-feature-store.js';
 
 describe('FeatureService integration', () => {
   let tempDir: string;

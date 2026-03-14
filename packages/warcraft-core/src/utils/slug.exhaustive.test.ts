@@ -1,17 +1,9 @@
 import { describe, expect, it } from 'bun:test';
-import {
-  slugifyTaskName,
-  slugifyIdentifierSegment,
-  deriveDeterministicLocalId,
-  deriveTaskFolder,
-} from './slug.js';
+import { deriveDeterministicLocalId, deriveTaskFolder, slugifyIdentifierSegment, slugifyTaskName } from './slug.js';
 
 describe('slug exhaustive', () => {
   describe('slugifyTaskName with international chars', () => {
-    const INPUTS = [
-      'café au lait', 'naïve', 'résumé', 'über cool',
-      'piñata party', 'El Niño', 'Straße',
-    ];
+    const INPUTS = ['café au lait', 'naïve', 'résumé', 'über cool', 'piñata party', 'El Niño', 'Straße'];
     for (const input of INPUTS) {
       it(`slugifies "${input}"`, () => {
         const result = slugifyTaskName(input);
@@ -32,10 +24,7 @@ describe('slug exhaustive', () => {
   });
 
   describe('deriveDeterministicLocalId consistency', () => {
-    const INPUTS = [
-      ['a'], ['b'], ['a', 'b'], ['a', 'b', 'c'],
-      ['test'], ['test', 'extra'], ['hello world'],
-    ];
+    const INPUTS = [['a'], ['b'], ['a', 'b'], ['a', 'b', 'c'], ['test'], ['test', 'extra'], ['hello world']];
     for (const parts of INPUTS) {
       it(`[${parts.join(', ')}] is deterministic`, () => {
         const a = deriveDeterministicLocalId(...parts);

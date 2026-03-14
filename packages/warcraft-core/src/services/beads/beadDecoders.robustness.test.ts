@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'bun:test';
 import {
-  decodeListItems,
   decodeDependentIssues,
-  decodeTasksFromDepList,
+  decodeListItems,
   decodeShowPayload,
+  decodeTasksFromDepList,
   extractBeadContent,
 } from './beadDecoders.js';
 

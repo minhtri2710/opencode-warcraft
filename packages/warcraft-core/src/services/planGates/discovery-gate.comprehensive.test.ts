@@ -44,11 +44,15 @@ describe('discovery-gate comprehensive', () => {
 
     it('unicode content', () => {
       const unicode = '## Discovery\n\n### Findings\n- 日本語のテスト\n- 中文测试';
-      expect(typeof validateDiscoverySection(unicode) === 'string' || validateDiscoverySection(unicode) === null).toBe(true);
+      expect(typeof validateDiscoverySection(unicode) === 'string' || validateDiscoverySection(unicode) === null).toBe(
+        true,
+      );
     });
 
     it('only whitespace', () => {
-      expect(typeof validateDiscoverySection('   \n\n   ') === 'string' || validateDiscoverySection('   \n\n   ') === null).toBe(true);
+      expect(
+        typeof validateDiscoverySection('   \n\n   ') === 'string' || validateDiscoverySection('   \n\n   ') === null,
+      ).toBe(true);
     });
   });
 });

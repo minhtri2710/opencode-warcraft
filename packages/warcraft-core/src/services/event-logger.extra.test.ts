@@ -90,7 +90,13 @@ describe('computeTrustMetrics extra edge cases', () => {
   it('handles blocked task resolved by non-completed commit', () => {
     const logger = createEventLogger(TEST_DIR);
     logger.emit({ type: 'blocked', feature: 'f', task: 't1', timestamp: '2026-01-01T10:00:00Z' });
-    logger.emit({ type: 'commit', feature: 'f', task: 't1', timestamp: '2026-01-01T10:30:00Z', details: { status: 'in_progress' } });
+    logger.emit({
+      type: 'commit',
+      feature: 'f',
+      task: 't1',
+      timestamp: '2026-01-01T10:30:00Z',
+      details: { status: 'in_progress' },
+    });
 
     const metrics = computeTrustMetrics(TEST_DIR);
     // Should still count MTTR even if commit is not "completed"

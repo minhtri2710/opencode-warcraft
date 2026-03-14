@@ -1,11 +1,11 @@
-import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
-import { TaskService } from './taskService.js';
-import { FilesystemTaskStore } from './state/fs-task-store.js';
-import { createNoopLogger } from '../utils/logger.js';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { getWarcraftPath, getPlanPath } from '../utils/paths.js';
+import { createNoopLogger } from '../utils/logger.js';
+import { getPlanPath, getWarcraftPath } from '../utils/paths.js';
+import { FilesystemTaskStore } from './state/fs-task-store.js';
+import { TaskService } from './taskService.js';
 
 describe('TaskService plan dependency patterns', () => {
   let tempDir: string;
@@ -29,7 +29,9 @@ describe('TaskService plan dependency patterns', () => {
   }
 
   it('fan-out pattern: one task depended on by many', () => {
-    writePlan('fan-out', `# Plan
+    writePlan(
+      'fan-out',
+      `# Plan
 
 ### 1. Core
 Depends on: none
@@ -46,7 +48,8 @@ Build B
 ### 4. Module C
 Depends on: 1
 Build C
-`);
+`,
+    );
     service.sync('fan-out');
     const runnable = service.getRunnableTasks('fan-out');
     expect(runnable.runnable.length).toBe(1); // Only Core
@@ -60,7 +63,9 @@ Build C
   });
 
   it('fan-in pattern: one task depends on many', () => {
-    writePlan('fan-in', `# Plan
+    writePlan(
+      'fan-in',
+      `# Plan
 
 ### 1. A
 Depends on: none
@@ -77,7 +82,8 @@ Part C
 ### 4. Merge
 Depends on: 1, 2, 3
 Combine all
-`);
+`,
+    );
     service.sync('fan-in');
     const runnable = service.getRunnableTasks('fan-in');
     expect(runnable.runnable.length).toBe(3); // A, B, C
@@ -98,7 +104,9 @@ Combine all
   });
 
   it('parallel independent tasks', () => {
-    writePlan('parallel', `# Plan
+    writePlan(
+      'parallel',
+      `# Plan
 
 ### 1. Task A
 Depends on: none
@@ -111,7 +119,8 @@ Independent B
 ### 3. Task C
 Depends on: none
 Independent C
-`);
+`,
+    );
     service.sync('parallel');
     const runnable = service.getRunnableTasks('parallel');
     expect(runnable.runnable.length).toBe(3);
@@ -119,7 +128,9 @@ Independent C
   });
 
   it('linear chain', () => {
-    writePlan('linear', `# Plan
+    writePlan(
+      'linear',
+      `# Plan
 
 ### 1. Step 1
 First step
@@ -132,7 +143,8 @@ Third step
 
 ### 4. Step 4
 Fourth step
-`);
+`,
+    );
     service.sync('linear');
     const r1 = service.getRunnableTasks('linear');
     expect(r1.runnable.length).toBe(1);
