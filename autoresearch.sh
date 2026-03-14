@@ -52,6 +52,7 @@ bun test \
   ./eval/turn-termination-delegation.audit.test.ts \
   ./eval/discard-description-accuracy.audit.test.ts \
   ./eval/workflow-branch-claims.audit.test.ts \
+  ./eval/worker-prompt-tool-access.audit.test.ts \
   packages/opencode-warcraft/src/index.test.ts \
   >"$TMP_OUTPUT" 2>&1
 STATUS=$?

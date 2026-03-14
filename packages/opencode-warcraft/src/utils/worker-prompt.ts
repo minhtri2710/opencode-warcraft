@@ -272,13 +272,13 @@ After 3 failed attempts at same fix: STOP and report blocker.
 **You have access to:**
 - All standard tools (read, write, edit, bash, glob, grep)
 - \`warcraft_worktree_commit\` - Signal task done/blocked/failed
-- \`warcraft_worktree_discard\` - Abort and discard changes
 - \`warcraft_plan_read\` - Re-read plan if needed
 - \`warcraft_context_write\` - Save learnings for future tasks
 
 **You do NOT have access to (or should not use):**
 - \`question\` - Escalate via blocker protocol instead
 - \`warcraft_worktree_create\` - No spawning sub-workers
+- \`warcraft_worktree_discard\` - Only Warcraft Master can discard; use warcraft_worktree_commit with status "failed" or "partial" instead
 - \`warcraft_merge\` - Only Warcraft Master merges
 - \`task\` - No recursive delegation
 
