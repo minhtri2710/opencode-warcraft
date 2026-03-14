@@ -44,7 +44,6 @@
   },
   "optionalDependencies": {
     "grep-mcp": "^1.1.0",
-    "@upstash/context7-mcp": "^2.1.0",
     "exa-mcp-server": "^3.1.5"
   },
   "devDependencies": {
