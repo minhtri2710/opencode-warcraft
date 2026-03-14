@@ -358,6 +358,13 @@ export class ContextTools {
       if (pending) {
         return 'Pending tasks exist but are blocked by dependencies. Check blockedBy for details.';
       }
+      const nonTerminal = taskList.filter(
+        (t) => t.status === 'failed' || t.status === 'partial' || t.status === 'cancelled' || t.status === 'blocked',
+      );
+      if (nonTerminal.length > 0) {
+        const summary = nonTerminal.map((t) => `${t.folder} (${t.status})`).join(', ');
+        return `Tasks need attention: ${summary}. Re-dispatch failed/partial tasks or resolve blocked tasks before completing.`;
+      }
       return 'All tasks complete. Review and merge or complete feature.';
     };
 

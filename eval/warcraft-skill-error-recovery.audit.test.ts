@@ -12,7 +12,7 @@ const skillContent = fs.readFileSync(SKILL_PATH, 'utf-8');
 describe('warcraft skill error recovery delegation contract', () => {
   it('Task Failed section should mention issuing the returned task() call after warcraft_worktree_create', () => {
     // Find the "Task Failed" section
-    const taskFailedMatch = skillContent.match(/### Task Failed[\s\S]*?(?=###|\n---|\Z)/);
+    const taskFailedMatch = skillContent.match(/### Task Failed[\s\S]*?(?=###|\n---|Z)/);
     expect(taskFailedMatch).toBeTruthy();
 
     const section = taskFailedMatch![0];
