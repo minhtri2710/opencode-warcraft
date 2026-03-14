@@ -22,6 +22,7 @@ import { MIMIRON_PROMPT } from '../packages/opencode-warcraft/src/agents/mimiron
 import { buildSaurfangPrompt } from '../packages/opencode-warcraft/src/agents/saurfang.js';
 import { ContextTools } from '../packages/opencode-warcraft/src/tools/context-tools.js';
 import { FeatureTools } from '../packages/opencode-warcraft/src/tools/feature-tools.js';
+import { PlanTools } from '../packages/opencode-warcraft/src/tools/plan-tools.js';
 import { TaskTools } from '../packages/opencode-warcraft/src/tools/task-tools.js';
 
 type CheckResult = { id: string; pass: boolean; detail: string };
@@ -55,6 +56,16 @@ function createWorkspace() {
   const taskService = new TaskService(projectRoot, taskStore, 'off');
 
   const featureTools = new FeatureTools({ featureService });
+  const planTools = new PlanTools({
+    featureService,
+    planService,
+    taskService,
+    captureSession: () => {},
+    updateFeatureMetadata: (feature, patch) => {
+      featureService.patchMetadata(feature, patch as any);
+    },
+    workflowGatesMode: 'warn',
+  });
   const taskTools = new TaskTools({
     featureService,
     planService,
@@ -88,7 +99,7 @@ function createWorkspace() {
     projectRoot,
   });
 
-  return { projectRoot, featureService, planService, taskService, featureTools, taskTools, contextTools };
+  return { projectRoot, featureService, planService, taskService, featureTools, planTools, taskTools, contextTools };
 }
 
 async function checkFeatureCreateMentionsInstantPath(): Promise<CheckResult> {
@@ -512,6 +523,81 @@ async function checkStatusReturnsPlanWriteArgsForEscalatedInstantWork(): Promise
   };
 }
 
+async function checkPlanWriteCanMaterializeLightweightScaffold(): Promise<CheckResult> {
+  const ctx = createWorkspace();
+  ctx.featureService.create('doc-tune');
+  await ctx.taskTools.createTaskTool((name?: string) => name || 'doc-tune').execute({
+    feature: 'doc-tune',
+    name: 'Refresh docs wording',
+    priority: 3,
+    description:
+      'Background: update the README and docs wording for the instant workflow path. Impact: README plus docs text. Safety: keep behavior unchanged. Verify: docs tests or snapshots still pass. Rollback: revert.',
+  } as any);
+
+  const raw = (await ctx.planTools.writePlanTool((name?: string) => name || 'doc-tune').execute({
+    feature: 'doc-tune',
+    useScaffold: true,
+  } as any, {} as any)) as string;
+  const parsed = parseToolResponse(raw);
+  const writtenPlan = ctx.planService.read('doc-tune');
+  const pass =
+    parsed.success === true &&
+    parsed.data?.generatedFromManualTasks === true &&
+    parsed.data?.planScaffoldMode === 'lightweight' &&
+    /Workflow Path: lightweight/i.test(String(writtenPlan?.content || '')) &&
+    /## Ghost Diffs/.test(String(writtenPlan?.content || ''));
+  return {
+    id: 'plan-write-use-scaffold-lightweight',
+    pass,
+    detail: pass ? 'warcraft_plan_write can materialize a lightweight scaffold from pending manual tasks' : `writtenPlan=${String(writtenPlan?.content || '')}`,
+  };
+}
+
+async function checkPlanWriteCanMaterializeStandardScaffold(): Promise<CheckResult> {
+  const ctx = createWorkspace();
+  ctx.featureService.create('quick-fix');
+  const createTask = ctx.taskTools.createTaskTool((name?: string) => name || 'quick-fix');
+  await createTask.execute({
+    feature: 'quick-fix',
+    name: 'Tighten prompt wording',
+    priority: 3,
+    description:
+      'Background: tiny wording fix. Impact: prompt text only. Safety: low risk. Verify: prompt tests. Rollback: revert.',
+  } as any);
+  await createTask.execute({
+    feature: 'quick-fix',
+    name: 'Refresh help text',
+    priority: 3,
+    description:
+      'Background: second tiny wording fix. Impact: prompt/help text only. Safety: low risk. Verify: prompt tests. Rollback: revert.',
+  } as any);
+  await createTask.execute({
+    feature: 'quick-fix',
+    name: 'Polish status wording',
+    priority: 3,
+    description:
+      'Background: third tiny wording fix. Impact: another prompt/status text tweak. Safety: low risk. Verify: prompt tests. Rollback: revert.',
+  } as any);
+
+  const raw = (await ctx.planTools.writePlanTool((name?: string) => name || 'quick-fix').execute({
+    feature: 'quick-fix',
+    useScaffold: true,
+  } as any, {} as any)) as string;
+  const parsed = parseToolResponse(raw);
+  const writtenPlan = ctx.planService.read('quick-fix');
+  const pass =
+    parsed.success === true &&
+    parsed.data?.generatedFromManualTasks === true &&
+    parsed.data?.planScaffoldMode === 'standard' &&
+    !/Workflow Path: lightweight/i.test(String(writtenPlan?.content || '')) &&
+    /### 3\. Polish status wording/.test(String(writtenPlan?.content || ''));
+  return {
+    id: 'plan-write-use-scaffold-standard',
+    pass,
+    detail: pass ? 'warcraft_plan_write can materialize a standard scaffold when instant work exceeds lightweight limits' : `writtenPlan=${String(writtenPlan?.content || '')}`,
+  };
+}
+
 async function checkPromptsMentionInstantPath(): Promise<CheckResult> {
   const khadgar = buildKhadgarPrompt({ verificationModel: 'tdd' });
   const saurfang = buildSaurfangPrompt({ verificationModel: 'tdd' });
@@ -591,6 +677,8 @@ async function main() {
     checkInstantWorkflowEscalatesPastLightweightTaskLimit(),
     checkStatusReturnsPlanScaffoldForEscalatedInstantWork(),
     checkStatusReturnsPlanWriteArgsForEscalatedInstantWork(),
+    checkPlanWriteCanMaterializeLightweightScaffold(),
+    checkPlanWriteCanMaterializeStandardScaffold(),
     checkPromptsMentionInstantPath(),
     checkBeadsModeManualBriefPersistence(),
   ]);

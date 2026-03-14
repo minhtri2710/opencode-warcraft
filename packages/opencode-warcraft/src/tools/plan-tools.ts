@@ -1,5 +1,5 @@
 import { type ToolDefinition, tool } from '@opencode-ai/plugin';
-import type { FeatureService, PlanService } from 'warcraft-core';
+import type { FeatureService, PlanService, TaskService } from 'warcraft-core';
 import {
   detectWorkflowPath,
   formatPlanReviewChecklistIssues,
@@ -8,10 +8,12 @@ import {
 } from 'warcraft-core';
 import type { ToolContext } from '../types.js';
 import { toolError, toolSuccess } from '../types.js';
+import { buildPlanScaffold } from './manual-plan-scaffold.js';
 import { resolveFeatureInput } from './tool-input.js';
 export interface PlanToolsDependencies {
   featureService: FeatureService;
   planService: PlanService;
+  taskService: TaskService;
   captureSession: (feature: string, toolContext: unknown) => void;
   updateFeatureMetadata: (
     feature: string,
@@ -35,29 +37,78 @@ export class PlanTools {
    */
   writePlanTool(resolveFeature: (name?: string) => string | null): ToolDefinition {
     // Capture deps in closure to avoid 'this' binding issues
-    const { captureSession, planService, updateFeatureMetadata } = this.deps;
+    const { captureSession, featureService, planService, taskService, updateFeatureMetadata } = this.deps;
     return tool({
       description: 'Write plan.md for the feature',
       args: {
-        content: tool.schema.string().describe('Plan markdown content'),
+        content: tool.schema.string().optional().describe('Plan markdown content'),
+        useScaffold: tool.schema
+          .boolean()
+          .optional()
+          .describe('When true, build plan content from pending manual-task briefs instead of requiring explicit markdown.'),
         feature: tool.schema.string().optional().describe('Feature name (defaults to detection or single feature)'),
       },
-      async execute({ content, feature: explicitFeature }, toolContext: ToolContext) {
+      async execute({ content, useScaffold, feature: explicitFeature }, toolContext: ToolContext) {
         const resolution = resolveFeatureInput(resolveFeature, explicitFeature);
         if (!resolution.ok) return toolError(resolution.error);
         const feature = resolution.feature;
 
-        const discoveryError = validateDiscoverySection(content);
+        let planContent = content?.trim() ?? '';
+        let scaffoldMode: 'lightweight' | 'standard' | null = null;
+        let generatedFromManualTasks = false;
+        let sourceTaskCount = 0;
+
+        if (!planContent) {
+          if (!useScaffold) {
+            return toolError('Plan content is required unless useScaffold is true.');
+          }
+
+          const featureData = featureService.get(feature);
+          const pendingManualTasks = taskService
+            .list(feature)
+            .filter((task) => task.origin === 'manual' && task.status === 'pending')
+            .map((task) => {
+              const rawStatus = taskService.getRawStatus(feature, task.folder);
+              return {
+                folder: task.folder,
+                name: rawStatus?.planTitle ?? task.name,
+                brief: rawStatus?.brief ?? null,
+              };
+            });
+
+          if (pendingManualTasks.length === 0) {
+            return toolError('No pending manual tasks are available to build a plan scaffold.');
+          }
+
+          sourceTaskCount = pendingManualTasks.length;
+          scaffoldMode =
+            featureData?.workflowRecommendation === 'standard' || pendingManualTasks.length > 2 ? 'standard' : 'lightweight';
+          planContent = buildPlanScaffold(feature, scaffoldMode, pendingManualTasks) ?? '';
+          generatedFromManualTasks = true;
+
+          if (!planContent) {
+            return toolError('Failed to build plan scaffold from pending manual tasks.');
+          }
+        }
+
+        const discoveryError = validateDiscoverySection(planContent);
         if (discoveryError) {
           return toolError(discoveryError);
         }
 
         captureSession(feature, toolContext);
-        const planPath = planService.write(feature, content);
+        const planPath = planService.write(feature, planContent);
         updateFeatureMetadata(feature, {
-          workflowPath: detectWorkflowPath(content),
+          workflowPath: detectWorkflowPath(planContent),
         });
-        return toolSuccess({ message: `Plan written to ${planPath}.` });
+        return toolSuccess({
+          workflowPath: detectWorkflowPath(planContent),
+          generatedFromManualTasks,
+          sourceTaskCount,
+          planScaffoldMode: generatedFromManualTasks ? scaffoldMode : null,
+          content: planContent,
+          message: `Plan written to ${planPath}.`,
+        });
       },
     });
   }

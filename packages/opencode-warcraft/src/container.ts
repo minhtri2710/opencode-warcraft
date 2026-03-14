@@ -136,6 +136,7 @@ export function createWarcraftContainer(directory: string, configService: Config
   const planTools = new PlanTools({
     featureService,
     planService,
+    taskService,
     captureSession,
     updateFeatureMetadata,
     workflowGatesMode: configService.getWorkflowGatesMode(),
