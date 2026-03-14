@@ -12,6 +12,7 @@ import type {
 import { computeTrustMetrics } from 'warcraft-core';
 import type { BlockedResult } from '../types.js';
 import { toolError, toolSuccess } from '../types.js';
+import { buildPlanScaffold } from './manual-plan-scaffold.js';
 import { resolveFeatureInput, validatePathSegment } from './tool-input.js';
 
 export interface ContextToolsDependencies {
@@ -91,6 +92,7 @@ interface StatusResponseData {
     reopenCount: number;
     blockedMttrMs: number | null;
   };
+  planScaffold: string | null;
   nextAction: string;
 }
 
@@ -409,6 +411,29 @@ export class ContextTools {
       : workflowPath === 'instant'
         ? 'instant'
         : 'none';
+    const pendingManualTasks =
+      !plan && (workflowPath === 'instant' || workflowRecommendation === 'lightweight' || workflowRecommendation === 'standard')
+        ? tasks
+            .filter((task) => task.origin === 'manual' && task.status === 'pending')
+            .map((task) => {
+              const rawStatus = taskService.getRawStatus(featureName, task.folder);
+              return {
+                folder: task.folder,
+                name: rawStatus?.planTitle ?? task.name,
+                brief: rawStatus?.brief ?? null,
+              };
+            })
+        : [];
+    const planScaffoldMode =
+      pendingManualTasks.length > 2 || workflowRecommendation === 'standard'
+        ? 'standard'
+        : pendingManualTasks.length > 1 || workflowRecommendation === 'lightweight'
+          ? 'lightweight'
+          : null;
+    const planScaffold =
+      planScaffoldMode && pendingManualTasks.length > 0
+        ? buildPlanScaffold(featureName, planScaffoldMode, pendingManualTasks)
+        : null;
 
     let trustMetrics: {
       reopenRate: number;
@@ -478,6 +503,7 @@ export class ContextTools {
         reopenCount: trustMetrics.reopenCount,
         blockedMttrMs: trustMetrics.blockedMttrMs,
       },
+      planScaffold,
       nextAction: getNextAction(planStatus, tasksSummary, runnable, workflowPath, workflowRecommendation),
     };
   }

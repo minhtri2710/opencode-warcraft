@@ -9,6 +9,7 @@ import {
   validateLightweightPlan,
 } from 'warcraft-core';
 import { toolError, toolSuccess } from '../types.js';
+import { buildPlanScaffold } from './manual-plan-scaffold.js';
 import { resolveFeatureInput, validateTaskInput } from './tool-input.js';
 
 export interface TaskToolsDependencies {
@@ -179,6 +180,27 @@ export class TaskTools {
           instantWorkflowActivated = true;
         }
 
+        const planScaffoldMode =
+          effectiveWorkflowRecommendation === 'standard'
+            ? 'standard'
+            : effectiveWorkflowRecommendation === 'lightweight'
+              ? 'lightweight'
+              : null;
+        const planScaffoldTasks = !hasPlan
+          ? taskService
+              .list(feature)
+              .filter((task) => task.origin === 'manual' && task.status === 'pending')
+              .map((task) => {
+                const rawStatus = taskService.getRawStatus(feature, task.folder);
+                return {
+                  folder: task.folder,
+                  name: rawStatus?.planTitle ?? task.name,
+                  brief: rawStatus?.brief ?? null,
+                };
+              })
+          : [];
+        const planScaffold =
+          planScaffoldMode && planScaffoldTasks.length > 0 ? buildPlanScaffold(feature, planScaffoldMode, planScaffoldTasks) : null;
         const recommendationWarning =
           expansionRecommendation === 'standard'
             ? '\nThis feature now has more than two pending manual tasks, so the lightweight path is no longer a good fit. Prefer the standard reviewed plan path with warcraft_plan_write before dispatching more work.'
@@ -189,6 +211,7 @@ export class TaskTools {
                 : effectiveWorkflowRecommendation === 'standard'
                   ? '\nThis manual task looks broad enough that the standard reviewed plan path is safer. Prefer warcraft_plan_write before dispatching it.'
                   : '';
+        const scaffoldHint = planScaffold ? '\nA draft reviewed-plan scaffold is included in `planScaffold`.' : '';
 
         return toolSuccess({
           feature,
@@ -197,10 +220,11 @@ export class TaskTools {
           workflowRecommendation: effectiveWorkflowRecommendation,
           workflowRationale: workflowAnalysis?.rationale ?? [],
           pendingManualTasks,
+          planScaffold,
           message:
             instantWorkflowActivated
-              ? `Manual task created: ${folder}\nInstant workflow activated for feature "${feature}" (no formal plan required for this small task). Include enough detail in the task description to make it self-contained, then call warcraft_worktree_create and issue the returned task() call.${recommendationWarning}`
-              : `Manual task created: ${folder}\nReminder: call warcraft_worktree_create to prepare the task workspace, then issue the returned task() call to start the worker in the assigned workspace.${recommendationWarning}`,
+              ? `Manual task created: ${folder}\nInstant workflow activated for feature "${feature}" (no formal plan required for this small task). Include enough detail in the task description to make it self-contained, then call warcraft_worktree_create and issue the returned task() call.${recommendationWarning}${scaffoldHint}`
+              : `Manual task created: ${folder}\nReminder: call warcraft_worktree_create to prepare the task workspace, then issue the returned task() call to start the worker in the assigned workspace.${recommendationWarning}${scaffoldHint}`,
         });
       },
     });

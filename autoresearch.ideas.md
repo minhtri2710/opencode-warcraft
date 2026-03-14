@@ -1,1 +1,1 @@
-- If the new status-based instant→lightweight escalation still feels too manual, add an actual `warcraft_task_expand` helper that can convert one or more rich manual briefs into a lightweight plan scaffold and bead-style subtasks.
+- If response-level `planScaffold` guidance still feels too manual, add an actual `warcraft_task_expand` helper that can take one or more rich manual briefs and write a reviewed plan scaffold / bead-style subtasks automatically instead of only suggesting the scaffold.

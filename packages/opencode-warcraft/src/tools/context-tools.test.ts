@@ -96,6 +96,7 @@ async function getStatusHealth(overrides: Partial<Record<string, unknown>> = {})
       staleForSeconds: number;
       hint: string;
     }> | null;
+    planScaffold: string | null;
     nextAction: string;
   };
 }> {
@@ -269,6 +270,9 @@ describe('ContextTools', () => {
       const result = await getStatusHealth({ featureService, planService, taskService });
 
       expect(result.success).toBe(true);
+      expect(result.data.planScaffold).toContain('Workflow Path: lightweight');
+      expect(result.data.planScaffold).toContain('### 1. First tiny task');
+      expect(result.data.planScaffold).toContain('### 2. Second tiny task');
       expect(result.data.nextAction).toBe(
         'This instant workflow now has multiple pending tasks and has likely outgrown the tiny-task path. Write a short lightweight plan with warcraft_plan_write (include Workflow Path: lightweight), then approve it before dispatching more work.',
       );
@@ -303,6 +307,9 @@ describe('ContextTools', () => {
       const result = await getStatusHealth({ featureService, planService, taskService });
 
       expect(result.success).toBe(true);
+      expect(result.data.planScaffold).toContain('# test-feature');
+      expect(result.data.planScaffold).not.toContain('Workflow Path: lightweight');
+      expect(result.data.planScaffold).toContain('### 3. Third tiny task');
       expect(result.data.nextAction).toBe(
         'This instant workflow now has more than two pending tasks, so the lightweight path is no longer a good fit. Write or revise plan with warcraft_plan_write, then get approval before dispatching more work.',
       );
@@ -358,6 +365,8 @@ describe('ContextTools', () => {
       const result = await getStatusHealth({ featureService, planService, taskService });
 
       expect(result.success).toBe(true);
+      expect(result.data.planScaffold).toContain('Workflow Path: lightweight');
+      expect(result.data.planScaffold).toContain('### 1. Refresh docs wording');
       expect(result.data.nextAction).toBe(
         'This task no longer looks tiny enough for direct execution. Write a short lightweight plan with warcraft_plan_write (include Workflow Path: lightweight), then approve it before dispatching work.',
       );

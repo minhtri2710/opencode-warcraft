@@ -213,6 +213,26 @@ async function checkManualTaskCreatesLightweightRecommendationForNonTinyBrief():
   };
 }
 
+async function checkManualTaskReturnsPlanScaffoldWhenItNeedsReview(): Promise<CheckResult> {
+  const ctx = createWorkspace();
+  ctx.featureService.create('doc-tune');
+  const raw = (await ctx.taskTools.createTaskTool((name?: string) => name || 'doc-tune').execute({
+    feature: 'doc-tune',
+    name: 'Refresh docs wording',
+    priority: 3,
+    description:
+      'Background: update the README and docs wording for the instant workflow path. Impact: README plus docs text. Safety: keep behavior unchanged. Verify: docs tests or snapshots still pass. Rollback: revert.',
+  } as any)) as string;
+  const parsed = parseToolResponse(raw);
+  const scaffold = String(parsed.data?.planScaffold || '');
+  const pass = /Workflow Path: lightweight/i.test(scaffold) && /### 1\. Refresh docs wording/.test(scaffold);
+  return {
+    id: 'manual-task-plan-scaffold',
+    pass,
+    detail: pass ? 'manual task creation returns a reviewed-plan scaffold when direct work needs review' : `planScaffold=${scaffold}`,
+  };
+}
+
 async function checkManualTaskSpecIsSelfContained(): Promise<CheckResult> {
   const ctx = createWorkspace();
   ctx.featureService.create('quick-fix');
@@ -380,6 +400,45 @@ async function checkInstantWorkflowEscalatesPastLightweightTaskLimit(): Promise<
   };
 }
 
+async function checkStatusReturnsPlanScaffoldForEscalatedInstantWork(): Promise<CheckResult> {
+  const ctx = createWorkspace();
+  ctx.featureService.create('quick-fix');
+  const createTask = ctx.taskTools.createTaskTool((name?: string) => name || 'quick-fix');
+  await createTask.execute({
+    feature: 'quick-fix',
+    name: 'Tighten prompt wording',
+    priority: 3,
+    description:
+      'Background: tiny wording fix. Impact: prompt text only. Safety: low risk. Verify: prompt tests. Rollback: revert.',
+  } as any);
+  await createTask.execute({
+    feature: 'quick-fix',
+    name: 'Refresh help text',
+    priority: 3,
+    description:
+      'Background: second tiny wording fix. Impact: prompt/help text only. Safety: low risk. Verify: prompt tests. Rollback: revert.',
+  } as any);
+  await createTask.execute({
+    feature: 'quick-fix',
+    name: 'Polish status wording',
+    priority: 3,
+    description:
+      'Background: third tiny wording fix. Impact: another prompt/status text tweak. Safety: low risk. Verify: prompt tests. Rollback: revert.',
+  } as any);
+
+  const statusRaw = (await ctx.contextTools.getStatusTool((name?: string) => name || 'quick-fix').execute({
+    feature: 'quick-fix',
+  })) as string;
+  const statusParsed = parseToolResponse(statusRaw);
+  const scaffold = String(statusParsed.data?.planScaffold || '');
+  const pass = /# quick-fix/.test(scaffold) && /### 3\. Polish status wording/.test(scaffold) && !/Workflow Path: lightweight/i.test(scaffold);
+  return {
+    id: 'status-plan-scaffold',
+    pass,
+    detail: pass ? 'status returns a reviewed-plan scaffold for escalated instant work' : `planScaffold=${scaffold}`,
+  };
+}
+
 async function checkPromptsMentionInstantPath(): Promise<CheckResult> {
   const khadgar = buildKhadgarPrompt({ verificationModel: 'tdd' });
   const saurfang = buildSaurfangPrompt({ verificationModel: 'tdd' });
@@ -450,11 +509,13 @@ async function main() {
     checkManualTaskCanPromoteInstantWorkflow(),
     checkManualTaskWarnsWhenInstantWorkflowOutgrowsTinyPath(),
     checkManualTaskCreatesLightweightRecommendationForNonTinyBrief(),
+    checkManualTaskReturnsPlanScaffoldWhenItNeedsReview(),
     checkManualTaskSpecIsSelfContained(),
     checkStatusNextActionSupportsInstantPath(),
     checkStatusNextActionSupportsLightweightRecommendation(),
     checkInstantWorkflowExpansionGuidance(),
     checkInstantWorkflowEscalatesPastLightweightTaskLimit(),
+    checkStatusReturnsPlanScaffoldForEscalatedInstantWork(),
     checkPromptsMentionInstantPath(),
     checkBeadsModeManualBriefPersistence(),
   ]);
