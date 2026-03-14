@@ -27,7 +27,7 @@ Common issues, recovery patterns, and operational playbooks.
      decision: "Use approach A because..."
    })
    ```
-   A new worker spawns in the same worktree with the previous worker's progress preserved.
+   A new worker is launched in the same workspace with the previous worker's progress preserved. Issue the returned `task()` call to start it.
 
 ### Prevention
 
