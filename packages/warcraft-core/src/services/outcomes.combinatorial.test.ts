@@ -1,16 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import {
-  collectOutcomes,
-  degraded,
-  diagnostic,
-  fatal,
-  fromError,
-  isUsable,
-  ok,
-  okVoid,
-  withDiagnostics,
-  worstSeverity,
-} from './outcomes.js';
+import { degraded, diagnostic, isUsable, ok, worstSeverity } from './outcomes.js';
 
 describe('outcomes combinatorial', () => {
   const SEVERITIES = ['ok', 'degraded', 'fatal'] as const;

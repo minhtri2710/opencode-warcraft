@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { getFeaturePath, getPlanPath, getWarcraftDir, getWarcraftPath, sanitizeName } from './paths.js';
+import { getFeaturePath, getPlanPath, getWarcraftDir, sanitizeName } from './paths.js';
 
 describe('paths beads mode comparison', () => {
   it('off mode and on mode give different warcraft dirs', () => {

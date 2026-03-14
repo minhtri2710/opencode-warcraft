@@ -12,8 +12,6 @@ import type {
   TaskOrigin,
   TaskStatus,
   TaskStatusType,
-  WarcraftConfig,
-  WorkerSession,
 } from './types.js';
 
 describe('types', () => {

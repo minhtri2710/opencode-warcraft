@@ -28,7 +28,7 @@ describe('defaults more validation', () => {
     });
 
     it('each agent model is a non-empty string', () => {
-      for (const [key, model] of Object.entries(DEFAULT_AGENT_MODELS)) {
+      for (const [_key, model] of Object.entries(DEFAULT_AGENT_MODELS)) {
         expect(typeof model).toBe('string');
         expect((model as string).length).toBeGreaterThan(0);
       }

@@ -1,22 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
-import {
-  getContextPath,
-  getFeatureJsonPath,
-  getFeaturePath,
-  getPlanPath,
-  getTaskPath,
-  getTaskReportPath,
-  getTaskSpecPath,
-  getTaskStatusPath,
-  getTasksPath,
-  getWarcraftDir,
-  getWarcraftPath,
-  listFeatureDirectories,
-  normalizePath,
-  sanitizeName,
-} from './paths.js';
+import { getFeaturePath, getTaskPath, listFeatureDirectories, normalizePath, sanitizeName } from './paths.js';
 
 const TEST_DIR = `/tmp/warcraft-paths-extra-${process.pid}`;
 

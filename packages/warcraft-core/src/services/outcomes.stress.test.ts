@@ -1,15 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import {
-  collectOutcomes,
-  degraded,
-  diagnostic,
-  fatal,
-  fromError,
-  isUsable,
-  ok,
-  okVoid,
-  withDiagnostics,
-} from './outcomes.js';
+import { collectOutcomes, degraded, diagnostic, fatal, fromError, ok, okVoid, withDiagnostics } from './outcomes.js';
 
 describe('outcomes stress and edge cases', () => {
   it('ok with complex nested object', () => {

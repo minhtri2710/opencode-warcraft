@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { deriveDeterministicLocalId, deriveTaskFolder, slugifyIdentifierSegment, slugifyTaskName } from './slug.js';
+import { deriveDeterministicLocalId, deriveTaskFolder, slugifyTaskName } from './slug.js';
 
 describe('slug matrix', () => {
   // Test deriveTaskFolder for orders 1-50

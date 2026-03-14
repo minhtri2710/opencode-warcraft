@@ -9,7 +9,6 @@ import {
   ok,
   okVoid,
   withDiagnostics,
-  worstSeverity,
 } from './outcomes.js';
 
 describe('outcomes integration scenarios', () => {

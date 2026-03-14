@@ -10,7 +10,7 @@ describe('defaults and types round-trip', () => {
 
   it('each default agent model is a non-empty string', () => {
     const models = DEFAULT_AGENT_MODELS;
-    for (const [agent, model] of Object.entries(models)) {
+    for (const [_agent, model] of Object.entries(models)) {
       expect(model.length).toBeGreaterThan(0);
       expect(model).toContain('/');
     }
@@ -18,7 +18,7 @@ describe('defaults and types round-trip', () => {
 
   it('config agents map to AgentModelConfig', () => {
     const agents = DEFAULT_WARCRAFT_CONFIG.agents!;
-    for (const [name, config] of Object.entries(agents)) {
+    for (const [_name, config] of Object.entries(agents)) {
       const agentConfig: AgentModelConfig = config!;
       expect(agentConfig.model).toBeDefined();
     }

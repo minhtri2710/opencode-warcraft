@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { type DetectionResult, detectContext, findProjectRoot } from './detection.js';
+import { detectContext, findProjectRoot } from './detection.js';
 
 describe('detection exhaustive', () => {
   describe('detectContext properties', () => {

@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'bun:test';
 import { DEFAULT_WARCRAFT_CONFIG } from '../defaults.js';
-import type { WarcraftConfig } from '../types.js';
 import { createNoopLogger } from '../utils/logger.js';
 import { ConfigService } from './configService.js';
 
@@ -21,14 +20,14 @@ describe('configService property validation', () => {
   });
 
   it('each agent has model string', () => {
-    for (const [name, agentConfig] of Object.entries(config.agents || {})) {
+    for (const [_name, agentConfig] of Object.entries(config.agents || {})) {
       expect(typeof agentConfig!.model).toBe('string');
       expect(agentConfig!.model.length).toBeGreaterThan(0);
     }
   });
 
   it('each agent has temperature number', () => {
-    for (const [name, agentConfig] of Object.entries(config.agents || {})) {
+    for (const [_name, agentConfig] of Object.entries(config.agents || {})) {
       expect(typeof agentConfig!.temperature).toBe('number');
     }
   });
@@ -45,7 +44,7 @@ describe('configService property validation', () => {
 
   it('DEFAULT_WARCRAFT_CONFIG has same keys as service config', () => {
     const defaultKeys = Object.keys(DEFAULT_WARCRAFT_CONFIG).sort();
-    const serviceKeys = Object.keys(config).sort();
+    const _serviceKeys = Object.keys(config).sort();
     // Service config may have more keys from file, but should have at least defaults
     for (const key of defaultKeys) {
       expect(config).toHaveProperty(key);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { createConsoleLogger, createNoopLogger, type Logger } from './logger.js';
+import { createConsoleLogger, createNoopLogger } from './logger.js';
 
 describe('logger more edge cases', () => {
   describe('createNoopLogger', () => {

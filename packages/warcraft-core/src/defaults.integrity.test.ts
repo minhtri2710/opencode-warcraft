@@ -3,7 +3,7 @@ import { DEFAULT_AGENT_MODELS, DEFAULT_WARCRAFT_CONFIG } from './defaults.js';
 
 describe('defaults agent integrity', () => {
   it('all agent models have provider/model format', () => {
-    for (const [name, model] of Object.entries(DEFAULT_AGENT_MODELS)) {
+    for (const [_name, model] of Object.entries(DEFAULT_AGENT_MODELS)) {
       expect(model).toContain('/');
       const [provider, modelName] = model.split('/');
       expect(provider.length).toBeGreaterThan(0);

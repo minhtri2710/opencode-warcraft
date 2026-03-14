@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'bun:test';
-import type { TaskBeadAction } from './beadMapping.js';
 import { getTaskBeadActions } from './beadMapping.js';
 
 describe('getTaskBeadActions extra edge cases', () => {

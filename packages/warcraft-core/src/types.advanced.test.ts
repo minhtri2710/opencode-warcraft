@@ -1,13 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import type {
-  AgentModelConfig,
-  BeadsMode,
-  FeatureJson,
-  SpecData,
-  TaskStatus,
-  TaskStatusType,
-  WarcraftConfig,
-} from './types.js';
+import type { AgentModelConfig, SpecData, TaskStatus, WarcraftConfig } from './types.js';
 
 describe('types advanced validation', () => {
   describe('AgentModelConfig', () => {

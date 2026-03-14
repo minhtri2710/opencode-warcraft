@@ -38,7 +38,7 @@ describe('discovery-gate comprehensive', () => {
 
   describe('edge cases', () => {
     it('very long plan', () => {
-      const long = '## Discovery\n\n### Findings\n' + 'x'.repeat(100000);
+      const long = `## Discovery\n\n### Findings\n${'x'.repeat(100000)}`;
       expect(typeof validateDiscoverySection(long) === 'string' || validateDiscoverySection(long) === null).toBe(true);
     });
 

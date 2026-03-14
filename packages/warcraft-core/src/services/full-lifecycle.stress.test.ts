@@ -14,7 +14,7 @@ import { TaskService } from './taskService.js';
 describe('Full lifecycle stress test', () => {
   let tempDir: string;
   let featureService: FeatureService;
-  let planService: PlanService;
+  let _planService: PlanService;
   let taskService: TaskService;
 
   beforeEach(() => {
@@ -23,7 +23,7 @@ describe('Full lifecycle stress test', () => {
     const planStore = new FilesystemPlanStore(tempDir);
     const taskStore = new FilesystemTaskStore(tempDir);
     featureService = new FeatureService(tempDir, featureStore, 'off', taskStore);
-    planService = new PlanService(tempDir, planStore, 'off');
+    _planService = new PlanService(tempDir, planStore, 'off');
     taskService = new TaskService(tempDir, taskStore, 'off', createNoopLogger());
     fs.mkdirSync(getWarcraftPath(tempDir, 'off'), { recursive: true });
   });

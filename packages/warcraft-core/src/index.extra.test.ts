@@ -1,7 +1,4 @@
 import { describe, expect, it } from 'bun:test';
-import * as fs from 'fs';
-import * as path from 'path';
-import { detectContext, findProjectRoot } from './utils/detection.js';
 import { fileExists, readJson, readText } from './utils/fs.js';
 import {
   getContextPath,

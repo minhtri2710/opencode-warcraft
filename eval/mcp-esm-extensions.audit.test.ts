@@ -37,7 +37,7 @@ describe('ESM .js extension compliance across all source files', () => {
   for (const root of roots) {
     const files = findTsFiles(root);
     for (const file of files) {
-      const relative = file.replace(join(import.meta.dir, '..') + '/', '');
+      const relative = file.replace(`${join(import.meta.dir, '..')}/`, '');
       it(`${relative} should use .js extensions on local imports`, () => {
         const content = readFileSync(file, 'utf-8');
         const localImportPattern = /from\s+['"](\.[^'"]+)['"]/g;

@@ -27,7 +27,7 @@ describe('json-lock comprehensive', () => {
       const lockPath = path.join(tempDir, 'visible.lock');
       const release = await acquireLock(lockPath);
       // Lock file should exist
-      expect(fs.existsSync(lockPath) || fs.existsSync(lockPath + '.lock')).toBe(true);
+      expect(fs.existsSync(lockPath) || fs.existsSync(`${lockPath}.lock`)).toBe(true);
       release();
     });
 

@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import type { BeadsRepository } from './beads/BeadsRepository.js';
 import { createStores } from './state/index.js';
 import { TaskService } from './taskService.js';
 
@@ -45,7 +44,7 @@ function createMockRepo(): any {
   };
 }
 
-function setupFeature(name: string): void {
+function _setupFeature(name: string): void {
   const featurePath = path.join(testRoot, 'docs', name);
   fs.mkdirSync(path.join(featurePath, 'tasks'), { recursive: true });
   fs.writeFileSync(
@@ -54,7 +53,7 @@ function setupFeature(name: string): void {
   );
 }
 
-function setupTask(featureName: string, folder: string, status: Record<string, unknown> = {}): void {
+function _setupTask(featureName: string, folder: string, status: Record<string, unknown> = {}): void {
   const taskPath = path.join(testRoot, 'docs', featureName, 'tasks', folder);
   fs.mkdirSync(taskPath, { recursive: true });
   fs.writeFileSync(

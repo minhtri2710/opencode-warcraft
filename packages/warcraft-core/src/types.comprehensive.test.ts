@@ -1,16 +1,11 @@
 import { describe, expect, it } from 'bun:test';
 import type {
-  AgentModelConfig,
   BeadsMode,
-  FeatureInfo,
   FeatureJson,
   FeatureStatusType,
   PlanReadResult,
-  SpecData,
-  TaskInfo,
   TaskStatus,
   TaskStatusType,
-  WarcraftConfig,
   WorkerSession,
 } from './types.js';
 

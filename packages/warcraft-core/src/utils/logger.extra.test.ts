@@ -1,5 +1,5 @@
 import { describe, expect, it, spyOn } from 'bun:test';
-import type { LogEntry, LogLevel } from './logger.js';
+import type { LogEntry } from './logger.js';
 import { createConsoleLogger, createNoopLogger, LOG_LEVELS } from './logger.js';
 
 describe('Logger extra edge cases', () => {

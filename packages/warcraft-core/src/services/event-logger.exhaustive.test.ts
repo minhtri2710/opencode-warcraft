@@ -4,7 +4,6 @@ import * as os from 'os';
 import * as path from 'path';
 import {
   computeTrustMetrics,
-  createEventLogger,
   createNoopEventLogger,
   WARCRAFT_EVENT_TYPES,
   type WarcraftEventType,

@@ -4,10 +4,6 @@ import * as os from 'os';
 import * as path from 'path';
 import { createNoopLogger } from '../utils/logger.js';
 import { getPlanPath, getWarcraftPath } from '../utils/paths.js';
-import { FeatureService } from './featureService.js';
-import { PlanService } from './planService.js';
-import { FilesystemFeatureStore } from './state/fs-feature-store.js';
-import { FilesystemPlanStore } from './state/fs-plan-store.js';
 import { FilesystemTaskStore } from './state/fs-task-store.js';
 import { TaskService } from './taskService.js';
 
