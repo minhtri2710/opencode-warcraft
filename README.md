@@ -75,7 +75,7 @@ packages/
     └── src/
         ├── agents/          # Agent definitions (Khadgar, Mimiron, Saurfang, etc.)
         ├── tools/           # Warcraft tool implementations (19 tools)
-        ├── mcp/             # MCP integration (websearch, grep-app, context7)
+        ├── mcp/             # MCP integration (websearch, grep-app)
         ├── hooks/           # Event hooks (variant, compaction)
         ├── skills/          # Skill definitions and generated registry
         ├── e2e/             # End-to-end tests
@@ -302,7 +302,7 @@ See [OpenCode Plugin Documentation](https://opencode.ai/docs/plugins/) for compl
 
 - **warcraft-core**: `simple-git` (git operations)
 - **opencode-warcraft**: `@opencode-ai/plugin` (peer dependency), `@opencode-ai/sdk`
-- **MCP Integrations** (optional): `grep-mcp`, `@upstash/context7-mcp`, `exa-mcp-server`
+- **MCP Integrations** (optional): `grep-mcp`, `exa-mcp-server`
 
 ### Code Style
 
@@ -937,7 +937,7 @@ opencode warcraft_plan_approve
 **Solution**: Install optional MCP dependencies:
 
 ```bash
-npm install grep-mcp @upstash/context7-mcp exa-mcp-server
+npm install grep-mcp exa-mcp-server
 ```
 
 #### Beads Gateway Errors

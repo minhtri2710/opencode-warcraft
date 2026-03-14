@@ -34,7 +34,7 @@ Add to `opencode.json`:
 2. Set `EXA_API_KEY` to enable `websearch_exa` (optional).
 3. Restart OpenCode.
 
-This enables tools like `grep_app_searchGitHub`, `context7_query-docs`, and `websearch_web_search_exa`.
+This enables tools like `grep_app_searchGitHub` and `websearch_web_search_exa`.
 
 ## The Workflow
 
@@ -442,7 +442,6 @@ Plan approval uses **SHA-256 content hashing** to detect plan modifications:
 | ID | Description | Requirements |
 |----|-------------|--------------|
 | `websearch` | Web search via [Exa AI](https://exa.ai). Real-time web searches and content scraping. | Set `EXA_API_KEY` env var |
-| `context7` | Library documentation lookup via [Context7](https://context7.com). Query up-to-date docs for any programming library. | None |
 | `grep_app` | GitHub code search via [grep.app](https://grep.app). Find real-world code examples from public repositories. | None |
 
 ### Per-Agent Skills
