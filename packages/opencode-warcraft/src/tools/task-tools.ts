@@ -325,7 +325,28 @@ export class TaskTools {
         if (resultingWorkflowPath === 'lightweight') {
           const lightweightIssues = validateLightweightPlan(planScaffold);
           if (lightweightIssues.length > 0) {
-            return toolError(`Cannot expand to a lightweight plan:\n${lightweightIssues.map((issue) => `- ${issue}`).join('\n')}`);
+            const retryTaskExpandArgs = { feature, tasks: selectedTasks.map((task) => task.folder), mode: 'standard' as const };
+            return toolError(
+              `Cannot expand to a lightweight plan:\n${lightweightIssues.map((issue) => `- ${issue}`).join('\n')}`,
+              [
+                `Retry warcraft_task_expand with ${JSON.stringify(retryTaskExpandArgs)} to promote this work through the standard reviewed path.`,
+              ],
+              {
+                data: {
+                  blockedReason: 'lightweight_plan_invalid',
+                  validationIssues: lightweightIssues,
+                  retryTaskExpandArgs,
+                },
+                warnings: [
+                  {
+                    type: 'lightweight_plan_invalid',
+                    severity: 'error',
+                    message: 'The requested lightweight expansion violates lightweight workflow guardrails.',
+                    count: lightweightIssues.length,
+                  },
+                ],
+              },
+            );
           }
         }
 

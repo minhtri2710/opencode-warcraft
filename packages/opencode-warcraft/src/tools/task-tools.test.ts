@@ -609,6 +609,64 @@ describe('TaskTools', () => {
       expect(parsed.data.planScaffold).not.toContain('### 1. Tiny Fix');
     });
 
+    it('returns structured recovery metadata when a requested lightweight expansion violates guardrails', async () => {
+      mockFeatureService.feature = {
+        ...mockFeatureService.feature,
+        status: 'executing',
+      };
+      mockPlanService.planResult = null;
+
+      const createTool = taskTools.createTaskTool(resolveFeature);
+      await createTool.execute({
+        name: 'Tiny Fix',
+        description: 'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
+        order: 1,
+        feature: undefined,
+        priority: 3,
+      });
+      await createTool.execute({
+        name: 'Second Tiny Fix',
+        description: 'Background: second tiny change. Impact: help text only. Safety: low. Verify: prompt tests. Rollback: revert.',
+        order: 2,
+        feature: undefined,
+        priority: 3,
+      });
+      await createTool.execute({
+        name: 'Third Tiny Fix',
+        description: 'Background: third tiny change. Impact: status text only. Safety: low. Verify: prompt tests. Rollback: revert.',
+        order: 3,
+        feature: undefined,
+        priority: 3,
+      });
+
+      const expandTool = taskTools.expandTaskTool(resolveFeature);
+      const raw = await expandTool.execute({ feature: undefined, mode: 'lightweight' });
+      const parsed = JSON.parse(raw);
+
+      expect(parsed.success).toBe(false);
+      expect(parsed.error).toContain('Cannot expand to a lightweight plan');
+      expect(parsed.hints).toEqual([
+        'Retry warcraft_task_expand with {"feature":"test-feature","tasks":["01-tiny-fix","02-second-tiny-fix","03-third-tiny-fix"],"mode":"standard"} to promote this work through the standard reviewed path.',
+      ]);
+      expect(parsed.data).toEqual({
+        blockedReason: 'lightweight_plan_invalid',
+        validationIssues: expect.any(Array),
+        retryTaskExpandArgs: {
+          feature: 'test-feature',
+          tasks: ['01-tiny-fix', '02-second-tiny-fix', '03-third-tiny-fix'],
+          mode: 'standard',
+        },
+      });
+      expect(parsed.warnings).toEqual([
+        {
+          type: 'lightweight_plan_invalid',
+          severity: 'error',
+          message: 'The requested lightweight expansion violates lightweight workflow guardrails.',
+          count: expect.any(Number),
+        },
+      ]);
+    });
+
     it('can merge selected manual tasks into an existing draft plan', async () => {
       mockFeatureService.feature = {
         ...mockFeatureService.feature,

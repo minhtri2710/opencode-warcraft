@@ -1500,6 +1500,59 @@ async function checkTaskExpandReturnsFollowUpExpansionForRemainingManualTasks():
   };
 }
 
+async function checkTaskExpandReturnsStructuredLightweightRecovery(): Promise<CheckResult> {
+  const ctx = createWorkspace();
+  ctx.featureService.create('quick-fix');
+  const createTask = ctx.taskTools.createTaskTool((name?: string) => name || 'quick-fix');
+  await createTask.execute({
+    feature: 'quick-fix',
+    name: 'Tiny Fix',
+    priority: 3,
+    description:
+      'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
+  } as any);
+  await createTask.execute({
+    feature: 'quick-fix',
+    name: 'Second Tiny Fix',
+    priority: 3,
+    description:
+      'Background: second tiny change. Impact: help text only. Safety: low. Verify: prompt tests. Rollback: revert.',
+  } as any);
+  await createTask.execute({
+    feature: 'quick-fix',
+    name: 'Third Tiny Fix',
+    priority: 3,
+    description:
+      'Background: third tiny change. Impact: status text only. Safety: low. Verify: prompt tests. Rollback: revert.',
+  } as any);
+
+  const raw = (await ctx.taskTools.expandTaskTool((name?: string) => name || 'quick-fix').execute({
+    feature: 'quick-fix',
+    mode: 'lightweight',
+  } as any)) as string;
+  const parsed = parseToolResponse(raw) as any;
+  const pass =
+    parsed.success === false &&
+    parsed.data?.blockedReason === 'lightweight_plan_invalid' &&
+    Array.isArray(parsed.data?.validationIssues) &&
+    parsed.data.validationIssues.length > 0 &&
+    parsed.data?.retryTaskExpandArgs?.feature === 'quick-fix' &&
+    JSON.stringify(parsed.data?.retryTaskExpandArgs?.tasks) ===
+      JSON.stringify(['01-tiny-fix', '02-second-tiny-fix', '03-third-tiny-fix']) &&
+    parsed.data?.retryTaskExpandArgs?.mode === 'standard' &&
+    Array.isArray(parsed.hints) &&
+    /warcraft_task_expand/.test(String(parsed.hints?.[0] || '')) &&
+    Array.isArray(parsed.warnings) &&
+    parsed.warnings[0]?.type === 'lightweight_plan_invalid';
+  return {
+    id: 'task-expand-lightweight-structured-recovery',
+    pass,
+    detail: pass
+      ? 'warcraft_task_expand returns structured recovery metadata when lightweight guardrails reject expansion'
+      : `response=${JSON.stringify(parsed)}`,
+  };
+}
+
 async function checkTaskExpandCanMergeIntoDraftPlan(): Promise<CheckResult> {
   const ctx = createWorkspace();
   ctx.featureService.create('doc-tune');
@@ -1668,6 +1721,7 @@ async function main() {
     checkTaskExpandWritesPlanAndPreviewsPromotion(),
     checkTaskExpandReturnsPromotionFlow(),
     checkTaskExpandReturnsFollowUpExpansionForRemainingManualTasks(),
+    checkTaskExpandReturnsStructuredLightweightRecovery(),
     checkTaskExpandCanMergeIntoDraftPlan(),
     checkPromptsMentionInstantPath(),
     checkBeadsModeManualBriefPersistence(),
