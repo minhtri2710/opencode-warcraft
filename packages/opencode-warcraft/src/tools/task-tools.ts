@@ -6,6 +6,7 @@ import {
   createTraceContext,
   detectWorkflowPath,
   InvalidTransitionError,
+  validateDiscoverySection,
   validateLightweightPlan,
 } from 'warcraft-core';
 import { toolError, toolSuccess } from '../types.js';
@@ -228,6 +229,108 @@ export class TaskTools {
             instantWorkflowActivated
               ? `Manual task created: ${folder}\nInstant workflow activated for feature "${feature}" (no formal plan required for this small task). Include enough detail in the task description to make it self-contained, then call warcraft_worktree_create and issue the returned task() call.${recommendationWarning}${scaffoldHint}`
               : `Manual task created: ${folder}\nReminder: call warcraft_worktree_create to prepare the task workspace, then issue the returned task() call to start the worker in the assigned workspace.${recommendationWarning}${scaffoldHint}`,
+        });
+      },
+    });
+  }
+
+  /**
+   * Expand pending manual tasks into a reviewed plan and preview sync impact
+   */
+  expandTaskTool(resolveFeature: (name?: string) => string | null): ToolDefinition {
+    const { featureService, planService, taskService } = this.deps;
+    return tool({
+      description: 'Expand pending manual tasks into a reviewed plan and preview sync impact',
+      args: {
+        tasks: tool.schema
+          .array(tool.schema.string())
+          .optional()
+          .describe('Optional manual task folders to promote. Defaults to all pending manual tasks.'),
+        mode: tool.schema
+          .enum(['auto', 'lightweight', 'standard'])
+          .optional()
+          .describe('Target plan mode. auto (default) chooses lightweight vs standard from task count/recommendation.'),
+        feature: tool.schema.string().optional().describe('Feature name (defaults to detection or single feature)'),
+      },
+      async execute({ tasks, mode, feature: explicitFeature }) {
+        const resolution = resolveFeatureInput(resolveFeature, explicitFeature);
+        if (!resolution.ok) return toolError(resolution.error);
+        const feature = resolution.feature;
+
+        if (planService.read(feature)) {
+          return toolError('A plan already exists for this feature. Use warcraft_plan_write to revise it directly.');
+        }
+
+        const pendingManualTasks = taskService
+          .list(feature)
+          .filter((task) => task.origin === 'manual' && task.status === 'pending');
+        if (pendingManualTasks.length === 0) {
+          return toolError('No pending manual tasks are available to expand.');
+        }
+
+        const requestedTasks = tasks?.length ? tasks : pendingManualTasks.map((task) => task.folder);
+        for (const taskFolder of requestedTasks) {
+          validateTaskInput(taskFolder);
+        }
+
+        const selectedTasks = [] as Array<{ folder: string; name: string; brief: string | null }>;
+        for (const taskFolder of requestedTasks) {
+          const task = pendingManualTasks.find((item) => item.folder === taskFolder);
+          if (!task) {
+            return toolError(`Task '${taskFolder}' is not a pending manual task for feature '${feature}'.`);
+          }
+          const rawStatus = taskService.getRawStatus(feature, task.folder);
+          selectedTasks.push({
+            folder: task.folder,
+            name: rawStatus?.planTitle ?? task.name,
+            brief: rawStatus?.brief ?? null,
+          });
+        }
+
+        const featureData = featureService.get(feature);
+        const selectedMode = mode && mode !== 'auto' ? mode : null;
+        const planScaffoldMode =
+          selectedMode ??
+          (featureData?.workflowRecommendation === 'standard' || selectedTasks.length > 2 ? 'standard' : 'lightweight');
+        const planScaffold = buildPlanScaffold(feature, planScaffoldMode, selectedTasks);
+        if (!planScaffold) {
+          return toolError('Failed to build a reviewed plan scaffold from the selected manual tasks.');
+        }
+
+        const discoveryError = validateDiscoverySection(planScaffold);
+        if (discoveryError) {
+          return toolError(discoveryError);
+        }
+
+        if (planScaffoldMode === 'lightweight') {
+          const lightweightIssues = validateLightweightPlan(planScaffold);
+          if (lightweightIssues.length > 0) {
+            return toolError(`Cannot expand to a lightweight plan:\n${lightweightIssues.map((issue) => `- ${issue}`).join('\n')}`);
+          }
+        }
+
+        const planPath = planService.write(feature, planScaffold);
+        featureService.patchMetadata(feature, { workflowPath: detectWorkflowPath(planScaffold) });
+        const preview = taskService.previewSync(feature);
+
+        return toolSuccess({
+          feature,
+          tasks: selectedTasks.map((task) => task.folder),
+          workflowPath: detectWorkflowPath(planScaffold),
+          planPath,
+          planScaffoldMode,
+          planScaffold,
+          planWriteArgs: { feature, content: planScaffold },
+          syncPreview: {
+            wouldCreate: preview.created,
+            wouldRemove: preview.removed,
+            wouldKeep: preview.kept,
+            wouldReconcile: preview.reconciled,
+            manualTasks: preview.manual,
+          },
+          message:
+            `Expanded ${selectedTasks.length} pending manual task(s) into a ${planScaffoldMode} reviewed plan at ${planPath}. ` +
+            'Review or refine the plan, then run warcraft_plan_approve and warcraft_tasks_sync to apply the previewed reconciliations.',
         });
       },
     });

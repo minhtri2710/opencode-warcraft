@@ -19,13 +19,13 @@ const WARCRAFT_SYSTEM_PROMPT = `
 
 Default workflow is plan-first, but tiny low-risk tasks may use an instant workflow: self-contained manual task → execute immediately without a formal plan.
 
-### Tools (19 total)
+### Tools (20 total)
 
 | Domain | Tools |
 |--------|-------|
 | Feature | warcraft_feature_create, warcraft_feature_complete |
 | Plan | warcraft_plan_write, warcraft_plan_read, warcraft_plan_approve |
-| Task | warcraft_tasks_sync, warcraft_task_create, warcraft_task_update |
+| Task | warcraft_tasks_sync, warcraft_task_create, warcraft_task_expand, warcraft_task_update |
 | Worktree | warcraft_worktree_create, warcraft_worktree_commit, warcraft_worktree_discard, warcraft_worktree_prune |
 | Merge | warcraft_merge |
 | Batch | warcraft_batch_execute |
@@ -53,6 +53,8 @@ Default workflow is plan-first, but tiny low-risk tasks may use an instant workf
 4. \`warcraft_merge(task)\`
 
 Use the instant workflow only when a formal plan would be overhead. The task description must be rich enough that future workers/reviewers do not need a missing plan file.
+
+If instant/manual work grows beyond the tiny-task path, use \`warcraft_task_expand()\` or \`warcraft_plan_write({ useScaffold: true })\` to promote the pending manual tasks into a reviewed plan before dispatching more work.
 
 **Important:** \`warcraft_worktree_commit\` finalizes work but does NOT merge.
 Use \`warcraft_merge\` to explicitly integrate changes.
@@ -210,6 +212,7 @@ const plugin: Plugin = async (ctx) => {
       warcraft_plan_approve: container.planTools.approvePlanTool(container.resolveFeature),
       warcraft_tasks_sync: container.taskTools.syncTasksTool(container.resolveFeature),
       warcraft_task_create: container.taskTools.createTaskTool(container.resolveFeature),
+      warcraft_task_expand: container.taskTools.expandTaskTool(container.resolveFeature),
       warcraft_task_update: container.taskTools.updateTaskTool(container.resolveFeature),
       warcraft_worktree_create: container.worktreeTools.createWorktreeTool(container.resolveFeature),
       warcraft_worktree_commit: container.worktreeTools.commitWorktreeTool(container.resolveFeature),

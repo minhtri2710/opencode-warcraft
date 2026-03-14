@@ -654,6 +654,46 @@ async function checkScaffoldPromotionSyncsManualTasksIntoPlan(): Promise<CheckRe
   };
 }
 
+async function checkTaskExpandWritesPlanAndPreviewsPromotion(): Promise<CheckResult> {
+  const ctx = createWorkspace();
+  ctx.featureService.create('doc-tune');
+  const createTask = ctx.taskTools.createTaskTool((name?: string) => name || 'doc-tune');
+  await createTask.execute({
+    feature: 'doc-tune',
+    name: 'Refresh docs wording',
+    priority: 3,
+    description:
+      'Background: update the README wording for the instant workflow path. Impact: README text only. Safety: keep behavior unchanged. Verify: docs tests still pass. Rollback: revert.',
+  } as any);
+  await createTask.execute({
+    feature: 'doc-tune',
+    name: 'Refresh help text',
+    priority: 3,
+    description:
+      'Background: update inline help text for the instant workflow path. Impact: help text only. Safety: keep behavior unchanged. Verify: docs tests still pass. Rollback: revert.',
+  } as any);
+
+  const raw = (await ctx.taskTools.expandTaskTool((name?: string) => name || 'doc-tune').execute({
+    feature: 'doc-tune',
+  } as any)) as string;
+  const parsed = parseToolResponse(raw);
+  const writtenPlan = ctx.planService.read('doc-tune');
+  const pass =
+    parsed.success === true &&
+    parsed.data?.planScaffoldMode === 'lightweight' &&
+    /Workflow Path: lightweight/i.test(String(writtenPlan?.content || '')) &&
+    Array.isArray(parsed.data?.syncPreview?.wouldReconcile) &&
+    parsed.data.syncPreview.wouldReconcile.length === 2 &&
+    /warcraft_plan_approve/i.test(String(parsed.data?.message || ''));
+  return {
+    id: 'task-expand-plan-promotion',
+    pass,
+    detail: pass
+      ? 'warcraft_task_expand writes the scaffolded plan and previews the sync reconciliation'
+      : `response=${JSON.stringify(parsed.data ?? null)} writtenPlan=${String(writtenPlan?.content || '')}`,
+  };
+}
+
 async function checkPromptsMentionInstantPath(): Promise<CheckResult> {
   const khadgar = buildKhadgarPrompt({ verificationModel: 'tdd' });
   const saurfang = buildSaurfangPrompt({ verificationModel: 'tdd' });
@@ -736,6 +776,7 @@ async function main() {
     checkPlanWriteCanMaterializeLightweightScaffold(),
     checkPlanWriteCanMaterializeStandardScaffold(),
     checkScaffoldPromotionSyncsManualTasksIntoPlan(),
+    checkTaskExpandWritesPlanAndPreviewsPromotion(),
     checkPromptsMentionInstantPath(),
     checkBeadsModeManualBriefPersistence(),
   ]);

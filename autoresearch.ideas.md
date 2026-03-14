@@ -1,1 +1,1 @@
-- If `warcraft_plan_write({ useScaffold: true })` still leaves too much manual follow-through, add an actual `warcraft_task_expand` helper that can promote one or more rich manual briefs all the way through reviewed plan creation and bead-style task generation instead of stopping after writing the scaffolded plan.
+- If `warcraft_task_expand` still leaves too much manual follow-through, let it merge selected pending manual tasks into an existing draft/lightweight plan (instead of only working when no plan exists) and return a sync preview for the revised plan.

@@ -62,6 +62,7 @@ The benchmark should reward real workflow improvements, not just prompt edits. I
 - direct scaffold materialization through `warcraft_plan_write`, so agents can promote pending manual tasks into a real plan file without copy/pasting returned scaffold content
 - end-to-end promotion from manual instant tasks into canonical planned tasks during `warcraft_tasks_sync`, avoiding duplicate task creation once scaffolded plans are approved
 - action guidance that points agents at the actual low-friction promotion command (`warcraft_plan_write({ useScaffold: true })`) once scaffold-based fallback is available
+- an actual `warcraft_task_expand` helper that writes the reviewed plan scaffold for pending manual tasks and previews the resulting promotion/reconciliation impact
 
 ## What's Been Tried
 - Added an initial behavior-oriented eval harness and baseline targeted tests.
@@ -70,4 +71,5 @@ The benchmark should reward real workflow improvements, not just prompt edits. I
 - Added request analysis in `warcraft_feature_create` via `analyzeWorkflowRequest`, returning `recommendedWorkflowPath` + rationale for instant vs lightweight vs standard.
 - Persisted `workflowRecommendation` on the feature so `warcraft_status` can guide the user toward the right next action (e.g. lightweight plan) even before a plan or task exists.
 - Added scaffolded-plan fallbacks: `planScaffold`, `planWriteArgs`, beads-aligned scaffold sections, and `warcraft_plan_write({ useScaffold: true })` so pending manual tasks can be promoted into a real reviewed plan without copy/paste.
-- Latest direction in progress: tighten the guidance so once scaffold-based fallback is available, the system explicitly steers agents toward `warcraft_plan_write({ useScaffold: true })` instead of leaving them with generic plan-writing instructions.
+- Added an actual `warcraft_task_expand` helper that writes a scaffolded reviewed plan from pending manual tasks and previews how `warcraft_tasks_sync` will reconcile them.
+- Latest direction in progress: reduce the remaining friction in mixed workflows by letting that helper merge selected pending manual tasks into an existing draft/lightweight plan instead of only working when no plan exists.

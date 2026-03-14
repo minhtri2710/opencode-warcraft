@@ -31,6 +31,7 @@ const EXPECTED_TOOLS = [
   'warcraft_plan_approve',
   'warcraft_tasks_sync',
   'warcraft_task_create',
+  'warcraft_task_expand',
   'warcraft_task_update',
   'warcraft_worktree_create',
   'warcraft_worktree_commit',

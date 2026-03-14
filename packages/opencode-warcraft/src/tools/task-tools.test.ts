@@ -147,9 +147,16 @@ class MockPlanService implements Partial<PlanService> {
     content: '# Plan\n\n### 1. Test Task\n\nDescription.',
     status: 'approved',
   };
+  writes: Array<{ feature: string; content: string }> = [];
 
   read() {
     return this.planResult;
+  }
+
+  write(feature: string, content: string) {
+    this.writes.push({ feature, content });
+    this.planResult = { content, status: 'planning' };
+    return `/tmp/${feature}/plan.md`;
   }
 }
 
@@ -465,6 +472,82 @@ describe('TaskTools', () => {
       expect(parsed.data.message).toContain('standard reviewed plan path');
     });
   });
+
+  describe('expandTaskTool', () => {
+    it('writes a scaffolded plan and previews promotion for pending manual tasks', async () => {
+      mockFeatureService.feature = {
+        ...mockFeatureService.feature,
+        status: 'executing',
+        workflowRecommendation: 'lightweight',
+      };
+      mockPlanService.planResult = null;
+      mockTaskService.previewResult = {
+        created: [],
+        removed: [],
+        kept: [],
+        reconciled: [{ from: '01-tiny-fix', to: '01-tiny-fix', planTitle: 'Tiny Fix', beadId: 'task-1' }],
+        manual: [],
+      };
+
+      const createTool = taskTools.createTaskTool(resolveFeature);
+      await createTool.execute({
+        name: 'Tiny Fix',
+        description: 'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
+        order: 1,
+        feature: undefined,
+        priority: 3,
+      });
+
+      const expandTool = taskTools.expandTaskTool(resolveFeature);
+      const raw = await expandTool.execute({ feature: undefined });
+      const parsed = JSON.parse(raw);
+
+      expect(parsed.success).toBe(true);
+      expect(parsed.data.planScaffoldMode).toBe('lightweight');
+      expect(parsed.data.planScaffold).toContain('Workflow Path: lightweight');
+      expect(parsed.data.planPath).toBe('/tmp/test-feature/plan.md');
+      expect(parsed.data.syncPreview.wouldReconcile).toEqual([
+        { from: '01-tiny-fix', to: '01-tiny-fix', planTitle: 'Tiny Fix', beadId: 'task-1' },
+      ]);
+      expect(mockPlanService.writes).toEqual([{ feature: 'test-feature', content: parsed.data.planScaffold }]);
+      expect(mockFeatureService.patchCalls).toContainEqual({ workflowPath: 'lightweight' });
+    });
+
+    it('can target a selected subset of pending manual tasks', async () => {
+      mockFeatureService.feature = {
+        ...mockFeatureService.feature,
+        status: 'executing',
+        workflowRecommendation: 'lightweight',
+      };
+      mockPlanService.planResult = null;
+
+      const createTool = taskTools.createTaskTool(resolveFeature);
+      await createTool.execute({
+        name: 'Tiny Fix',
+        description: 'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
+        order: 1,
+        feature: undefined,
+        priority: 3,
+      });
+      await createTool.execute({
+        name: 'Second Tiny Fix',
+        description: 'Background: second tiny change. Impact: help text only. Safety: low. Verify: prompt tests. Rollback: revert.',
+        order: 2,
+        feature: undefined,
+        priority: 3,
+      });
+
+      const expandTool = taskTools.expandTaskTool(resolveFeature);
+      const raw = await expandTool.execute({ feature: undefined, tasks: ['02-second-tiny-fix'] });
+      const parsed = JSON.parse(raw);
+
+      expect(parsed.success).toBe(true);
+      expect(parsed.data.tasks).toEqual(['02-second-tiny-fix']);
+      expect(parsed.data.planScaffold).toContain('### 1. Second Tiny Fix');
+      expect(parsed.data.planScaffold).not.toContain('### 1. Tiny Fix');
+    });
+  });
+
   describe('syncTasksTool', () => {
     it('preview surfaces reconciliations', async () => {
       mockTaskService.previewResult = {

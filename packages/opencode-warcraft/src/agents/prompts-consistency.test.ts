@@ -190,12 +190,12 @@ describe('Prompt consistency (contradiction detection)', () => {
     const promptTableSection = extractSection(systemPrompt, 'Tools');
     const promptTools = extractPromptTools(promptTableSection);
 
-    it('runtime registers exactly 19 tools', () => {
-      expect(runtimeTools).toHaveLength(19);
+    it('runtime registers exactly 20 tools', () => {
+      expect(runtimeTools).toHaveLength(20);
     });
 
-    it('static prompt documents exactly 19 tools in the table', () => {
-      expect(promptTools).toHaveLength(19);
+    it('static prompt documents exactly 20 tools in the table', () => {
+      expect(promptTools).toHaveLength(20);
     });
 
     it('every runtime tool appears in the static prompt table', () => {

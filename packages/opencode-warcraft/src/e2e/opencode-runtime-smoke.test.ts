@@ -15,6 +15,7 @@ const EXPECTED_TOOLS = [
   'warcraft_plan_write',
   'warcraft_plan_read',
   'warcraft_tasks_sync',
+  'warcraft_task_expand',
   'warcraft_worktree_create',
 ] as const;
 

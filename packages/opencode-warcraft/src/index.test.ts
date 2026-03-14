@@ -29,7 +29,7 @@ describe('Warcraft Plugin Tool Registration', () => {
     expect(typeof plugin).toBe('function');
   });
 
-  it('should have all 19 warcraft tools registered', () => {
+  it('should have all 20 warcraft tools registered', () => {
     const tools = pluginInstance.tool;
     expect(tools).toBeDefined();
 
@@ -45,6 +45,7 @@ describe('Warcraft Plugin Tool Registration', () => {
     // Task tools
     expect(tools.warcraft_tasks_sync).toBeDefined();
     expect(tools.warcraft_task_create).toBeDefined();
+    expect(tools.warcraft_task_expand).toBeDefined();
     expect(tools.warcraft_task_update).toBeDefined();
 
     // Worktree tools
