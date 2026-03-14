@@ -1,18 +1,16 @@
 # Autoresearch Deferred Ideas
 
-## Deeper audit areas
-- Sandbox hook only applies to worktree paths — direct-mode bash commands bypass sandboxing entirely. This could be a security gap if sandbox mode is meant to protect the host.
-- dispatch-coordinator.ts line 278: error message "No worktree found for blocked task" — accurate since it's in the worktree-specific code path, but could be more helpful with recovery guidance
+## Design-level concerns (not simple code fixes)
+- Sandbox hook only applies to worktree paths — direct-mode bash commands bypass sandboxing entirely. This is architectural: sandboxing the project root would require a different approach.
+- `batchExecuteTool` execute mode revalidates all tasks serially before dispatching — a TOCTOU window exists where task state could change between validation and dispatch. Low risk since human-initiated.
 
-## Logic/behavior bugs to investigate
-- `completeFeatureTool` allows marking a feature as complete even if tasks are still pending/in_progress — intentional design (manual override), but the tool description doesn't warn the user
-- `batchExecuteTool` execute mode revalidates all tasks serially before dispatching — a TOCTOU window exists where task state could change between validation and dispatch
-- `resolveParallelPolicy` defaults to 'unbounded' strategy but still caps maxConcurrency at 32 — is this consistent or should unbounded truly have no cap?
-- Prompt budgeting in task-dispatch.ts uses `DEFAULT_BUDGET` for all features — no per-feature budget scaling based on task count or complexity
-- Hook cadence tracker evicts oldest entry when map exceeds MAX_HOOK_COUNTERS (100) — consider if this could lose critical hook state
+## Verified as correct / intentional (no action needed)
+- ~~`completeFeatureTool` allows marking a feature as complete even if tasks are still pending~~ — intentional (manual override); `syncCompletionFromTasks()` handles automatic completion
+- ~~`resolveParallelPolicy` defaults to 'unbounded' but caps at 32~~ — only applies to 'bounded' strategy; 'unbounded' uses Promise.all
+- ~~Hook cadence tracker eviction~~ — correct, evicts oldest when map exceeds 100 entries
+- ~~dispatch-coordinator "No worktree found" error~~ — accurate, in worktree-specific code path
+- ~~Prompt budgeting defaults~~ — sensible defaults, per-feature scaling would be premature
 
-## Cross-cutting audit angles still unexplored
+## Remaining audit angles
 - Check e2e tests for stale assertions or missing coverage of direct-mode dispatch path
-- Verify the `warcraft_agents_md` tool description matches its actual sync/init capabilities
-- Check if the MCP server configs (context7, grep-app, websearch) have any stale documentation
-- Audit the skill registry for skills that reference stale tool names or outdated workflows
+- Audit the generated skill registry for skills that reference stale tool names or outdated workflows (partially done — main skills checked, but generated content from `bun run generate-skills` hasn't been re-generated)

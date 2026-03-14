@@ -45,7 +45,7 @@ While agent-hive focuses on a bee-themed colony, opencode-warcraft adapts these 
 
 **opencode-warcraft** is an OpenCode plugin that provides a structured feature development workflow with character-based AI agents. It extends OpenCode's capabilities with:
 
-- **17 custom tools** for feature management, planning, and execution
+- **19 custom tools** for feature management, planning, and execution
 - **6 specialized agents** (Khadgar, Mimiron, Saurfang, Brann, Mekkatorque, Algalon) inspired by Warcraft lore
 - **Plan-first workflow**: Human shapes the plan; agents execute it
 - **Integration with beads_rust**: Native task management and dependency tracking
@@ -74,7 +74,7 @@ packages/
 └── opencode-warcraft/       # OpenCode plugin integration
     └── src/
         ├── agents/          # Agent definitions (Khadgar, Mimiron, Saurfang, etc.)
-        ├── tools/           # Warcraft tool implementations (17 tools)
+        ├── tools/           # Warcraft tool implementations (19 tools)
         ├── mcp/             # MCP integration (websearch, grep-app, context7)
         ├── hooks/           # Event hooks (variant, compaction)
         ├── skills/          # Skill definitions and generated registry
