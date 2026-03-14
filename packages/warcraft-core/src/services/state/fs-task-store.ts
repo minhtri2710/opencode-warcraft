@@ -69,6 +69,7 @@ export class FilesystemTaskStore implements TaskStore {
       origin: status.origin,
       planTitle: status.planTitle,
       summary: status.summary,
+      folderSource: 'stored' as const,
     };
   }
 
