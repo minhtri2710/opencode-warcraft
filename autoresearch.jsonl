@@ -1,0 +1,2 @@
+{"type":"config","name":"Fresh-eyes bug hunt across warcraft-core","metricName":"audit_failures","metricUnit":"","bestDirection":"lower"}
+{"run":1,"commit":"4b3d298","metric":0,"metrics":{},"status":"discard","description":"Baseline: 0 audit failures, 481 tests across 72 files. Starting deep warcraft-core exploration.","timestamp":1773471084013,"segment":0}

@@ -2822,6 +2822,20 @@ Second task description.
       expect(result.startedAt! <= after).toBe(true);
     });
 
+    it('stamps preparedAt on transition to dispatch_prepared', () => {
+      const featureName = 'test-feature';
+      setupFeature(featureName);
+      setupTask(featureName, '01-test-task', { status: 'pending', beadId: 'bd-task-1' });
+
+      const before = new Date().toISOString();
+      const result = offModeService.transition(featureName, '01-test-task', 'dispatch_prepared');
+      const after = new Date().toISOString();
+
+      expect(result.preparedAt).toBeDefined();
+      expect(result.preparedAt! >= before).toBe(true);
+      expect(result.preparedAt! <= after).toBe(true);
+    });
+
     it('preserves preparedAt and stamps startedAt when dispatch_prepared transitions to in_progress', () => {
       const featureName = 'test-feature';
       setupFeature(featureName);

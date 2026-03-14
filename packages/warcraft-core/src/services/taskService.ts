@@ -550,6 +550,9 @@ export class TaskService {
       schemaVersion: TASK_STATUS_SCHEMA_VERSION,
     };
 
+    if (updates.status === 'dispatch_prepared' && !current.preparedAt) {
+      updated.preparedAt = new Date().toISOString();
+    }
     if (updates.status === 'in_progress' && !current.startedAt) {
       updated.startedAt = new Date().toISOString();
     }
