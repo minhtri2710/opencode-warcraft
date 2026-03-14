@@ -32,6 +32,11 @@ describe('getTaskBeadActions', () => {
     expect(actions).toEqual([{ type: 'unclaim', removeLabels: ['blocked', 'failed', 'partial', 'cancelled'] }]);
   });
 
+  it('maps dispatch_prepared to unclaim action with removeLabels for all transient labels', () => {
+    const actions = getTaskBeadActions('dispatch_prepared');
+    expect(actions).toEqual([{ type: 'unclaim', removeLabels: ['blocked', 'failed', 'partial', 'cancelled'] }]);
+  });
+
   it('returns empty array for unknown status', () => {
     expect(getTaskBeadActions('unknown' as any)).toEqual([]);
   });

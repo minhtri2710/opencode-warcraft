@@ -42,8 +42,9 @@ export function getTaskBeadActions(status: TaskStatusType): TaskBeadAction[] {
     return [{ type: 'defer', label: status, removeLabels }];
   }
 
-  if (status === 'pending') {
-    // Moving back to pending clears all transient labels
+  if (status === 'pending' || status === 'dispatch_prepared') {
+    // Moving back to pending (or dispatch_prepared, a pre-claim staging status)
+    // clears all transient labels
     return [{ type: 'unclaim', removeLabels: [...TRANSIENT_LABELS] }];
   }
 
