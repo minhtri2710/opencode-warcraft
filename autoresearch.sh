@@ -59,6 +59,7 @@ bun test \
   ./eval/warcraft-skill-discard-table.audit.test.ts \
   ./eval/batch-preview-nonterminal.audit.test.ts \
   ./eval/context-dead-review-branch.audit.test.ts \
+  ./eval/discard-task-existence-check.audit.test.ts \
   ./eval/mcp-esm-extensions.audit.test.ts \
   ./eval/quickstart-merge-description.audit.test.ts \
   ./eval/readme-skill-table-accuracy.audit.test.ts \

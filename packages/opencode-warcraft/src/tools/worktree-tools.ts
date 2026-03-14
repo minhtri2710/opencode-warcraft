@@ -617,6 +617,9 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
         if (!resolution.ok) return toolError(resolution.error);
         const feature = resolution.feature;
 
+        const taskInfo = taskService.get(feature, task);
+        if (!taskInfo) return toolError(`Task "${task}" not found`);
+
         const rawStatus = taskService.getRawStatus(feature, task);
         const workspaceMode = rawStatus?.workerSession?.workspaceMode ?? 'worktree';
         const workspacePath = rawStatus?.workerSession?.workspacePath;
