@@ -94,6 +94,8 @@ interface StatusResponseData {
   };
   planScaffold: string | null;
   planWriteArgs: { feature: string; content: string } | null;
+  planApproveArgs: { feature: string } | null;
+  taskSyncArgs: { feature: string; mode: 'sync' } | null;
   taskExpandArgs: { feature: string; tasks: string[]; mode: 'lightweight' | 'standard' } | null;
   nextAction: string;
 }
@@ -507,6 +509,8 @@ export class ContextTools {
       },
       planScaffold,
       planWriteArgs: planScaffold ? { feature: featureName, content: planScaffold } : null,
+      planApproveArgs: plan && planStatus === 'draft' ? { feature: featureName } : null,
+      taskSyncArgs: plan && planStatus === 'approved' && tasks.length === 0 ? { feature: featureName, mode: 'sync' } : null,
       taskExpandArgs:
         planScaffoldMode && pendingManualTasks.length > 0
           ? { feature: featureName, tasks: pendingManualTasks.map((task) => task.folder), mode: planScaffoldMode }

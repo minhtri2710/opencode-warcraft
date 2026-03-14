@@ -98,6 +98,8 @@ async function getStatusHealth(overrides: Partial<Record<string, unknown>> = {})
     }> | null;
     planScaffold: string | null;
     planWriteArgs: { feature: string; content: string } | null;
+    planApproveArgs: { feature: string } | null;
+    taskSyncArgs: { feature: string; mode: 'sync' } | null;
     taskExpandArgs: { feature: string; tasks: string[]; mode: 'lightweight' | 'standard' } | null;
     nextAction: string;
   };
@@ -162,7 +164,7 @@ describe('ContextTools', () => {
       expect(result.data.health.blockedMttrMs).toBeNull();
     });
 
-    it('health is sibling of feature, plan, tasks, context, worktreeHygiene, planScaffold, planWriteArgs, taskExpandArgs, nextAction', async () => {
+    it('health is sibling of feature, plan, tasks, context, worktreeHygiene, planScaffold, planWriteArgs, planApproveArgs, taskSyncArgs, taskExpandArgs, nextAction', async () => {
       const result = await getStatusHealth();
 
       expect(result.success).toBe(true);
@@ -174,6 +176,8 @@ describe('ContextTools', () => {
       expect(dataKeys).toContain('worktreeHygiene');
       expect(dataKeys).toContain('planScaffold');
       expect(dataKeys).toContain('planWriteArgs');
+      expect(dataKeys).toContain('planApproveArgs');
+      expect(dataKeys).toContain('taskSyncArgs');
       expect(dataKeys).toContain('taskExpandArgs');
       expect(dataKeys).toContain('nextAction');
       expect(dataKeys).toContain('health');
@@ -358,6 +362,58 @@ describe('ContextTools', () => {
       expect(result.data.nextAction).toBe(
         'Write a short lightweight plan with warcraft_plan_write (include Workflow Path: lightweight), then approve it.',
       );
+    });
+
+    it('returns planApproveArgs when a draft plan already exists', async () => {
+      const featureService = {
+        get: () => ({
+          name: 'test-feature',
+          status: 'planning',
+          workflowPath: 'lightweight',
+          ticket: null,
+          createdAt: '2025-01-01T00:00:00Z',
+        }),
+        list: () => ['test-feature'],
+      } as unknown as FeatureService;
+
+      const planService = {
+        read: () => ({ content: '# Plan', status: 'planning' }),
+      } as unknown as PlanService;
+
+      const result = await getStatusHealth({ featureService, planService });
+
+      expect(result.success).toBe(true);
+      expect(result.data.planApproveArgs).toEqual({ feature: 'test-feature' });
+      expect(result.data.taskSyncArgs).toBeNull();
+    });
+
+    it('returns taskSyncArgs when an approved plan exists but tasks have not been generated yet', async () => {
+      const featureService = {
+        get: () => ({
+          name: 'test-feature',
+          status: 'approved',
+          workflowPath: 'lightweight',
+          ticket: null,
+          createdAt: '2025-01-01T00:00:00Z',
+        }),
+        list: () => ['test-feature'],
+      } as unknown as FeatureService;
+
+      const planService = {
+        read: () => ({ content: '# Plan', status: 'approved' }),
+      } as unknown as PlanService;
+
+      const taskService = {
+        list: () => [],
+        getRawStatus: () => null,
+        computeRunnableStatus: () => ({ runnable: [], blocked: {} }),
+      } as unknown as TaskService;
+
+      const result = await getStatusHealth({ featureService, planService, taskService });
+
+      expect(result.success).toBe(true);
+      expect(result.data.planApproveArgs).toBeNull();
+      expect(result.data.taskSyncArgs).toEqual({ feature: 'test-feature', mode: 'sync' });
     });
 
     it('suggests a lightweight plan before dispatch when a pending instant task is marked as no longer tiny', async () => {

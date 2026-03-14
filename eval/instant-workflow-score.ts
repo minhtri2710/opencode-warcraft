@@ -384,6 +384,63 @@ async function checkStatusNextActionSupportsLightweightRecommendation(): Promise
   };
 }
 
+async function checkStatusReturnsPlanApproveArgsForDraftPlan(): Promise<CheckResult> {
+  const ctx = createWorkspace();
+  ctx.featureService.create('doc-tune');
+  await ctx.planTools.writePlanTool((name?: string) => name || 'doc-tune').execute(
+    {
+      feature: 'doc-tune',
+      content: [
+        '# doc-tune',
+        '',
+        'Workflow Path: lightweight',
+        '',
+        '## Discovery',
+        '',
+        'Impact: docs text only',
+        'Safety: low',
+        'Verify: docs tests',
+        'Rollback: revert',
+        '',
+        '## Non-Goals',
+        '',
+        '- Keep scope tight.',
+        '',
+        '## Ghost Diffs',
+        '',
+        '- Skip alternatives for now.',
+        '',
+        '## Tasks',
+        '',
+        '### 1. Refresh docs wording',
+        '',
+        '**Depends on**: none',
+        '',
+        '**What to do**:',
+        '- Update docs wording.',
+        '',
+        '**References**:',
+        '- Existing context.',
+        '',
+        '**Verify**:',
+        '- [ ] docs tests',
+        '',
+      ].join('\n'),
+    } as any,
+    {} as any,
+  );
+  const raw = (await ctx.contextTools.getStatusTool((name?: string) => name || 'doc-tune').execute({
+    feature: 'doc-tune',
+  })) as string;
+  const parsed = parseToolResponse(raw);
+  const pass = parsed.data?.planApproveArgs?.feature === 'doc-tune';
+  return {
+    id: 'status-plan-approve-args',
+    pass,
+    detail: pass ? 'status returns ready-to-use warcraft_plan_approve args for draft plans' : `planApproveArgs=${JSON.stringify(parsed.data?.planApproveArgs ?? null)}`,
+  };
+}
+
 async function checkInstantWorkflowExpansionGuidance(): Promise<CheckResult> {
   const ctx = createWorkspace();
   ctx.featureService.create('quick-fix');
@@ -590,6 +647,64 @@ async function checkStatusReturnsTaskExpandArgsForEscalatedInstantWork(): Promis
     detail: pass
       ? 'status returns ready-to-use warcraft_task_expand args alongside the scaffold'
       : `taskExpandArgs=${JSON.stringify(statusParsed.data?.taskExpandArgs ?? null)}`,
+  };
+}
+
+async function checkStatusReturnsTaskSyncArgsAfterApproval(): Promise<CheckResult> {
+  const ctx = createWorkspace();
+  ctx.featureService.create('doc-tune');
+  await ctx.planTools.writePlanTool((name?: string) => name || 'doc-tune').execute(
+    {
+      feature: 'doc-tune',
+      content: [
+        '# doc-tune',
+        '',
+        'Workflow Path: lightweight',
+        '',
+        '## Discovery',
+        '',
+        'Impact: docs text only',
+        'Safety: low',
+        'Verify: docs tests',
+        'Rollback: revert',
+        '',
+        '## Non-Goals',
+        '',
+        '- Keep scope tight.',
+        '',
+        '## Ghost Diffs',
+        '',
+        '- Skip alternatives for now.',
+        '',
+        '## Tasks',
+        '',
+        '### 1. Refresh docs wording',
+        '',
+        '**Depends on**: none',
+        '',
+        '**What to do**:',
+        '- Update docs wording.',
+        '',
+        '**References**:',
+        '- Existing context.',
+        '',
+        '**Verify**:',
+        '- [ ] docs tests',
+        '',
+      ].join('\n'),
+    } as any,
+    {} as any,
+  );
+  await ctx.planTools.approvePlanTool((name?: string) => name || 'doc-tune').execute({ feature: 'doc-tune' } as any, {} as any);
+  const raw = (await ctx.contextTools.getStatusTool((name?: string) => name || 'doc-tune').execute({
+    feature: 'doc-tune',
+  })) as string;
+  const parsed = parseToolResponse(raw);
+  const pass = parsed.data?.taskSyncArgs?.feature === 'doc-tune' && parsed.data?.taskSyncArgs?.mode === 'sync';
+  return {
+    id: 'status-task-sync-args',
+    pass,
+    detail: pass ? 'status returns ready-to-use warcraft_tasks_sync args after plan approval' : `taskSyncArgs=${JSON.stringify(parsed.data?.taskSyncArgs ?? null)}`,
   };
 }
 
@@ -914,11 +1029,13 @@ async function main() {
     checkManualTaskSpecIsSelfContained(),
     checkStatusNextActionSupportsInstantPath(),
     checkStatusNextActionSupportsLightweightRecommendation(),
+    checkStatusReturnsPlanApproveArgsForDraftPlan(),
     checkInstantWorkflowExpansionGuidance(),
     checkInstantWorkflowEscalatesPastLightweightTaskLimit(),
     checkStatusReturnsPlanScaffoldForEscalatedInstantWork(),
     checkStatusReturnsPlanWriteArgsForEscalatedInstantWork(),
     checkStatusReturnsTaskExpandArgsForEscalatedInstantWork(),
+    checkStatusReturnsTaskSyncArgsAfterApproval(),
     checkPlanWriteCanMaterializeLightweightScaffold(),
     checkPlanWriteCanMaterializeStandardScaffold(),
     checkScaffoldPromotionSyncsManualTasksIntoPlan(),

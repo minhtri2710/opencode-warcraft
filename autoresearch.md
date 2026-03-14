@@ -77,4 +77,5 @@ The benchmark should reward real workflow improvements, not just prompt edits. I
 - Added `warcraft_task_expand` plus guidance that steers agents toward it, and taught it to merge pending manual tasks into an existing draft plan instead of only no-plan features.
 - Added `taskExpandArgs` in task/status responses so agents can call the higher-level promotion helper directly instead of reconstructing its arguments.
 - Added follow-up args (`planApproveArgs`, `taskSyncArgs`) in scaffold-promotion responses so the post-expansion flow can be carried forward with less manual re-wrapping.
-- Latest direction in progress: surface those follow-up args in `warcraft_status` too, so agents can recover the next exact approval/sync calls from status after promotion work has already started.
+- Surfaced those follow-up args in `warcraft_status` too, so agents can recover the next exact approval/sync calls from status after promotion work has already started.
+- Latest direction in progress: the remaining helper friction is mostly around orchestrating the multi-step promotion flow itself; if needed, the next real step is bundling or chaining those promotion calls more explicitly rather than only returning individual arg payloads.
