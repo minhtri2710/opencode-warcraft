@@ -81,3 +81,8 @@ Systematically explore the repository, trace execution flows across related impo
 - Fixed docs/troubleshooting.md blocked-resume: 'spawns in same worktree' → 'launched in same workspace' + task() call guidance.
 - Fixed docs/plan-authoring.md: 'Workers operate in isolated worktrees' → 'Workers operate in assigned workspaces'.
 - Fixed all 3 eval/scenarios (blocked-worker.md, parallel-batch.md, simple-feature.md): replaced stale 'spawned in worktree', 'changes committed to task branch' with mode-neutral workspace/delegation wording.
+- Fixed taskService.update() missing central preparedAt stamping for dispatch_prepared transitions. startedAt/completedAt were centrally stamped but preparedAt was only set by dispatch-coordinator via Record<string,unknown> type widening.
+- Fixed TaskStateArtifact missing preparedAt field in interface, encode/decode functions, and legacy migration. In beads mode, preparedAt was silently dropped during round-trip, breaking stale dispatch detection after process restart.
+- Fixed beadDecoders.ts incomplete BEAD_STATUS_TO_TASK mapping (only 2 of 8+ statuses). Replaced with canonical mapBeadStatusToTaskStatus import.
+- Fixed featureService.patchMetadata allowing status bypass. Added 'status' to immutable keys to prevent desync between feature.json and bead state.
+- Fixed BeadsPlanStore.isApproved() Result<boolean> unwrap bug. hasWorkflowLabel returns Result<boolean> (object), but code checked !hasLabel which is always false for objects. The 'approved' label check was completely bypassed.
