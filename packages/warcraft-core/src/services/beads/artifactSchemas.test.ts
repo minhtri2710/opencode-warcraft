@@ -62,6 +62,18 @@ describe('artifactSchemas', () => {
       expect(decodeTaskState('invalid json')).toBeNull();
     });
 
+    it('should return null for unknown schema version', () => {
+      const future = JSON.stringify({ schemaVersion: 99, status: 'done', origin: 'plan' });
+      expect(decodeTaskState(future)).toBeNull();
+    });
+
+    it('should default status to pending and origin to plan for legacy without them', () => {
+      const minimal = JSON.stringify({ summary: 'minimal' });
+      const decoded = decodeTaskState(minimal);
+      expect(decoded?.status).toBe('pending');
+      expect(decoded?.origin).toBe('plan');
+    });
+
     it('should convert between TaskStatus and TaskStateArtifact', () => {
       const taskStatus: TaskStatus = {
         schemaVersion: 1,
@@ -199,6 +211,19 @@ describe('artifactSchemas', () => {
       expect(decodeWorkerPrompt('')).toBeNull();
       expect(decodeWorkerPrompt('{}')).toBeNull();
     });
+
+    it('should return null for unknown schema version', () => {
+      const future = JSON.stringify({ schemaVersion: 99, content: 'prompt', generatedAt: '2024-01-01T00:00:00Z' });
+      expect(decodeWorkerPrompt(future)).toBeNull();
+    });
+
+    it('should handle raw non-JSON content as legacy string', () => {
+      const raw = 'Execute: setup environment and run tests';
+      const decoded = decodeWorkerPrompt(raw);
+      expect(decoded).not.toBeNull();
+      expect(decoded?.content).toBe(raw);
+      expect(decoded?.schemaVersion).toBe(1);
+    });
   });
 
   describe('TaskReportArtifact', () => {
@@ -242,6 +267,19 @@ describe('artifactSchemas', () => {
       expect(decodeTaskReport(null)).toBeNull();
       expect(decodeTaskReport('')).toBeNull();
       expect(decodeTaskReport('{}')).toBeNull();
+    });
+
+    it('should return null for unknown schema version', () => {
+      const future = JSON.stringify({ schemaVersion: 99, content: 'report', createdAt: '2024-01-01T00:00:00Z' });
+      expect(decodeTaskReport(future)).toBeNull();
+    });
+
+    it('should handle raw non-JSON content as legacy string', () => {
+      const raw = '## Report\n\nAll tests passed. No issues found.';
+      const decoded = decodeTaskReport(raw);
+      expect(decoded).not.toBeNull();
+      expect(decoded?.content).toBe(raw);
+      expect(decoded?.schemaVersion).toBe(1);
     });
   });
 });
