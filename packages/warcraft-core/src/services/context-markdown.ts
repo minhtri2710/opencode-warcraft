@@ -22,11 +22,11 @@ function stripRedundantLeadingHeading(sectionName: string, content: string): str
   const headingMatch = withoutLeadingBlankLines.match(/^(#{1,6})[ \t]+(.+?)[ \t]*#*[ \t]*(?:\r?\n|$)/);
 
   if (!headingMatch) {
-    return content;
+    return withoutBom;
   }
 
   if (normalizeHeadingValue(headingMatch[2]) !== normalizeHeadingValue(sectionName)) {
-    return content;
+    return withoutBom;
   }
 
   return withoutLeadingBlankLines.slice(headingMatch[0].length).replace(LEADING_BLANK_LINES, '');
