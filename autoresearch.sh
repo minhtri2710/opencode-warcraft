@@ -91,3 +91,4 @@ bun test eval/readme-tool-completeness.audit.test.ts --no-cache 2>&1
 bun test eval/root-readme-tool-count.audit.test.ts --no-cache 2>&1
 bun test eval/agents-md-tool-count.audit.test.ts --no-cache 2>&1
 bun test eval/troubleshooting-blocked-resume.audit.test.ts --no-cache 2>&1
+bun test eval/plan-authoring-workspace.audit.test.ts --no-cache 2>&1

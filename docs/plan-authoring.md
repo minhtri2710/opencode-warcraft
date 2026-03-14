@@ -186,7 +186,7 @@ Lightweight plans are constrained to a maximum of 2 tasks.
 
 ### Be Specific About File Paths
 
-Workers operate in isolated worktrees. Ambiguous paths cause confusion:
+Workers operate in assigned workspaces (worktrees or the project root). Ambiguous paths cause confusion:
 
 ```markdown
 <!-- Bad -->
