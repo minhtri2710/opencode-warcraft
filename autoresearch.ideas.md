@@ -1,1 +1,1 @@
-- If `warcraft_task_expand` still leaves too much manual follow-through, let it merge selected pending manual tasks into an existing draft/lightweight plan (instead of only working when no plan exists) and return a sync preview for the revised plan.
+- If `taskExpandArgs` is now the preferred promotion handoff, return ready-to-use follow-up args for `warcraft_plan_approve` and `warcraft_tasks_sync` as well, so agents can carry the reviewed promotion flow forward without reconstructing the next calls.

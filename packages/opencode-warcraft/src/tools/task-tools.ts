@@ -10,7 +10,7 @@ import {
   validateLightweightPlan,
 } from 'warcraft-core';
 import { toolError, toolSuccess } from '../types.js';
-import { buildPlanScaffold } from './manual-plan-scaffold.js';
+import { appendTasksToPlanScaffold, buildPlanScaffold } from './manual-plan-scaffold.js';
 import { resolveFeatureInput, validateTaskInput } from './tool-input.js';
 
 export interface TaskToolsDependencies {
@@ -225,6 +225,10 @@ export class TaskTools {
           pendingManualTasks,
           planScaffold,
           planWriteArgs: planScaffold ? { feature, content: planScaffold } : null,
+          taskExpandArgs:
+            planScaffoldMode && pendingManualTasks.length > 0
+              ? { feature, tasks: pendingManualTasks, mode: planScaffoldMode }
+              : null,
           message:
             instantWorkflowActivated
               ? `Manual task created: ${folder}\nInstant workflow activated for feature "${feature}" (no formal plan required for this small task). Include enough detail in the task description to make it self-contained, then call warcraft_worktree_create and issue the returned task() call.${recommendationWarning}${scaffoldHint}`
@@ -257,8 +261,9 @@ export class TaskTools {
         if (!resolution.ok) return toolError(resolution.error);
         const feature = resolution.feature;
 
-        if (planService.read(feature)) {
-          return toolError('A plan already exists for this feature. Use warcraft_plan_write to revise it directly.');
+        const existingPlan = planService.read(feature);
+        if (existingPlan && existingPlan.status !== 'planning') {
+          return toolError('Only draft plans can be expanded. Use warcraft_plan_write to revise an approved/executing plan directly.');
         }
 
         const pendingManualTasks = taskService
@@ -289,12 +294,20 @@ export class TaskTools {
 
         const featureData = featureService.get(feature);
         const selectedMode = mode && mode !== 'auto' ? mode : null;
+        const existingWorkflowPath = existingPlan ? detectWorkflowPath(existingPlan.content) : null;
         const planScaffoldMode =
           selectedMode ??
-          (featureData?.workflowRecommendation === 'standard' || selectedTasks.length > 2 ? 'standard' : 'lightweight');
-        const planScaffold = buildPlanScaffold(feature, planScaffoldMode, selectedTasks);
+          (existingWorkflowPath ??
+            (featureData?.workflowRecommendation === 'standard' || selectedTasks.length > 2 ? 'standard' : 'lightweight'));
+        const planScaffold = existingPlan
+          ? appendTasksToPlanScaffold(existingPlan.content, selectedTasks)
+          : buildPlanScaffold(feature, planScaffoldMode, selectedTasks);
         if (!planScaffold) {
-          return toolError('Failed to build a reviewed plan scaffold from the selected manual tasks.');
+          return toolError(
+            existingPlan
+              ? 'Failed to merge the selected manual tasks into the existing draft plan. Ensure the plan still contains a ## Tasks section.'
+              : 'Failed to build a reviewed plan scaffold from the selected manual tasks.',
+          );
         }
 
         const discoveryError = validateDiscoverySection(planScaffold);
@@ -302,7 +315,8 @@ export class TaskTools {
           return toolError(discoveryError);
         }
 
-        if (planScaffoldMode === 'lightweight') {
+        const resultingWorkflowPath = detectWorkflowPath(planScaffold);
+        if (resultingWorkflowPath === 'lightweight') {
           const lightweightIssues = validateLightweightPlan(planScaffold);
           if (lightweightIssues.length > 0) {
             return toolError(`Cannot expand to a lightweight plan:\n${lightweightIssues.map((issue) => `- ${issue}`).join('\n')}`);
@@ -310,15 +324,16 @@ export class TaskTools {
         }
 
         const planPath = planService.write(feature, planScaffold);
-        featureService.patchMetadata(feature, { workflowPath: detectWorkflowPath(planScaffold) });
+        featureService.patchMetadata(feature, { workflowPath: resultingWorkflowPath });
         const preview = taskService.previewSync(feature);
 
         return toolSuccess({
           feature,
           tasks: selectedTasks.map((task) => task.folder),
-          workflowPath: detectWorkflowPath(planScaffold),
+          workflowPath: resultingWorkflowPath,
           planPath,
           planScaffoldMode,
+          mergedIntoExistingPlan: !!existingPlan,
           planScaffold,
           planWriteArgs: { feature, content: planScaffold },
           syncPreview: {
@@ -329,7 +344,7 @@ export class TaskTools {
             manualTasks: preview.manual,
           },
           message:
-            `Expanded ${selectedTasks.length} pending manual task(s) into a ${planScaffoldMode} reviewed plan at ${planPath}. ` +
+            `Expanded ${selectedTasks.length} pending manual task(s) into ${existingPlan ? 'the existing draft plan' : `a ${planScaffoldMode} reviewed plan`} at ${planPath}. ` +
             'Review or refine the plan, then run warcraft_plan_approve and warcraft_tasks_sync to apply the previewed reconciliations.',
         });
       },

@@ -384,6 +384,11 @@ describe('TaskTools', () => {
       expect(parsed.data.planScaffold).toContain('## Ghost Diffs');
       expect(parsed.data.planScaffold).toContain('### 1. Refresh docs wording');
       expect(parsed.data.planWriteArgs).toEqual({ feature: 'test-feature', content: parsed.data.planScaffold });
+      expect(parsed.data.taskExpandArgs).toEqual({
+        feature: 'test-feature',
+        tasks: ['01-refresh-docs-wording'],
+        mode: 'lightweight',
+      });
       expect(parsed.data.message).toContain('Workflow Path: lightweight');
       expect(parsed.data.message).toContain('warcraft_task_expand');
       expect(parsed.data.message).toContain('warcraft_plan_write({ useScaffold: true })');
@@ -423,6 +428,11 @@ describe('TaskTools', () => {
       expect(parsed.data.planScaffold).toContain('### 1. Tiny Fix');
       expect(parsed.data.planScaffold).toContain('### 2. Second Tiny Fix');
       expect(parsed.data.planWriteArgs).toEqual({ feature: 'test-feature', content: parsed.data.planScaffold });
+      expect(parsed.data.taskExpandArgs).toEqual({
+        feature: 'test-feature',
+        tasks: ['01-tiny-fix', '02-second-tiny-fix'],
+        mode: 'lightweight',
+      });
       expect(parsed.data.message).toContain('multiple pending manual tasks');
       expect(parsed.data.message).toContain('warcraft_task_expand');
       expect(parsed.data.message).toContain('warcraft_plan_write({ useScaffold: true })');
@@ -469,6 +479,11 @@ describe('TaskTools', () => {
       expect(parsed.data.planScaffold).not.toContain('Workflow Path: lightweight');
       expect(parsed.data.planScaffold).toContain('### 3. Third Tiny Fix');
       expect(parsed.data.planWriteArgs).toEqual({ feature: 'test-feature', content: parsed.data.planScaffold });
+      expect(parsed.data.taskExpandArgs).toEqual({
+        feature: 'test-feature',
+        tasks: ['01-tiny-fix', '02-second-tiny-fix', '03-third-tiny-fix'],
+        mode: 'standard',
+      });
       expect(parsed.data.message).toContain('more than two pending manual tasks');
       expect(parsed.data.message).toContain('warcraft_task_expand');
       expect(parsed.data.message).toContain('warcraft_plan_write({ useScaffold: true })');
@@ -548,6 +563,88 @@ describe('TaskTools', () => {
       expect(parsed.data.tasks).toEqual(['02-second-tiny-fix']);
       expect(parsed.data.planScaffold).toContain('### 1. Second Tiny Fix');
       expect(parsed.data.planScaffold).not.toContain('### 1. Tiny Fix');
+    });
+
+    it('can merge selected manual tasks into an existing draft plan', async () => {
+      mockFeatureService.feature = {
+        ...mockFeatureService.feature,
+        status: 'planning',
+      };
+      mockPlanService.planResult = {
+        content: [
+          '# test-feature',
+          '',
+          'Workflow Path: lightweight',
+          '',
+          '## Discovery',
+          '',
+          'Impact: existing plan',
+          'Safety: low',
+          'Verify: tests',
+          'Rollback: revert',
+          '',
+          '## Non-Goals',
+          '',
+          '- Keep scope tight.',
+          '',
+          '## Ghost Diffs',
+          '',
+          '- Skip alternatives for now.',
+          '',
+          '## Tasks',
+          '',
+          '### 1. Existing Task',
+          '',
+          '**Depends on**: none',
+          '',
+          '**What to do**:',
+          '- Keep existing behavior.',
+          '',
+          '**References**:',
+          '- Existing context.',
+          '',
+          '**Verify**:',
+          '- [ ] Run tests',
+          '',
+        ].join('\n'),
+        status: 'planning',
+      };
+      mockTaskService.previewResult = {
+        created: [],
+        removed: [],
+        kept: ['01-existing-task'],
+        reconciled: [{ from: '02-second-tiny-fix', to: '02-second-tiny-fix', planTitle: 'Second Tiny Fix', beadId: 'task-2' }],
+        manual: ['01-tiny-fix'],
+      };
+
+      const createTool = taskTools.createTaskTool(resolveFeature);
+      await createTool.execute({
+        name: 'Tiny Fix',
+        description: 'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
+        order: 1,
+        feature: undefined,
+        priority: 3,
+      });
+      await createTool.execute({
+        name: 'Second Tiny Fix',
+        description: 'Background: second tiny change. Impact: help text only. Safety: low. Verify: prompt tests. Rollback: revert.',
+        order: 2,
+        feature: undefined,
+        priority: 3,
+      });
+
+      const expandTool = taskTools.expandTaskTool(resolveFeature);
+      const raw = await expandTool.execute({ feature: undefined, tasks: ['02-second-tiny-fix'] });
+      const parsed = JSON.parse(raw);
+
+      expect(parsed.success).toBe(true);
+      expect(parsed.data.mergedIntoExistingPlan).toBe(true);
+      expect(parsed.data.planScaffold).toContain('### 1. Existing Task');
+      expect(parsed.data.planScaffold).toContain('### 2. Second Tiny Fix');
+      expect(parsed.data.syncPreview.wouldReconcile).toEqual([
+        { from: '02-second-tiny-fix', to: '02-second-tiny-fix', planTitle: 'Second Tiny Fix', beadId: 'task-2' },
+      ]);
+      expect(mockPlanService.writes.at(-1)).toEqual({ feature: 'test-feature', content: parsed.data.planScaffold });
     });
   });
 

@@ -1,3 +1,5 @@
+import { countPlanTasks } from 'warcraft-core';
+
 export type PlanScaffoldMode = 'lightweight' | 'standard';
 
 export interface ManualPlanScaffoldTask {
@@ -42,15 +44,17 @@ function renderDiscoveryField(label: string, values: string[], fallback: string)
   return [`- **${label}**:`, ...(values.length > 0 ? values.map((value) => `  - ${value}`) : [`  - ${fallback}`])];
 }
 
-function buildTaskSection(task: ManualPlanScaffoldTask, index: number): string[] {
+function buildTaskSection(task: ManualPlanScaffoldTask, index: number, startNumber: number = 1): string[] {
   const sections = parseBriefSections(task.brief);
   const briefSummary = uniqueNonEmpty([sections.background, sections.impact, sections.reasoning, sections.scope]).join(' ');
   const verify = sections.verify ?? 'Review and replace with the exact verification command(s) before approval.';
+  const taskNumber = startNumber + index;
+  const dependsOnNumber = taskNumber - 1;
 
   return [
-    `### ${index + 1}. ${task.name}`,
+    `### ${taskNumber}. ${task.name}`,
     '',
-    `**Depends on**: ${index === 0 ? 'none' : index}`,
+    `**Depends on**: ${index === 0 ? 'none' : dependsOnNumber}`,
     '',
     '**What to do**:',
     `- Carry forward the intent from manual task \`${task.folder}\`.`,
@@ -109,4 +113,23 @@ export function buildPlanScaffold(
   });
 
   return lines.join('\n');
+}
+
+export function appendTasksToPlanScaffold(existingContent: string, tasks: ManualPlanScaffoldTask[]): string | null {
+  if (tasks.length === 0) return existingContent;
+
+  const tasksHeading = existingContent.match(/^##\s+Tasks\s*$/im);
+  if (!tasksHeading || tasksHeading.index === undefined) {
+    return null;
+  }
+
+  const currentTaskCount = countPlanTasks(existingContent);
+  const normalized = existingContent.trimEnd();
+  const appendedSections: string[] = [];
+  tasks.forEach((task, index) => {
+    appendedSections.push(...buildTaskSection(task, index, currentTaskCount + 1));
+    if (index < tasks.length - 1) appendedSections.push('');
+  });
+
+  return `${normalized}\n\n${appendedSections.join('\n')}`;
 }

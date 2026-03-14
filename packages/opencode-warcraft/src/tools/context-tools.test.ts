@@ -98,6 +98,7 @@ async function getStatusHealth(overrides: Partial<Record<string, unknown>> = {})
     }> | null;
     planScaffold: string | null;
     planWriteArgs: { feature: string; content: string } | null;
+    taskExpandArgs: { feature: string; tasks: string[]; mode: 'lightweight' | 'standard' } | null;
     nextAction: string;
   };
 }> {
@@ -161,7 +162,7 @@ describe('ContextTools', () => {
       expect(result.data.health.blockedMttrMs).toBeNull();
     });
 
-    it('health is sibling of feature, plan, tasks, context, worktreeHygiene, planScaffold, planWriteArgs, nextAction', async () => {
+    it('health is sibling of feature, plan, tasks, context, worktreeHygiene, planScaffold, planWriteArgs, taskExpandArgs, nextAction', async () => {
       const result = await getStatusHealth();
 
       expect(result.success).toBe(true);
@@ -173,6 +174,7 @@ describe('ContextTools', () => {
       expect(dataKeys).toContain('worktreeHygiene');
       expect(dataKeys).toContain('planScaffold');
       expect(dataKeys).toContain('planWriteArgs');
+      expect(dataKeys).toContain('taskExpandArgs');
       expect(dataKeys).toContain('nextAction');
       expect(dataKeys).toContain('health');
     });
@@ -279,6 +281,11 @@ describe('ContextTools', () => {
       expect(result.data.planScaffold).toContain('### 1. First tiny task');
       expect(result.data.planScaffold).toContain('### 2. Second tiny task');
       expect(result.data.planWriteArgs).toEqual({ feature: 'test-feature', content: result.data.planScaffold });
+      expect(result.data.taskExpandArgs).toEqual({
+        feature: 'test-feature',
+        tasks: ['01-task', '02-task'],
+        mode: 'lightweight',
+      });
       expect(result.data.nextAction).toBe(
         'This instant workflow now has multiple pending tasks and has likely outgrown the tiny-task path. Use warcraft_task_expand to promote the pending manual tasks into a lightweight plan, then approve it before dispatching more work.',
       );
@@ -319,6 +326,11 @@ describe('ContextTools', () => {
       expect(result.data.planScaffold).not.toContain('Workflow Path: lightweight');
       expect(result.data.planScaffold).toContain('### 3. Third tiny task');
       expect(result.data.planWriteArgs).toEqual({ feature: 'test-feature', content: result.data.planScaffold });
+      expect(result.data.taskExpandArgs).toEqual({
+        feature: 'test-feature',
+        tasks: ['01-task', '02-task', '03-task'],
+        mode: 'standard',
+      });
       expect(result.data.nextAction).toBe(
         'This instant workflow now has more than two pending tasks, so the lightweight path is no longer a good fit. Use warcraft_task_expand to promote the pending manual tasks into a reviewed standard plan, then approve it before dispatching more work.',
       );
@@ -379,6 +391,11 @@ describe('ContextTools', () => {
       expect(result.data.planScaffold).toContain('## Ghost Diffs');
       expect(result.data.planScaffold).toContain('### 1. Refresh docs wording');
       expect(result.data.planWriteArgs).toEqual({ feature: 'test-feature', content: result.data.planScaffold });
+      expect(result.data.taskExpandArgs).toEqual({
+        feature: 'test-feature',
+        tasks: ['01-task'],
+        mode: 'lightweight',
+      });
       expect(result.data.nextAction).toBe(
         'This task no longer looks tiny enough for direct execution. Use warcraft_task_expand to promote the pending manual task into a lightweight plan, then approve it before dispatching work.',
       );

@@ -64,6 +64,7 @@ The benchmark should reward real workflow improvements, not just prompt edits. I
 - action guidance that points agents at the actual low-friction promotion command (`warcraft_plan_write({ useScaffold: true })`) once scaffold-based fallback is available
 - an actual `warcraft_task_expand` helper that writes the reviewed plan scaffold for pending manual tasks and previews the resulting promotion/reconciliation impact
 - guidance that points agents at `warcraft_task_expand` once that helper exists, instead of continuing to surface only lower-level scaffold-writing commands
+- ready-to-use `warcraft_task_expand` arguments in responses, analogous to `planWriteArgs`, so agents can invoke the higher-level promotion helper directly
 
 ## What's Been Tried
 - Added an initial behavior-oriented eval harness and baseline targeted tests.
@@ -73,4 +74,6 @@ The benchmark should reward real workflow improvements, not just prompt edits. I
 - Persisted `workflowRecommendation` on the feature so `warcraft_status` can guide the user toward the right next action (e.g. lightweight plan) even before a plan or task exists.
 - Added scaffolded-plan fallbacks: `planScaffold`, `planWriteArgs`, beads-aligned scaffold sections, and `warcraft_plan_write({ useScaffold: true })` so pending manual tasks can be promoted into a real reviewed plan without copy/paste.
 - Added an actual `warcraft_task_expand` helper that writes a scaffolded reviewed plan from pending manual tasks and previews how `warcraft_tasks_sync` will reconcile them.
-- Latest direction in progress: now that `warcraft_task_expand` exists, tighten the surrounding task/status guidance so agents are steered toward the helper itself rather than only lower-level `warcraft_plan_write({ useScaffold: true })` instructions.
+- Added `warcraft_task_expand` plus guidance that steers agents toward it, and taught it to merge pending manual tasks into an existing draft plan instead of only no-plan features.
+- Added `taskExpandArgs` in task/status responses so agents can call the higher-level promotion helper directly instead of reconstructing its arguments.
+- Latest direction in progress: reduce the remaining promotion friction by returning the post-expansion follow-up calls (`warcraft_plan_approve` / `warcraft_tasks_sync`) as ready-to-use arguments too.

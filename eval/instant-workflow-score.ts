@@ -270,6 +270,31 @@ async function checkManualTaskReturnsPlanWriteArgsWhenItNeedsReview(): Promise<C
   };
 }
 
+async function checkManualTaskReturnsTaskExpandArgsWhenItNeedsReview(): Promise<CheckResult> {
+  const ctx = createWorkspace();
+  ctx.featureService.create('doc-tune');
+  const raw = (await ctx.taskTools.createTaskTool((name?: string) => name || 'doc-tune').execute({
+    feature: 'doc-tune',
+    name: 'Refresh docs wording',
+    priority: 3,
+    description:
+      'Background: update the README and docs wording for the instant workflow path. Impact: README plus docs text. Safety: keep behavior unchanged. Verify: docs tests or snapshots still pass. Rollback: revert.',
+  } as any)) as string;
+  const parsed = parseToolResponse(raw);
+  const pass =
+    parsed.data?.taskExpandArgs?.feature === 'doc-tune' &&
+    Array.isArray(parsed.data?.taskExpandArgs?.tasks) &&
+    parsed.data.taskExpandArgs.tasks.length === 1 &&
+    parsed.data.taskExpandArgs.mode === 'lightweight';
+  return {
+    id: 'manual-task-task-expand-args',
+    pass,
+    detail: pass
+      ? 'manual task creation returns ready-to-use warcraft_task_expand args alongside the scaffold'
+      : `taskExpandArgs=${JSON.stringify(parsed.data?.taskExpandArgs ?? null)}`,
+  };
+}
+
 async function checkManualTaskSpecIsSelfContained(): Promise<CheckResult> {
   const ctx = createWorkspace();
   ctx.featureService.create('quick-fix');
@@ -524,6 +549,50 @@ async function checkStatusReturnsPlanWriteArgsForEscalatedInstantWork(): Promise
   };
 }
 
+async function checkStatusReturnsTaskExpandArgsForEscalatedInstantWork(): Promise<CheckResult> {
+  const ctx = createWorkspace();
+  ctx.featureService.create('quick-fix');
+  const createTask = ctx.taskTools.createTaskTool((name?: string) => name || 'quick-fix');
+  await createTask.execute({
+    feature: 'quick-fix',
+    name: 'Tighten prompt wording',
+    priority: 3,
+    description:
+      'Background: tiny wording fix. Impact: prompt text only. Safety: low risk. Verify: prompt tests. Rollback: revert.',
+  } as any);
+  await createTask.execute({
+    feature: 'quick-fix',
+    name: 'Refresh help text',
+    priority: 3,
+    description:
+      'Background: second tiny wording fix. Impact: prompt/help text only. Safety: low risk. Verify: prompt tests. Rollback: revert.',
+  } as any);
+  await createTask.execute({
+    feature: 'quick-fix',
+    name: 'Polish status wording',
+    priority: 3,
+    description:
+      'Background: third tiny wording fix. Impact: another prompt/status text tweak. Safety: low risk. Verify: prompt tests. Rollback: revert.',
+  } as any);
+
+  const statusRaw = (await ctx.contextTools.getStatusTool((name?: string) => name || 'quick-fix').execute({
+    feature: 'quick-fix',
+  })) as string;
+  const statusParsed = parseToolResponse(statusRaw);
+  const pass =
+    statusParsed.data?.taskExpandArgs?.feature === 'quick-fix' &&
+    Array.isArray(statusParsed.data?.taskExpandArgs?.tasks) &&
+    statusParsed.data.taskExpandArgs.tasks.length === 3 &&
+    statusParsed.data.taskExpandArgs.mode === 'standard';
+  return {
+    id: 'status-task-expand-args',
+    pass,
+    detail: pass
+      ? 'status returns ready-to-use warcraft_task_expand args alongside the scaffold'
+      : `taskExpandArgs=${JSON.stringify(statusParsed.data?.taskExpandArgs ?? null)}`,
+  };
+}
+
 async function checkPlanWriteCanMaterializeLightweightScaffold(): Promise<CheckResult> {
   const ctx = createWorkspace();
   ctx.featureService.create('doc-tune');
@@ -689,6 +758,77 @@ async function checkTaskExpandWritesPlanAndPreviewsPromotion(): Promise<CheckRes
   };
 }
 
+async function checkTaskExpandCanMergeIntoDraftPlan(): Promise<CheckResult> {
+  const ctx = createWorkspace();
+  ctx.featureService.create('doc-tune');
+  ctx.planService.write(
+    'doc-tune',
+    [
+      '# doc-tune',
+      '',
+      'Workflow Path: lightweight',
+      '',
+      '## Discovery',
+      '',
+      'Impact: existing plan',
+      'Safety: low',
+      'Verify: tests',
+      'Rollback: revert',
+      '',
+      '## Non-Goals',
+      '',
+      '- Keep scope tight.',
+      '',
+      '## Ghost Diffs',
+      '',
+      '- Skip alternatives for now.',
+      '',
+      '## Tasks',
+      '',
+      '### 1. Existing Task',
+      '',
+      '**Depends on**: none',
+      '',
+      '**What to do**:',
+      '- Keep existing behavior.',
+      '',
+      '**References**:',
+      '- Existing context.',
+      '',
+      '**Verify**:',
+      '- [ ] Run tests',
+      '',
+    ].join('\n'),
+  );
+  const createTask = ctx.taskTools.createTaskTool((name?: string) => name || 'doc-tune');
+  await createTask.execute({
+    feature: 'doc-tune',
+    name: 'Refresh help text',
+    priority: 3,
+    description:
+      'Background: update inline help text for the instant workflow path. Impact: help text only. Safety: keep behavior unchanged. Verify: docs tests still pass. Rollback: revert.',
+  } as any);
+
+  const raw = (await ctx.taskTools.expandTaskTool((name?: string) => name || 'doc-tune').execute({
+    feature: 'doc-tune',
+  } as any)) as string;
+  const parsed = parseToolResponse(raw);
+  const writtenPlan = ctx.planService.read('doc-tune');
+  const planContent = String(writtenPlan?.content || '');
+  const pass =
+    parsed.success === true &&
+    parsed.data?.mergedIntoExistingPlan === true &&
+    /### 1\. Existing Task/.test(planContent) &&
+    /### 2\. Refresh help text/.test(planContent) &&
+    Array.isArray(parsed.data?.syncPreview?.wouldReconcile) &&
+    parsed.data.syncPreview.wouldReconcile.length === 1;
+  return {
+    id: 'task-expand-merge-draft-plan',
+    pass,
+    detail: pass ? 'warcraft_task_expand can merge pending manual work into an existing draft plan' : `response=${JSON.stringify(parsed.data ?? null)} writtenPlan=${planContent}`,
+  };
+}
+
 async function checkPromptsMentionInstantPath(): Promise<CheckResult> {
   const khadgar = buildKhadgarPrompt({ verificationModel: 'tdd' });
   const saurfang = buildSaurfangPrompt({ verificationModel: 'tdd' });
@@ -761,6 +901,7 @@ async function main() {
     checkManualTaskCreatesLightweightRecommendationForNonTinyBrief(),
     checkManualTaskReturnsPlanScaffoldWhenItNeedsReview(),
     checkManualTaskReturnsPlanWriteArgsWhenItNeedsReview(),
+    checkManualTaskReturnsTaskExpandArgsWhenItNeedsReview(),
     checkManualTaskSpecIsSelfContained(),
     checkStatusNextActionSupportsInstantPath(),
     checkStatusNextActionSupportsLightweightRecommendation(),
@@ -768,10 +909,12 @@ async function main() {
     checkInstantWorkflowEscalatesPastLightweightTaskLimit(),
     checkStatusReturnsPlanScaffoldForEscalatedInstantWork(),
     checkStatusReturnsPlanWriteArgsForEscalatedInstantWork(),
+    checkStatusReturnsTaskExpandArgsForEscalatedInstantWork(),
     checkPlanWriteCanMaterializeLightweightScaffold(),
     checkPlanWriteCanMaterializeStandardScaffold(),
     checkScaffoldPromotionSyncsManualTasksIntoPlan(),
     checkTaskExpandWritesPlanAndPreviewsPromotion(),
+    checkTaskExpandCanMergeIntoDraftPlan(),
     checkPromptsMentionInstantPath(),
     checkBeadsModeManualBriefPersistence(),
   ]);

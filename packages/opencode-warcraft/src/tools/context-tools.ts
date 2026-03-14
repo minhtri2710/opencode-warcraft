@@ -94,6 +94,7 @@ interface StatusResponseData {
   };
   planScaffold: string | null;
   planWriteArgs: { feature: string; content: string } | null;
+  taskExpandArgs: { feature: string; tasks: string[]; mode: 'lightweight' | 'standard' } | null;
   nextAction: string;
 }
 
@@ -506,6 +507,10 @@ export class ContextTools {
       },
       planScaffold,
       planWriteArgs: planScaffold ? { feature: featureName, content: planScaffold } : null,
+      taskExpandArgs:
+        planScaffoldMode && pendingManualTasks.length > 0
+          ? { feature: featureName, tasks: pendingManualTasks.map((task) => task.folder), mode: planScaffoldMode }
+          : null,
       nextAction: getNextAction(planStatus, tasksSummary, runnable, workflowPath, workflowRecommendation),
     };
   }
