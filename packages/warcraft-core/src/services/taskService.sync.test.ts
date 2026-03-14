@@ -294,6 +294,28 @@ describe('TaskService.sync() - duplicate numbered task header validation', () =>
     const result = service.sync(featureName);
     expect(result.created).toHaveLength(3);
   });
+
+  it('parses Depends on annotations with bold-colon markdown pattern', () => {
+    const featureName = 'bold-colon-depends-test';
+    setupFeature(featureName);
+
+    const planPath = path.join(TEST_DIR, 'docs', featureName, 'plan.md');
+    fs.writeFileSync(
+      planPath,
+      '# Plan\n\n### 1. Setup\n\nSetup project.\n\n### 2. Build\n\n**Depends on:** 1\n\nBuild the project.\n\n### 3. Deploy\n\n**Depends on**: 1, 2\n\nDeploy it.\n',
+    );
+
+    const result = service.sync(featureName);
+    expect(result.created).toHaveLength(3);
+
+    // Verify task 2 depends on task 1
+    const task2Status = service.getRawStatus(featureName, '02-build');
+    expect(task2Status?.dependsOn).toEqual(['01-setup']);
+
+    // Verify task 3 depends on tasks 1 and 2
+    const task3Status = service.getRawStatus(featureName, '03-deploy');
+    expect(task3Status?.dependsOn).toEqual(['01-setup', '02-build']);
+  });
 });
 
 describe('Concurrent patchBackground interleaving', () => {

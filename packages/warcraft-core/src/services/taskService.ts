@@ -1050,7 +1050,10 @@ export class TaskService {
           // Check for Depends on: annotation within task section
           const dependsMatch = line.match(dependsOnRegex);
           if (dependsMatch) {
-            const value = dependsMatch[1].trim().toLowerCase();
+            const value = dependsMatch[1]
+              .replace(/\*+/g, '')
+              .trim()
+              .toLowerCase();
             if (value === 'none') {
               currentTask.dependsOnNumbers = [];
             } else {
