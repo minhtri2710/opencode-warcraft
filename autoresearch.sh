@@ -57,6 +57,15 @@ bun test \
   ./eval/context-next-action-nonterminal.audit.test.ts \
   ./eval/doctor-direct-mode-wording.audit.test.ts \
   ./eval/warcraft-skill-discard-table.audit.test.ts \
+  ./eval/feature-complete-irreversible.audit.test.ts \
+  ./eval/warcraft-tools-docs-completeness.audit.test.ts \
+  ./eval/readme-tool-completeness.audit.test.ts \
+  ./eval/root-readme-tool-count.audit.test.ts \
+  ./eval/agents-md-tool-count.audit.test.ts \
+  ./eval/troubleshooting-blocked-resume.audit.test.ts \
+  ./eval/plan-authoring-workspace.audit.test.ts \
+  ./eval/docs-delegation-wording.audit.test.ts \
+  ./eval/scenarios-wording.audit.test.ts \
   packages/opencode-warcraft/src/index.test.ts \
   >"$TMP_OUTPUT" 2>&1
 STATUS=$?
@@ -90,12 +99,3 @@ echo "METRIC audit_runtime_ms=${RUNTIME_MS}"
 # the number of failing audit assertions. Correctness backpressure comes from
 # autoresearch.checks.sh, which runs after passing benchmark executions.
 exit 0
-bun test eval/feature-complete-irreversible.audit.test.ts --no-cache 2>&1
-bun test eval/warcraft-tools-docs-completeness.audit.test.ts --no-cache 2>&1
-bun test eval/readme-tool-completeness.audit.test.ts --no-cache 2>&1
-bun test eval/root-readme-tool-count.audit.test.ts --no-cache 2>&1
-bun test eval/agents-md-tool-count.audit.test.ts --no-cache 2>&1
-bun test eval/troubleshooting-blocked-resume.audit.test.ts --no-cache 2>&1
-bun test eval/plan-authoring-workspace.audit.test.ts --no-cache 2>&1
-bun test eval/docs-delegation-wording.audit.test.ts --no-cache 2>&1
-bun test eval/scenarios-wording.audit.test.ts --no-cache 2>&1
