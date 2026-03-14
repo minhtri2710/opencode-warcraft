@@ -34,13 +34,13 @@ End-to-end scenario covering the happy-path feature development workflow.
    - Expect: Each task has status "pending"
    - Expect: Task dependencies parsed from plan
 
-5. **Create worktree**: `warcraft_worktree_create({ task: "01-first-task" })`
-   - Expect: Git worktree created at expected path
-   - Expect: Worker agent spawned in worktree
+5. **Prepare workspace**: `warcraft_worktree_create({ task: "01-first-task" })`
+   - Expect: Workspace prepared, task() delegation payload returned
+   - Expect: Issue returned task() call to launch worker
    - Expect: Task status changes to "in_progress"
 
 6. **Worker completes**: `warcraft_worktree_commit({ task: "01-first-task", summary: "Done", status: "completed" })`
-   - Expect: Changes committed to task branch
+   - Expect: Work finalized
    - Expect: Task status changes to "done"
 
 7. **Merge task**: `warcraft_merge({ task: "01-first-task" })`
@@ -53,4 +53,4 @@ End-to-end scenario covering the happy-path feature development workflow.
 - All tool calls return structured success responses
 - Task status transitions follow: pending → in_progress → done
 - Git history contains the expected commits
-- No orphaned worktrees after merge
+- No orphaned workspaces after merge

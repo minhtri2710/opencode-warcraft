@@ -73,3 +73,10 @@ Systematically explore the repository, trace execution flows across related impo
 - Fixed the turn-termination fragment: 'Worker delegation (warcraft_worktree_create)' now includes the returned task() call, since stopping at just warcraft_worktree_create is an incomplete delegation turn.
 - Fixed warcraft_worktree_discard tool description: said 'discard changes, reset status' but direct mode does NOT discard file changes. Now says 'Abort task and reset status (reverts changes only in worktree mode)'.
 - Fixed the system prompt Workflow quick-reference: 'Merge task branch into main' → 'Integrate completed task work'; 'commits changes to task branch' → 'finalizes work'. Removed worktree-only 'Worktrees persist until manually removed' note.
+- Fixed warcraft_feature_complete 'irreversible' claim in tool description, JSDoc, WARCRAFT-TOOLS.md docs, and quickstart.md — feature completion IS reversible via syncCompletionFromTasks().
+- Fixed WARCRAFT-TOOLS.md comprehensive stale documentation: tool count 17→19, added Diagnostics section (warcraft_doctor), Worktree 3→4 tools (warcraft_worktree_prune), updated stale tool descriptions, fixed agent permissions table, categories summary.
+- Fixed README.md (package) stale tool count and descriptions: 17→19, added missing tools, updated stale descriptions.
+- Fixed root README.md stale tool count: two 17→19 references. Fixed architecture diagram, agent table, execution phase, blocked resume, and tool summary — all now use mode-neutral workspace/delegation wording.
+- Fixed AGENTS.md stale count: 17 tools / 7 modules → 19 tools / 8 modules.
+- Fixed docs/troubleshooting.md blocked-resume: 'spawns in same worktree' → 'launched in same workspace' + task() call guidance.
+- Fixed docs/plan-authoring.md: 'Workers operate in isolated worktrees' → 'Workers operate in assigned workspaces'.

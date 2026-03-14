@@ -18,8 +18,8 @@ encounters a blocker, reports it, and the orchestrator resumes with a decision.
 
 ## Steps
 
-1. **Spawn worker**: `warcraft_worktree_create({ task: "01-extract-middleware" })`
-   - Expect: Worktree created, worker spawned
+1. **Prepare workspace**: `warcraft_worktree_create({ task: "01-extract-middleware" })`
+   - Expect: Workspace prepared, task() delegation payload returned
    - Expect: Task status → "in_progress"
 
 2. **Worker encounters blocker**: Worker calls
@@ -33,20 +33,20 @@ encounters a blocker, reports it, and the orchestrator resumes with a decision.
 
 4. **User provides decision**: Orchestrator calls
    `warcraft_worktree_create({ task: "01-extract-middleware", continueFrom: "blocked", decision: "Use JWT" })`
-   - Expect: NEW worker spawned in SAME worktree
+   - Expect: NEW worker launched in SAME workspace via returned task() call
    - Expect: Previous worker's progress preserved
    - Expect: Decision passed to new worker
 
 5. **Resumed worker completes**: Worker calls
    `warcraft_worktree_commit({ task: "01-extract-middleware", summary: "Implemented JWT auth middleware", status: "completed" })`
    - Expect: Task status → "done"
-   - Expect: Changes committed to task branch
+   - Expect: Work finalized
 
 ## Assertions
 
 - Task transitions follow: pending → in_progress → blocked → in_progress → done
 - Blocker metadata is preserved and accessible via status
 - Worker resume creates new worker, does not modify existing commits
-- Previous worker's file changes are preserved in the worktree
+- Previous worker's file changes are preserved in the workspace
 - Decision text is available to the resumed worker
 - No data loss during blocked → resume transition

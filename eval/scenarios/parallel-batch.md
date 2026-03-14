@@ -32,18 +32,18 @@ independent tasks are executed simultaneously by separate workers.
    - Expect: Both tasks transition to "in_progress"
 
 3. **Parallel worker execution**: Issue both task() calls in same message
-   - Expect: Two workers spawned in separate worktrees
+   - Expect: Two workers launched in separate workspaces
    - Expect: Workers execute independently without interference
 
 4. **Workers complete**: Both workers call warcraft_worktree_commit with status "completed"
    - Expect: Both tasks transition to "done"
-   - Expect: Worktree changes committed to respective task branches
+   - Expect: Work finalized in respective workspaces
 
 5. **Check next batch**: `warcraft_status()`
    - Expect: Task 03 now runnable (01 is done)
    - Expect: Task 04 still blocked (needs both 01 AND 02 done)
 
-6. **Complete task 03**: Execute via worktree_create, worker completes
+6. **Complete task 03**: Execute via worktree_create + task() call, worker completes
    - Expect: Task 03 transitions pending → in_progress → done
 
 7. **Final status check**: `warcraft_status()`
@@ -52,7 +52,7 @@ independent tasks are executed simultaneously by separate workers.
 ## Assertions
 
 - Batch preview correctly identifies runnable vs blocked tasks
-- Parallel workers do not interfere with each other's worktrees
+- Parallel workers do not interfere with each other's workspaces
 - Dependency resolution updates correctly as tasks complete
 - Task status transitions are atomic and consistent
 - No race conditions in status updates during parallel execution

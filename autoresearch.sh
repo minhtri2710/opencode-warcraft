@@ -93,3 +93,4 @@ bun test eval/agents-md-tool-count.audit.test.ts --no-cache 2>&1
 bun test eval/troubleshooting-blocked-resume.audit.test.ts --no-cache 2>&1
 bun test eval/plan-authoring-workspace.audit.test.ts --no-cache 2>&1
 bun test eval/docs-delegation-wording.audit.test.ts --no-cache 2>&1
+bun test eval/scenarios-wording.audit.test.ts --no-cache 2>&1
