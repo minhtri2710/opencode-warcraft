@@ -56,6 +56,7 @@ bun test \
   ./eval/warcraft-skill-error-recovery.audit.test.ts \
   ./eval/context-next-action-nonterminal.audit.test.ts \
   ./eval/doctor-direct-mode-wording.audit.test.ts \
+  ./eval/warcraft-skill-discard-table.audit.test.ts \
   packages/opencode-warcraft/src/index.test.ts \
   >"$TMP_OUTPUT" 2>&1
 STATUS=$?

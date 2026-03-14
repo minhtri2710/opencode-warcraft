@@ -396,7 +396,7 @@ If "Revise Plan":
 | Execute   | `warcraft_task_update`                                     | Update task status                         |
 | Execute   | `warcraft_worktree_create`                                 | Prepare task workspace + delegation instructions |
 | Execute   | `warcraft_worktree_commit`                                 | Finish task                                |
-| Execute   | `warcraft_worktree_discard`                                | Discard task                               |
+| Execute   | `warcraft_worktree_discard`                                | Abort task and reset status                |
 | Execute   | `warcraft_merge`                                           | Integrate completed task work              |
 | Execute   | `warcraft_batch_execute`                                   | Parallel task dispatch                     |
 | Execute   | `warcraft_status`                                          | Check workers/blockers                     |
