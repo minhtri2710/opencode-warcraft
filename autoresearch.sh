@@ -50,6 +50,7 @@ bun test \
   ./eval/tool-permissions-completeness.audit.test.ts \
   ./eval/index-tool-count.audit.test.ts \
   ./eval/turn-termination-delegation.audit.test.ts \
+  ./eval/discard-description-accuracy.audit.test.ts \
   packages/opencode-warcraft/src/index.test.ts \
   >"$TMP_OUTPUT" 2>&1
 STATUS=$?

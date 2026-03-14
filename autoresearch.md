@@ -67,3 +67,7 @@ Systematically explore the repository, trace execution flows across related impo
 - Fixed the worker prompt blocker protocol: 'Save your progress to the workspace' instead of 'to the worktree'.
 - Fixed stale JSDoc in batch-tools, worker-prompt, dispatch-coordinator, and dispatch-task: all now use 'workspace' terminology instead of 'worktree' unconditionally.
 - Fixed warcraft_worktree_commit and warcraft_merge tool descriptions and JSDoc to not claim branch-specific operations unconditionally.
+- Fixed the agents/index.ts JSDoc character model and the Mekkatorque prompt header: both said 'in isolation' which is inaccurate for direct mode.
+- Fixed missing warcraft_doctor in WARCRAFT_TOOL_IDS: the doctor tool was registered at runtime (19 tools) but absent from tool-permissions.ts (18 entries), so it bypassed the per-agent allow/deny permission system entirely.
+- Fixed the index.test.ts stale tool count: claimed '18 warcraft tools' but 19 exist at runtime (warcraft_doctor was missing from the registration check).
+- Fixed the turn-termination fragment: 'Worker delegation (warcraft_worktree_create)' now includes the returned task() call, since stopping at just warcraft_worktree_create is an incomplete delegation turn.

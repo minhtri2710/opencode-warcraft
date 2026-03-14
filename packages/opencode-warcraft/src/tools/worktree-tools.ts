@@ -606,7 +606,7 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
     // Capture deps in closure to avoid 'this' binding issues
     const { taskService, worktreeService } = this.deps;
     return tool({
-      description: 'Abort task: discard changes, reset status',
+      description: 'Abort task and reset status (reverts changes only in worktree mode)',
       args: {
         task: tool.schema.string().describe('Task folder name'),
         feature: tool.schema.string().optional().describe('Feature name (defaults to detection or single feature)'),
