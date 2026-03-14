@@ -556,6 +556,12 @@ export class TaskService {
     if (updates.status === 'done' && !current.completedAt) {
       updated.completedAt = new Date().toISOString();
     }
+    // Reset execution-cycle timestamps when returning to pending (e.g. cancelled → pending re-queue).
+    // Without this, a re-executed task keeps stale startedAt/completedAt from its first execution.
+    if (updates.status === 'pending') {
+      updated.startedAt = undefined;
+      updated.completedAt = undefined;
+    }
 
     const statusChanged = updates.status !== undefined && updates.status !== current.status;
     this.store.save(featureName, taskFolder, updated, { syncBeadStatus: updates.status !== undefined });
