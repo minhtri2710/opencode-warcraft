@@ -173,7 +173,7 @@ describe('DoctorTools', () => {
       expect(check!.message).toContain('blocked');
     });
 
-    it('detects direct-mode degradation', async () => {
+    it('detects direct-mode tasks', async () => {
       const result = await runDoctor({
         taskService: {
           list: () => [{ folder: '01-setup', name: 'Setup', status: 'in_progress', origin: 'plan' }],
@@ -191,9 +191,9 @@ describe('DoctorTools', () => {
       });
 
       expect(result.success).toBe(true);
-      const check = result.data.checks.find((c) => c.name === 'direct_mode_degradation');
+      const check = result.data.checks.find((c) => c.name === 'direct_mode_tasks');
       expect(check).toBeDefined();
-      expect(check!.status).toBe('warning');
+      expect(check!.status).toBe('ok');
       expect(check!.message).toContain('direct');
     });
 
@@ -232,12 +232,12 @@ describe('DoctorTools', () => {
 
       const preparedCheck = result.data.checks.find((c) => c.name === 'stuck_dispatch_prepared');
       const inProgressCheck = result.data.checks.find((c) => c.name === 'stuck_in_progress');
-      const directCheck = result.data.checks.find((c) => c.name === 'direct_mode_degradation');
+      const directCheck = result.data.checks.find((c) => c.name === 'direct_mode_tasks');
       const blockedCheck = result.data.checks.find((c) => c.name === 'check_blocked_failures');
 
       expect(preparedCheck?.status).toBe('warning');
       expect(inProgressCheck?.status).toBe('warning');
-      expect(directCheck?.status).toBe('warning');
+      expect(directCheck?.status).toBe('ok');
       expect(blockedCheck?.status).toBe('warning');
     });
 
@@ -258,7 +258,7 @@ describe('DoctorTools', () => {
       });
 
       const blockedCheck = result.data.checks.find((c) => c.name === 'check_blocked_failures');
-      const directCheck = result.data.checks.find((c) => c.name === 'direct_mode_degradation');
+      const directCheck = result.data.checks.find((c) => c.name === 'direct_mode_tasks');
       const inProgressCheck = result.data.checks.find((c) => c.name === 'stuck_in_progress');
       const preparedCheck = result.data.checks.find((c) => c.name === 'stuck_dispatch_prepared');
 

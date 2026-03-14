@@ -55,7 +55,7 @@ export class DoctorTools {
 
     return tool({
       description:
-        'Run diagnostic checks on the warcraft system. Detects stuck tasks, stale worktrees, blocked features, and degraded execution modes. Diagnoses only — never auto-fixes.',
+        'Run diagnostic checks on the warcraft system. Detects stuck tasks, stale worktrees, blocked features, and workspace mode details. Diagnoses only — never auto-fixes.',
       args: {},
       async execute() {
         const checks: DiagnosticCheck[] = [];
@@ -163,7 +163,7 @@ export class DoctorTools {
               }
             }
 
-            // Check direct-mode degradation
+            // Check direct-mode tasks
             if (task.status === 'in_progress' && rawStatus?.workerSession?.workspaceMode === 'direct') {
               directModeTasks.push({
                 feature: featureName,
@@ -283,15 +283,15 @@ export class DoctorTools {
         checks.push(
           directModeTasks.length > 0
             ? {
-                name: 'direct_mode_degradation',
-                status: 'warning',
-                message: `${directModeTasks.length} task(s) running in direct (non-isolated) mode. Worktree isolation is missing.`,
+                name: 'direct_mode_tasks',
+                status: 'ok',
+                message: `${directModeTasks.length} task(s) running in direct mode (no worktree isolation). This is a supported execution mode.`,
                 details: directModeTasks,
               }
             : {
-                name: 'direct_mode_degradation',
+                name: 'direct_mode_tasks',
                 status: 'ok',
-                message: 'All active tasks use worktree isolation.',
+                message: 'No direct-mode tasks active.',
               },
         );
 
