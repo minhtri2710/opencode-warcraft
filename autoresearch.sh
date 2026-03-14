@@ -48,6 +48,7 @@ bun test \
   ./eval/agents-jsdoc-isolation.audit.test.ts \
   ./eval/mekkatorque-isolation-claim.audit.test.ts \
   ./eval/tool-permissions-completeness.audit.test.ts \
+  ./eval/index-tool-count.audit.test.ts \
   packages/opencode-warcraft/src/index.test.ts \
   >"$TMP_OUTPUT" 2>&1
 STATUS=$?

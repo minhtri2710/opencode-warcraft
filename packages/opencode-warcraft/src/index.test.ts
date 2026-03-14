@@ -29,7 +29,7 @@ describe('Warcraft Plugin Tool Registration', () => {
     expect(typeof plugin).toBe('function');
   });
 
-  it('should have all 18 warcraft tools registered', () => {
+  it('should have all 19 warcraft tools registered', () => {
     const tools = pluginInstance.tool;
     expect(tools).toBeDefined();
 
@@ -59,6 +59,9 @@ describe('Warcraft Plugin Tool Registration', () => {
     expect(tools.warcraft_context_write).toBeDefined();
     expect(tools.warcraft_status).toBeDefined();
     expect(tools.warcraft_agents_md).toBeDefined();
+
+    // Doctor tools
+    expect(tools.warcraft_doctor).toBeDefined();
 
     // Skill tools
     expect(tools.warcraft_skill).toBeDefined();
