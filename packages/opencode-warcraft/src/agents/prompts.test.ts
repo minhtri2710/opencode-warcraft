@@ -35,8 +35,9 @@ describe('Khadgar (Hybrid) prompt', () => {
       expect(KHADGAR_PROMPT).toContain('Internal codebase exploration');
     });
 
-    it('routes trivial/simple intent to lightweight workflow path', () => {
-      expect(KHADGAR_PROMPT).toContain('Lightweight workflow path');
+    it('routes trivial/simple intent to an instant or lightweight workflow path', () => {
+      expect(KHADGAR_PROMPT).toContain('Instant workflow path');
+      expect(KHADGAR_PROMPT).toContain('warcraft_task_create');
       expect(KHADGAR_PROMPT).toContain('Workflow Path: lightweight');
     });
 
@@ -113,8 +114,9 @@ describe('Mimiron (Planner) prompt', () => {
       expect(MIMIRON_PROMPT).toContain('internal codebase');
     });
 
-    it('requires checklist and lightweight mini-record in plans', () => {
+    it('supports instant tasks while keeping lightweight plan guidance', () => {
       expect(MIMIRON_PROMPT).toContain('Plan Review Checklist');
+      expect(MIMIRON_PROMPT).toContain('warcraft_task_create');
       expect(MIMIRON_PROMPT).toContain('Workflow Path: lightweight');
     });
   });
@@ -157,7 +159,8 @@ describe('Saurfang (Orchestrator) prompt', () => {
       expect(SAURFANG_PROMPT).toContain('task() for research fan-out');
     });
 
-    it('includes lightweight constraints and evidence reminder', () => {
+    it('includes instant-task guidance plus lightweight constraints and evidence reminder', () => {
+      expect(SAURFANG_PROMPT).toContain('warcraft_task_create');
       expect(SAURFANG_PROMPT).toContain('keep <=2 tasks');
       expect(SAURFANG_PROMPT).toContain('verification evidence');
     });

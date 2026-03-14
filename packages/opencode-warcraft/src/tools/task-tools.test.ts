@@ -14,7 +14,13 @@ function cleanup() {
 }
 
 class MockTaskService implements Partial<TaskService> {
-  private createCalls: Array<{ feature: string; name: string; order?: number; priority?: number }> = [];
+  private createCalls: Array<{
+    feature: string;
+    name: string;
+    order?: number;
+    priority?: number;
+    description?: string;
+  }> = [];
   previewResult = {
     created: [] as string[],
     removed: [] as string[],
@@ -31,8 +37,8 @@ class MockTaskService implements Partial<TaskService> {
     diagnostics: [] as Array<Record<string, unknown>>,
   };
 
-  create(featureName: string, name: string, order?: number, priority?: number): string {
-    this.createCalls.push({ feature: featureName, name, order, priority });
+  create(featureName: string, name: string, order?: number, priority?: number, description?: string): string {
+    this.createCalls.push({ feature: featureName, name, order, priority, description });
     const orderStr = order !== undefined ? String(order).padStart(2, '0') : '01';
     return `${orderStr}-${name.toLowerCase().replace(/\s+/g, '-')}`;
   }
@@ -50,28 +56,73 @@ class MockTaskService implements Partial<TaskService> {
     return lastCall?.priority;
   }
 
+  getLastDescription(): string | undefined {
+    const lastCall = this.createCalls[this.createCalls.length - 1];
+    return lastCall?.description;
+  }
+
   getCreateCallCount(): number {
     return this.createCalls.length;
   }
 }
 
 class MockFeatureService implements Partial<FeatureService> {
+  feature: {
+    name: string;
+    epicBeadId: string;
+    status: 'planning' | 'approved' | 'executing' | 'completed';
+    workflowPath?: 'standard' | 'lightweight' | 'instant';
+    createdAt: string;
+  } = {
+    name: 'test-feature',
+    epicBeadId: 'bd-epic-test',
+    status: 'executing',
+    createdAt: new Date().toISOString(),
+  };
+  patchCalls: Array<Record<string, unknown>> = [];
+  updateStatusCalls: string[] = [];
+
   get(name: string) {
     return {
+      ...this.feature,
       name,
-      epicBeadId: 'bd-epic-test',
-      status: 'executing',
-      createdAt: new Date().toISOString(),
     };
+  }
+
+  patchMetadata(name: string, patch: Record<string, unknown>) {
+    this.patchCalls.push(patch);
+    this.feature = {
+      ...this.feature,
+      name,
+      ...(patch as Partial<typeof this.feature>),
+    };
+    return this.feature as unknown as ReturnType<FeatureService['patchMetadata']>;
+  }
+
+  updateStatus(name: string, status: 'planning' | 'approved' | 'executing' | 'completed') {
+    this.updateStatusCalls.push(status);
+    this.feature = {
+      ...this.feature,
+      name,
+      status,
+    };
+    return this.feature as unknown as ReturnType<FeatureService['updateStatus']>;
   }
 }
 
 class MockPlanService implements Partial<PlanService> {
+  planResult:
+    | {
+        content: string;
+        status: 'approved' | 'planning';
+      }
+    | null = {
+    content: '# Plan\n\n### 1. Test Task\n\nDescription.',
+    status: 'approved',
+  };
+
   read() {
-    return {
-      content: '# Plan\n\n### 1. Test Task\n\nDescription.',
-      status: 'approved',
-    };
+    return this.planResult;
   }
 }
 
@@ -234,6 +285,44 @@ describe('TaskTools', () => {
       expect(result).not.toContain('to use its worktree');
       // Should mention the returned task() call
       expect(result).toContain('task()');
+    });
+
+    it('passes optional description through to the task service', async () => {
+      const tool = taskTools.createTaskTool(resolveFeature);
+      const result = await tool.execute({
+        name: 'Test Task',
+        description: 'Background: small fix. Verify: run tests.',
+        order: undefined,
+        feature: undefined,
+        priority: 3,
+      });
+
+      expect(mockTaskService.getLastDescription()).toBe('Background: small fix. Verify: run tests.');
+      expect(result).toContain('Manual task created');
+    });
+
+    it('activates the instant workflow when the feature has no plan yet', async () => {
+      mockFeatureService.feature = {
+        ...mockFeatureService.feature,
+        status: 'planning',
+      };
+      mockPlanService.planResult = null;
+
+      const tool = taskTools.createTaskTool(resolveFeature);
+      const result = await tool.execute({
+        name: 'Tiny Fix',
+        description: 'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
+        order: undefined,
+        feature: undefined,
+        priority: 3,
+      });
+      const parsed = JSON.parse(result);
+
+      expect(parsed.success).toBe(true);
+      expect(parsed.data.workflowPath).toBe('instant');
+      expect(parsed.data.message).toContain('Instant workflow activated');
+      expect(mockFeatureService.updateStatusCalls).toContain('executing');
+      expect(mockFeatureService.patchCalls).toContainEqual({ workflowPath: 'instant' });
     });
   });
   describe('syncTasksTool', () => {

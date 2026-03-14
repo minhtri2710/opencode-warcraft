@@ -39,7 +39,7 @@ function inferTaskType(planSection: string | null, taskName: string): string | n
  * @returns Markdown formatted spec content
  */
 export function formatSpecContent(data: SpecData): string {
-  const { featureName, task, dependsOn, allTasks, planSection, contextFiles, completedTasks } = data;
+  const { featureName, task, dependsOn, allTasks, planSection, taskBrief, contextFiles, completedTasks } = data;
 
   const taskType = inferTaskType(planSection, task.name);
 
@@ -62,11 +62,23 @@ export function formatSpecContent(data: SpecData): string {
 
   if (planSection) {
     specLines.push(planSection.trim());
+  } else if (taskBrief) {
+    specLines.push(taskBrief.trim());
   } else {
     specLines.push('_No plan section available._');
   }
 
   specLines.push('');
+
+  if (!planSection && taskBrief) {
+    specLines.push(
+      '## Execution Notes',
+      '',
+      '- This task is using the instant/manual workflow path rather than an approved plan.',
+      '- Treat the plan section above as the canonical brief for background, scope, safety, verification, and rollback.',
+      '',
+    );
+  }
 
   if (taskType) {
     specLines.push('## Task Type', '', taskType, '');

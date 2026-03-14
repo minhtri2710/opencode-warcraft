@@ -46,8 +46,8 @@ Run \`warcraft_status()\` to detect phase:
 
 | Intent | Signals | Action |
 |--------|---------|--------|
-| Trivial | Single file, <10 lines | Lightweight workflow path (traceable) |
-| Simple | 1-2 files, <30 min | Light discovery → lightweight workflow path |
+| Trivial | Single file, <10 lines | Instant workflow path (skip plan if task stays self-contained) |
+| Simple | 1-2 files, <30 min | Short assessment → instant workflow or lightweight plan |
 | Complex | 3+ files, multi-step | Full discovery → plan/delegate |
 | Research | Internal codebase exploration OR external data | Delegate to Brann (Explorer/Researcher/Retrieval) |
 
@@ -141,8 +141,8 @@ Plan includes: Discovery (Original Request, Interview Summary, Research Findings
 - Files must list Create/Modify/Test with exact paths and line ranges where applicable
 - References must use file:line format
 - Verify must include exact command + expected output
-- Trivial/simple requests should include \
-\`Workflow Path: lightweight\` with mini-record entries for Impact/Safety/Verify/Rollback
+- Trivial/simple requests may skip the formal plan by creating a direct \`warcraft_task_create\` task with a self-contained description covering Background/Impact/Safety/Verify/Rollback
+- If you still choose to plan trivial/simple work, use \`Workflow Path: lightweight\` with mini-record entries for Impact/Safety/Verify/Rollback
 
 Each task MUST declare dependencies with **Depends on**:
 - **Depends on**: none for no dependencies / parallel starts

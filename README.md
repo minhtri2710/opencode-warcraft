@@ -47,7 +47,7 @@ While agent-hive focuses on a bee-themed colony, opencode-warcraft adapts these 
 
 - **19 custom tools** for feature management, planning, and execution
 - **6 specialized agents** (Khadgar, Mimiron, Saurfang, Brann, Mekkatorque, Algalon) inspired by Warcraft lore
-- **Plan-first workflow**: Human shapes the plan; agents execute it
+- **Hybrid workflow**: default plan-first for complex work, with an instant path for tiny self-contained tasks
 - **Integration with beads_rust**: Native task management and dependency tracking
 - **MCP integrations**: Web search, GitHub code search, documentation lookup (optional)
 

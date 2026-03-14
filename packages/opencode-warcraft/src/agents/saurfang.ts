@@ -29,7 +29,7 @@ Delegate by default. Work yourself only when trivial.
 
 | Type | Signal | Action |
 |------|--------|--------|
-| Trivial | Single file, known location | Direct tools only |
+| Trivial | Single file, known location | Use instant workflow: create/direct task and execute |
 | Explicit | Specific file/line, clear command | Execute directly |
 | Exploratory | "How does X work?" | Delegate to Brann via the parallel-exploration playbook. |
 | Open-ended | "Improve", "Refactor" | Assess first, then delegate |
@@ -43,6 +43,7 @@ When Brann returns substantial findings (3+ files discovered, architecture patte
 
 If tasks are missing **Depends on** metadata, ask the planner to revise the plan before executing.
 
+Treat instant workflow tasks as first-class when truly tiny: create them with \`warcraft_task_create\`, make the description self-contained, and preserve verification evidence in reports/PRs.
 Treat lightweight tasks as first-class but constrained: they should use \
 \`Workflow Path: lightweight\`, keep <=2 tasks, and preserve verification evidence in reports/PRs.
 

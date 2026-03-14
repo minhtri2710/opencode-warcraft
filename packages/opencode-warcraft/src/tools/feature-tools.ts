@@ -41,13 +41,15 @@ export class FeatureTools {
         return toolSuccess({
           message: `Feature "${feature.name}" created (epic: ${epicBeadId || 'unknown'}).
 
-## Discovery Phase Required
+## Choose a workflow path
 
-Before writing a plan, you MUST:
+### Standard / beads-aligned path (default)
+Use this for anything ambiguous, multi-file, risky, or likely to benefit from review.
 1. Ask clarifying questions about the feature
 2. Document Q&A in plan.md with a \`## Discovery\` section
 3. Research the codebase (grep, read existing code)
 4. Save findings with warcraft_context_write
+5. Write/approve the plan, then run \`warcraft_tasks_sync\`
 
 Example discovery section:
 \`\`\`markdown
@@ -64,15 +66,26 @@ A: No, online-only is fine
 - Uses CSS variables pattern
 \`\`\`
 
+### Instant workflow path (tiny, low-risk work only)
+If the change is truly simple and you can already describe the work clearly, you may skip the formal plan and create a direct task instead:
+\`\`\`
+warcraft_task_create({
+  name: "small, self-contained task",
+  description: "Background: ...\nImpact: ...\nSafety: ...\nVerify: ...\nRollback: ..."
+})
+\`\`\`
+
+That task description should be self-contained enough that a worker never needs to consult a missing plan.
+
 ## Planning Guidelines
 
-When writing your plan, include:
+When writing a plan, include:
 - \`## Non-Goals\` - What we're explicitly NOT building (scope boundaries)
 - \`## Ghost Diffs\` - Alternatives you considered but rejected
 
 These prevent scope creep and re-proposing rejected solutions.
 
-NEXT: Ask your first clarifying question about this feature.`,
+NEXT: either ask your first clarifying question or, for tiny well-scoped work, create a direct task with \`warcraft_task_create\`.`,
         });
       },
     });

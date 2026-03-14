@@ -334,11 +334,15 @@ export class ContextTools {
       planStatus: string | null,
       taskList: Array<{ status: string; folder: string }>,
       runnableTasks: string[],
+      workflowPath?: string,
     ): string => {
-      if (!planStatus || planStatus === 'draft') {
-        return 'Write or revise plan with warcraft_plan_write, then get approval';
-      }
       if (taskList.length === 0) {
+        if (workflowPath === 'instant') {
+          return 'Create a direct task with warcraft_task_create, include a self-contained description, then dispatch it with warcraft_worktree_create.';
+        }
+        if (!planStatus || planStatus === 'draft') {
+          return 'Write or revise plan with warcraft_plan_write, then get approval';
+        }
         return 'Generate tasks from plan with warcraft_tasks_sync';
       }
       const inProgress = taskList.find((t) => t.status === 'in_progress' || t.status === 'dispatch_prepared');
@@ -362,17 +366,26 @@ export class ContextTools {
         const summary = nonTerminal.map((t) => `${t.folder} (${t.status})`).join(', ');
         return `Tasks need attention: ${summary}. Re-dispatch failed/partial tasks or resolve blocked tasks before completing.`;
       }
+      if (!planStatus || planStatus === 'draft') {
+        return workflowPath === 'instant'
+          ? 'All instant-workflow tasks are complete. Review, merge, or complete the feature.'
+          : 'Write or revise plan with warcraft_plan_write, then get approval';
+      }
       return 'All tasks complete. Review and merge or complete feature.';
     };
 
-    const planStatus =
-      featureData.status === 'planning'
+    const workflowPath = featureData.workflowPath || 'standard';
+    const planStatus = plan
+      ? featureData.status === 'planning'
         ? 'draft'
         : featureData.status === 'approved'
           ? 'approved'
           : featureData.status === 'executing'
             ? 'locked'
-            : 'none';
+            : 'none'
+      : workflowPath === 'instant'
+        ? 'instant'
+        : 'none';
 
     let trustMetrics: {
       reopenRate: number;
@@ -440,7 +453,7 @@ export class ContextTools {
         reopenCount: trustMetrics.reopenCount,
         blockedMttrMs: trustMetrics.blockedMttrMs,
       },
-      nextAction: getNextAction(planStatus, tasksSummary, runnable),
+      nextAction: getNextAction(planStatus, tasksSummary, runnable, workflowPath),
     };
   }
 

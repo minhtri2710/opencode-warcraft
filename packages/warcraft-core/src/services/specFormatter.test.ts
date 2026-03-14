@@ -84,6 +84,17 @@ describe('formatSpecContent structure', () => {
     expect(formatted).toContain('Implement the feature.');
   });
 
+  it('falls back to a self-contained manual task brief when no plan section exists', () => {
+    const specData = createSpecData({
+      taskBrief: 'Background: tiny fix. Impact: prompt text only. Safety: low. Verify: prompt tests. Rollback: revert.',
+    });
+
+    const formatted = formatSpecContent(specData);
+    expect(formatted).toContain('Background: tiny fix.');
+    expect(formatted).toContain('## Execution Notes');
+    expect(formatted).not.toContain('_No plan section available._');
+  });
+
   it('renders completed tasks section', () => {
     const specData = createSpecData({
       completedTasks: [{ name: 'Setup', summary: 'Created project skeleton' }],

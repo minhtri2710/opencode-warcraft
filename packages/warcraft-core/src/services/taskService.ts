@@ -461,8 +461,9 @@ export class TaskService {
    * Folder format: "01-task-name", "02-task-name", etc.
    * Index ensures alphabetical sort = chronological order.
    */
-  create(featureName: string, name: string, order?: number, priority: number = 3): string {
+  create(featureName: string, name: string, order?: number, priority: number = 3, brief?: string): string {
     name = sanitizeName(name);
+    const normalizedBrief = brief?.trim();
 
     // Validate priority
     if (!Number.isInteger(priority) || priority < 1 || priority > 5) {
@@ -512,6 +513,7 @@ export class TaskService {
       status: 'pending',
       origin: 'manual',
       planTitle: name,
+      ...(normalizedBrief ? { brief: normalizedBrief } : {}),
     };
 
     this.store.createTask(featureName, folder, name, status, priority);
@@ -698,6 +700,8 @@ export class TaskService {
     const { featureName, task, dependsOn, allTasks, planContent, contextFiles = [], completedTasks = [] } = params;
 
     const planSection = this.extractPlanSection(planContent ?? null, task);
+    const rawStatus = this.store.getRawStatus(featureName, task.folder);
+    const taskBrief = rawStatus?.origin === 'manual' ? (rawStatus.brief?.trim() ?? null) : null;
 
     return {
       featureName,
@@ -709,6 +713,7 @@ export class TaskService {
       dependsOn,
       allTasks,
       planSection,
+      taskBrief,
       contextFiles,
       completedTasks,
     };

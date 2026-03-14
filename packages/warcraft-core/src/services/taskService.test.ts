@@ -2468,6 +2468,23 @@ Second task.
       const folder = svc.create(featureName, 'Valid Task', 1, 3);
       expect(folder).toBe('01-valid-task');
     });
+
+    it('stores an optional self-contained brief for manual tasks', () => {
+      const featureName = 'test-feature';
+      setupFeature(featureName);
+      const offStores = createStores(PROJECT_ROOT, 'off', createRepository('off'));
+      const svc = new TaskService(PROJECT_ROOT, offStores.taskStore, 'off');
+      const folder = svc.create(
+        featureName,
+        'Valid Task',
+        1,
+        3,
+        'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
+      );
+
+      const status = svc.getRawStatus(featureName, folder);
+      expect(status?.brief).toContain('Background: tiny change.');
+    });
   });
 
   describe('previewSync and sync produce identical classification', () => {

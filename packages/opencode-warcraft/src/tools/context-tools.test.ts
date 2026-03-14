@@ -217,6 +217,30 @@ describe('ContextTools', () => {
       expect(result.data.nextAction).toBe('Generate tasks from plan with warcraft_tasks_sync');
     });
 
+    it('suggests the instant workflow when a feature is marked instant and has no plan yet', async () => {
+      const featureService = {
+        get: () => ({
+          name: 'test-feature',
+          status: 'executing',
+          workflowPath: 'instant',
+          ticket: null,
+          createdAt: '2025-01-01T00:00:00Z',
+        }),
+        list: () => ['test-feature'],
+      } as unknown as FeatureService;
+
+      const planService = {
+        read: () => null,
+      } as unknown as PlanService;
+
+      const result = await getStatusHealth({ featureService, planService });
+
+      expect(result.success).toBe(true);
+      expect(result.data.nextAction).toBe(
+        'Create a direct task with warcraft_task_create, include a self-contained description, then dispatch it with warcraft_worktree_create.',
+      );
+    });
+
     it('health does not expose excluded metric keys', async () => {
       // Write events that produce non-zero values for excluded metrics
       writeEventsJsonl([

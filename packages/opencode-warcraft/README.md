@@ -48,7 +48,8 @@ This enables tools like `grep_app_searchGitHub` and `websearch_web_search_exa`.
 ### Workflow guardrails
 
 - **Standard path**: default full plan.
-- **Lightweight path**: for trivial/simple work, include `Workflow Path: lightweight`, keep 1-2 tasks, and include `Impact`, `Safety`, `Verify`, `Rollback`.
+- **Instant path**: for tiny, already-well-scoped work, create a self-contained manual task with `warcraft_task_create({ name, description })` and include `Background`, `Impact`, `Safety`, `Verify`, and `Rollback` in the description.
+- **Lightweight path**: for trivial/simple work that still benefits from review, include `Workflow Path: lightweight`, keep 1-2 tasks, and include `Impact`, `Safety`, `Verify`, `Rollback`.
 - `warcraft_plan_approve` validates `## Plan Review Checklist`; it blocks when `WARCRAFT_WORKFLOW_GATES_MODE=enforce` and warns in default `warn` mode.
 - `warcraft_worktree_commit` completion summary must include build/test/lint pass evidence.
 - PRs should map to artifact evidence (`plan.md`, task `report.md`, verification output).

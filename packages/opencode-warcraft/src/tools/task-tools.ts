@@ -110,16 +110,22 @@ export class TaskTools {
    */
   createTaskTool(resolveFeature: (name?: string) => string | null): ToolDefinition {
     // Capture deps in closure to avoid 'this' binding issues
-    const { taskService } = this.deps;
+    const { featureService, planService, taskService } = this.deps;
     return tool({
       description: 'Create manual task (not from plan)',
       args: {
         name: tool.schema.string().describe('Task name'),
+        description: tool.schema
+          .string()
+          .optional()
+          .describe(
+            'Self-contained execution brief for instant/manual work. Include background, scope, safety, verification, and rollback notes when skipping a formal plan.',
+          ),
         order: tool.schema.number().optional().describe('Task order'),
         feature: tool.schema.string().optional().describe('Feature name (defaults to detection or single feature)'),
         priority: tool.schema.number().optional().describe('Priority (1-5, default: 3)'),
       },
-      async execute({ name, order, feature: explicitFeature, priority }) {
+      async execute({ name, description, order, feature: explicitFeature, priority }) {
         const resolution = resolveFeatureInput(resolveFeature, explicitFeature);
         if (!resolution.ok) return toolError(resolution.error);
         const feature = resolution.feature;
@@ -127,9 +133,27 @@ export class TaskTools {
         if (!Number.isInteger(priorityValue) || priorityValue < 1 || priorityValue > 5) {
           return toolError(`Priority must be an integer between 1 and 5 (inclusive), got: ${priorityValue}`);
         }
-        const folder = taskService.create(feature, name, order, priorityValue);
+        const folder = taskService.create(feature, name, order, priorityValue, description);
+
+        const featureData = featureService.get(feature);
+        const hasPlan = planService.read(feature) !== null;
+        let instantWorkflowActivated = false;
+        if (featureData && !hasPlan) {
+          featureService.patchMetadata(feature, { workflowPath: 'instant' });
+          if (featureData.status !== 'executing') {
+            featureService.updateStatus(feature, 'executing');
+          }
+          instantWorkflowActivated = true;
+        }
+
         return toolSuccess({
-          message: `Manual task created: ${folder}\nReminder: call warcraft_worktree_create to prepare the task workspace, then issue the returned task() call to start the worker in the assigned workspace.`,
+          feature,
+          task: folder,
+          workflowPath: instantWorkflowActivated ? 'instant' : featureData?.workflowPath ?? 'standard',
+          message:
+            instantWorkflowActivated
+              ? `Manual task created: ${folder}\nInstant workflow activated for feature "${feature}" (no formal plan required for this small task). Include enough detail in the task description to make it self-contained, then call warcraft_worktree_create and issue the returned task() call.`
+              : `Manual task created: ${folder}\nReminder: call warcraft_worktree_create to prepare the task workspace, then issue the returned task() call to start the worker in the assigned workspace.`,
         });
       },
     });

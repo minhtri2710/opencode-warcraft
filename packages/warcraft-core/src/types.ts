@@ -4,7 +4,7 @@ export interface FeatureJson {
   name: string;
   epicBeadId: string;
   status: FeatureStatusType;
-  workflowPath?: 'standard' | 'lightweight';
+  workflowPath?: 'standard' | 'lightweight' | 'instant';
   reviewChecklistVersion?: 'v1';
   reviewChecklistCompletedAt?: string;
   ticket?: string;
@@ -84,6 +84,8 @@ export interface TaskStatus {
   preparedAt?: string;
   /** Task folder name (e.g., '01-setup'). Persisted for stable identity across reordering. */
   folder?: string;
+  /** Self-contained execution brief for manual/instant tasks when no formal plan exists. */
+  brief?: string;
   /** Learnings surfaced by the worker upon task completion (done tasks only). */
   learnings?: string[];
 }
@@ -151,6 +153,7 @@ export interface SpecData {
   dependsOn: string[];
   allTasks: Array<{ folder: string; name: string; order: number }>;
   planSection: string | null;
+  taskBrief?: string | null;
   contextFiles: Array<{ name: string; content: string }>;
   completedTasks: Array<{ name: string; summary: string }>;
 }

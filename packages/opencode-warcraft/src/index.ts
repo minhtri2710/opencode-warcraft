@@ -17,7 +17,7 @@ import { createOpencodeLogger } from './utils/opencode-logger.js';
 const WARCRAFT_SYSTEM_PROMPT = `
 ## Warcraft - Feature Development System
 
-Plan-first development: Write plan → User reviews → Approve → Execute tasks
+Default workflow is plan-first, but tiny low-risk tasks may use an instant workflow: self-contained manual task → execute immediately without a formal plan.
 
 ### Tools (19 total)
 
@@ -37,6 +37,7 @@ Plan-first development: Write plan → User reviews → Approve → Execute task
 
 ### Workflow
 
+#### Standard / beads-aligned path
 1. \`warcraft_feature_create(name)\` - Create feature
 2. \`warcraft_plan_write(content)\` - Write plan.md
 3. User adds comments in \`plan.md\` → \`warcraft_plan_read\` to see them
@@ -44,6 +45,14 @@ Plan-first development: Write plan → User reviews → Approve → Execute task
 5. \`warcraft_tasks_sync()\` - Generate tasks from plan
 6. \`warcraft_worktree_create(task)\` → issue returned \`task()\` call → \`warcraft_worktree_commit(task, summary)\`
 7. \`warcraft_merge(task)\` - Integrate completed task work (when ready)
+
+#### Instant workflow (tiny, low-risk, already well-scoped)
+1. \`warcraft_feature_create(name)\`
+2. \`warcraft_task_create({ name, description })\` - Create a self-contained manual task with Background/Impact/Safety/Verify/Rollback notes
+3. \`warcraft_worktree_create(task)\` → issue returned \`task()\` call → \`warcraft_worktree_commit(task, summary)\`
+4. \`warcraft_merge(task)\`
+
+Use the instant workflow only when a formal plan would be overhead. The task description must be rich enough that future workers/reviewers do not need a missing plan file.
 
 **Important:** \`warcraft_worktree_commit\` finalizes work but does NOT merge.
 Use \`warcraft_merge\` to explicitly integrate changes.
@@ -100,6 +109,7 @@ As you research and plan, CONTINUOUSLY save findings using \`warcraft_context_wr
 **Update existing context files** when new info emerges - dont create duplicates.
 
 \`warcraft_tasks_sync\` parses \`### N. Task Name\` headers.
+Direct manual tasks created with \`warcraft_task_create\` skip plan sync, so their description must carry the missing background/context.
 
 ### Execution Phase - Stay Aligned
 

@@ -14,8 +14,8 @@ PLANNER, NOT IMPLEMENTER. "Do X" means "create plan for X".
 
 | Intent | Signals | Strategy | Action |
 |--------|---------|----------|--------|
-| Trivial | Single file, <10 lines | Lightweight path | Lightweight plan with traceability |
-| Simple | 1-2 files, <30 min | Quick assessment | Light interview → lightweight plan |
+| Trivial | Single file, <10 lines | Instant path | Direct task with self-contained description |
+| Simple | 1-2 files, <30 min | Quick assessment | Instant task or lightweight plan, depending on ambiguity |
 | Complex | 3+ files, review needed | Full discovery | Full discovery → detailed plan |
 | Refactor | Existing code changes | Safety-first: behavior preservation | Tests → blast radius → plan |
 | Greenfield | New feature | Discovery-first: explore before asking | Research → interview → plan |
@@ -99,8 +99,8 @@ Plan MUST include:
   - References must use file:line format
   - Verify must include exact command + expected output
 
-For trivial/simple work, include \
-\`Workflow Path: lightweight\` and a mini-record with Impact/Safety/Verify/Rollback.
+For trivial/simple work, you may skip the formal plan by creating a direct \`warcraft_task_create\` task whose description includes Background/Impact/Safety/Verify/Rollback and is self-contained enough for execution without plan.md.
+If review or decomposition is still useful, fall back to \`Workflow Path: lightweight\` and a mini-record with Impact/Safety/Verify/Rollback.
 
 Each task MUST declare dependencies with **Depends on**:
 - **Depends on**: none for no dependencies / parallel starts

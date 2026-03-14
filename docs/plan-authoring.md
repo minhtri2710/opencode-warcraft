@@ -182,6 +182,21 @@ For small, low-risk changes, use the lightweight workflow path (`workflowPath: "
 
 Lightweight plans are constrained to a maximum of 2 tasks.
 
+## Instant Tasks (No Formal Plan)
+
+For tiny, low-risk work where a full plan would be overhead, use `warcraft_task_create` instead of writing `plan.md`.
+The task description becomes the canonical brief, so make it self-contained:
+
+```markdown
+Background: why this task exists and what triggered it
+Impact: files/behaviors expected to change
+Safety: key risks or invariants to preserve
+Verify: exact commands or checks to run
+Rollback: how to undo the change safely
+```
+
+If the task stops feeling tiny or needs decomposition/review, fall back to the lightweight or standard plan path.
+
 ## Tips for Effective Plans
 
 ### Be Specific About File Paths
