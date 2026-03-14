@@ -38,8 +38,8 @@ class MockBeadsRepository {
     return { success: true as const, value: undefined };
   }
 
-  hasWorkflowLabel(beadId: string, label: string): boolean {
-    return this.labels.get(beadId)?.has(label) ?? false;
+  hasWorkflowLabel(beadId: string, label: string): { success: true; value: boolean } {
+    return { success: true as const, value: this.labels.get(beadId)?.has(label) ?? false };
   }
 
   setPlanDescription(beadId: string, content: string) {
@@ -245,7 +245,7 @@ describe('PlanService bead-backed approval (beadsMode: on)', () => {
     // Should add approved label
     expect(mockRepo.addedLabels).toContainEqual({ beadId: 'epic-1', label: 'approved' });
     // Should have the label tracked
-    expect(mockRepo.hasWorkflowLabel('epic-1', 'approved')).toBe(true);
+    expect(mockRepo.hasWorkflowLabel('epic-1', 'approved').value).toBe(true);
   });
 
   it('isApproved() returns true when label exists and description matches', () => {
@@ -295,7 +295,7 @@ describe('PlanService bead-backed approval (beadsMode: on)', () => {
     service.revokeApproval('bead-revoke');
 
     expect(service.isApproved('bead-revoke')).toBe(false);
-    expect(mockRepo.hasWorkflowLabel('epic-1', 'approved')).toBe(false);
+    expect(mockRepo.hasWorkflowLabel('epic-1', 'approved').value).toBe(false);
     expect(mockRepo.removedLabels).toContainEqual({ beadId: 'epic-1', label: 'approved' });
   });
 
@@ -364,7 +364,7 @@ describe('PlanService bead-backed approval (beadsMode: on)', () => {
     service.approve('bead-no-session');
 
     expect(mockRepo.addedLabels).toContainEqual({ beadId: 'epic-1', label: 'approved' });
-    expect(mockRepo.hasWorkflowLabel('epic-1', 'approved')).toBe(true);
+    expect(mockRepo.hasWorkflowLabel('epic-1', 'approved').value).toBe(true);
   });
 
   it('revokeApproval() does not add contradictory approved label', () => {

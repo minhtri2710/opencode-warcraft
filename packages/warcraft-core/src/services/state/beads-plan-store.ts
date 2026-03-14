@@ -56,7 +56,7 @@ export class BeadsPlanStore implements PlanStore {
 
     // Check the 'approved' label
     const hasLabel = this.repository.hasWorkflowLabel(epicBeadId, 'approved');
-    if (!hasLabel) return false;
+    if (hasLabel.success === false || !hasLabel.value) return false;
 
     // Compare plan.md content with epic description
     const descResult = this.repository.getPlanDescription(epicBeadId);
