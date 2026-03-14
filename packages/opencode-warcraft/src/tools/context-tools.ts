@@ -32,6 +32,8 @@ interface StatusResponseData {
     status: string;
     ticket: string | null;
     createdAt: string;
+    workflowPath?: string;
+    workflowRecommendation?: string;
   };
   plan: {
     exists: boolean;
@@ -335,10 +337,14 @@ export class ContextTools {
       taskList: Array<{ status: string; folder: string }>,
       runnableTasks: string[],
       workflowPath?: string,
+      workflowRecommendation?: string,
     ): string => {
       if (taskList.length === 0) {
-        if (workflowPath === 'instant') {
+        if (workflowPath === 'instant' || workflowRecommendation === 'instant') {
           return 'Create a direct task with warcraft_task_create, include a self-contained description, then dispatch it with warcraft_worktree_create.';
+        }
+        if (workflowRecommendation === 'lightweight') {
+          return 'Write a short lightweight plan with warcraft_plan_write (include Workflow Path: lightweight), then approve it.';
         }
         if (!planStatus || planStatus === 'draft') {
           return 'Write or revise plan with warcraft_plan_write, then get approval';
@@ -367,14 +373,17 @@ export class ContextTools {
         return `Tasks need attention: ${summary}. Re-dispatch failed/partial tasks or resolve blocked tasks before completing.`;
       }
       if (!planStatus || planStatus === 'draft') {
-        return workflowPath === 'instant'
+        return workflowPath === 'instant' || workflowRecommendation === 'instant'
           ? 'All instant-workflow tasks are complete. Review, merge, or complete the feature.'
-          : 'Write or revise plan with warcraft_plan_write, then get approval';
+          : workflowRecommendation === 'lightweight'
+            ? 'Write a short lightweight plan with warcraft_plan_write (include Workflow Path: lightweight), then approve it.'
+            : 'Write or revise plan with warcraft_plan_write, then get approval';
       }
       return 'All tasks complete. Review and merge or complete feature.';
     };
 
     const workflowPath = featureData.workflowPath || 'standard';
+    const workflowRecommendation = featureData.workflowRecommendation;
     const planStatus = plan
       ? featureData.status === 'planning'
         ? 'draft'
@@ -405,6 +414,8 @@ export class ContextTools {
         status: featureData.status,
         ticket: featureData.ticket || null,
         createdAt: featureData.createdAt,
+        workflowPath,
+        workflowRecommendation,
       },
       plan: {
         exists: !!plan,
@@ -453,7 +464,7 @@ export class ContextTools {
         reopenCount: trustMetrics.reopenCount,
         blockedMttrMs: trustMetrics.blockedMttrMs,
       },
-      nextAction: getNextAction(planStatus, tasksSummary, runnable, workflowPath),
+      nextAction: getNextAction(planStatus, tasksSummary, runnable, workflowPath, workflowRecommendation),
     };
   }
 

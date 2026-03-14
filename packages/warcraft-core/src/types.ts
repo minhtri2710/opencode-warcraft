@@ -5,6 +5,7 @@ export interface FeatureJson {
   epicBeadId: string;
   status: FeatureStatusType;
   workflowPath?: 'standard' | 'lightweight' | 'instant';
+  workflowRecommendation?: 'standard' | 'lightweight' | 'instant';
   reviewChecklistVersion?: 'v1';
   reviewChecklistCompletedAt?: string;
   ticket?: string;

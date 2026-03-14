@@ -17,6 +17,7 @@ class MockFeatureService implements Partial<FeatureService> {
   private features: Map<string, { name: string; epicBeadId: string; priority?: number }> = new Map();
   private createCallCount = 0;
   private completeCallCount = 0;
+  private patchCalls: Array<{ name: string; patch: Record<string, unknown> }> = [];
 
   create(name: string, ticket?: string, priority?: number) {
     this.createCallCount++;
@@ -41,6 +42,17 @@ class MockFeatureService implements Partial<FeatureService> {
     });
   }
 
+  patchMetadata(name: string, patch: Record<string, unknown>) {
+    this.patchCalls.push({ name, patch });
+    return {
+      name,
+      epicBeadId: this.features.get(name)?.epicBeadId ?? 'epic-patched',
+      status: 'planning' as const,
+      createdAt: new Date().toISOString(),
+      ...patch,
+    } as any;
+  }
+
   getCreateCallCount() {
     return this.createCallCount;
   }
@@ -52,6 +64,10 @@ class MockFeatureService implements Partial<FeatureService> {
   getLastPriority() {
     const lastFeature = Array.from(this.features.values()).pop();
     return lastFeature?.priority;
+  }
+
+  getPatchCalls() {
+    return this.patchCalls;
   }
 }
 
@@ -201,6 +217,10 @@ describe('FeatureTools', () => {
       expect(parsed.success).toBe(true);
       expect(parsed.data.recommendedWorkflowPath).toBe('instant');
       expect(parsed.data.message).toContain('**Recommended workflow:** instant');
+      expect(mockFeatureService.getPatchCalls()).toContainEqual({
+        name: 'test-feature',
+        patch: { workflowRecommendation: 'instant' },
+      });
     });
 
     it('returns a standard recommendation for broad cross-cutting requests', async () => {

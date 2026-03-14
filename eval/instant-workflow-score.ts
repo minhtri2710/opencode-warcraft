@@ -235,6 +235,23 @@ async function checkStatusNextActionSupportsInstantPath(): Promise<CheckResult> 
   };
 }
 
+async function checkStatusNextActionSupportsLightweightRecommendation(): Promise<CheckResult> {
+  const ctx = createWorkspace();
+  ctx.featureService.create('doc-tune');
+  ctx.featureService.patchMetadata('doc-tune', { workflowRecommendation: 'lightweight' as any });
+  const raw = (await ctx.contextTools.getStatusTool((name?: string) => name || 'doc-tune').execute({
+    feature: 'doc-tune',
+  })) as string;
+  const parsed = parseToolResponse(raw);
+  const nextAction = String(parsed.data?.nextAction || '');
+  const pass = /lightweight/i.test(nextAction) && /warcraft_plan_write/i.test(nextAction);
+  return {
+    id: 'status-next-action-lightweight-recommendation',
+    pass,
+    detail: pass ? `nextAction=${nextAction}` : `nextAction missing lightweight guidance: ${nextAction}`,
+  };
+}
+
 async function checkPromptsMentionInstantPath(): Promise<CheckResult> {
   const khadgar = buildKhadgarPrompt({ verificationModel: 'tdd' });
   const saurfang = buildSaurfangPrompt({ verificationModel: 'tdd' });
@@ -305,6 +322,7 @@ async function main() {
     checkManualTaskCanPromoteInstantWorkflow(),
     checkManualTaskSpecIsSelfContained(),
     checkStatusNextActionSupportsInstantPath(),
+    checkStatusNextActionSupportsLightweightRecommendation(),
     checkPromptsMentionInstantPath(),
     checkBeadsModeManualBriefPersistence(),
   ]);

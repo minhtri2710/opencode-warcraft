@@ -44,6 +44,9 @@ export class FeatureTools {
         const epicBeadId = (feature as { epicBeadId?: string }).epicBeadId;
         const workflowAnalysis = request?.trim() ? analyzeWorkflowRequest(request) : null;
         const workflowRecommendation = workflowAnalysis?.workflowPath;
+        if (workflowRecommendation) {
+          featureService.patchMetadata(feature.name, { workflowRecommendation });
+        }
         const workflowRecommendationBlock = workflowAnalysis
           ? `\n## Recommended path for this request\n- **Recommended workflow:** ${workflowAnalysis.workflowPath}\n${workflowAnalysis.rationale
               .map((line) => `- ${line}`)

@@ -241,6 +241,30 @@ describe('ContextTools', () => {
       );
     });
 
+    it('suggests a lightweight plan when the feature recommendation is lightweight and no plan exists yet', async () => {
+      const featureService = {
+        get: () => ({
+          name: 'test-feature',
+          status: 'planning',
+          workflowRecommendation: 'lightweight',
+          ticket: null,
+          createdAt: '2025-01-01T00:00:00Z',
+        }),
+        list: () => ['test-feature'],
+      } as unknown as FeatureService;
+
+      const planService = {
+        read: () => null,
+      } as unknown as PlanService;
+
+      const result = await getStatusHealth({ featureService, planService });
+
+      expect(result.success).toBe(true);
+      expect(result.data.nextAction).toBe(
+        'Write a short lightweight plan with warcraft_plan_write (include Workflow Path: lightweight), then approve it.',
+      );
+    });
+
     it('health does not expose excluded metric keys', async () => {
       // Write events that produce non-zero values for excluded metrics
       writeEventsJsonl([
@@ -390,11 +414,12 @@ describe('ContextTools', () => {
 
       expect(result.success).toBe(true);
       // Verify existing fields retain their expected structure
-      expect(result.data.feature).toEqual({
+      expect(result.data.feature).toMatchObject({
         name: 'test-feature',
         status: 'executing',
         ticket: null,
         createdAt: '2025-01-01T00:00:00Z',
+        workflowPath: 'standard',
       });
       expect(result.data.plan).toEqual({
         exists: true,
