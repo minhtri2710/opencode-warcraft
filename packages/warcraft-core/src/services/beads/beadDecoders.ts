@@ -1,6 +1,7 @@
 import type { TaskInfo, TaskStatusType } from '../../types.js';
 import type { AuditEntry, BeadComment } from './BeadGateway.types.js';
 import { BeadGatewayError } from './BeadGateway.types.js';
+import { mapBeadStatusToTaskStatus } from './beadStatus.js';
 
 // ---------------------------------------------------------------------------
 // Shared helpers
@@ -137,18 +138,13 @@ export function decodeDependentIssues(
 // Tasks-from-dep-list decoder  (br dep list → TaskInfo[])
 // ---------------------------------------------------------------------------
 
-const BEAD_STATUS_TO_TASK: Record<string, TaskStatusType> = {
-  closed: 'done',
-  deferred: 'blocked',
-};
-
 export function decodeTasksFromDepList(output: string, epicId: string): TaskInfo[] {
   const items = decodeDependentIssues(output, `tasks for epic '${epicId}'`, 'parent-child');
   return items.map((item) => ({
     folder: '',
     name: item.title,
     beadId: item.id,
-    status: (BEAD_STATUS_TO_TASK[item.status] ?? 'pending') as TaskStatusType,
+    status: mapBeadStatusToTaskStatus(item.status) as TaskStatusType,
     origin: 'plan' as const,
   }));
 }
