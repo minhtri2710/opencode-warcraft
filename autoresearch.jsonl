@@ -1,1 +1,2 @@
 {"type":"config","name":"Bug hunting in warcraft-core","metricName":"tests_passing","metricUnit":"","bestDirection":"higher"}
+{"run":1,"commit":"23c1f34","metric":987,"metrics":{},"status":"keep","description":"Baseline: 987 tests passing, 0 failing across 41 files in warcraft-core","timestamp":1773473218645,"segment":0}

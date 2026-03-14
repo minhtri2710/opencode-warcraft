@@ -20,7 +20,7 @@ import { formatSpecContent } from './specFormatter.js';
 import type { TaskStore } from './state/types.js';
 import { validateTransition } from './task-state-machine.js';
 import type { RunnableBlockedResult, TaskWithDeps } from './taskDependencyGraph.js';
-import { buildEffectiveDependencies, computeRunnableAndBlocked } from './taskDependencyGraph.js';
+import { computeRunnableAndBlocked } from './taskDependencyGraph.js';
 
 /** Current schema version for TaskStatus */
 export const TASK_STATUS_SCHEMA_VERSION = 1;
@@ -937,13 +937,7 @@ export class TaskService {
       };
     });
 
-    const effectiveDeps = buildEffectiveDependencies(tasksWithDeps);
-    const normalizedTasks = tasksWithDeps.map((task) => ({
-      ...task,
-      dependsOn: effectiveDeps.get(task.folder),
-    }));
-
-    return computeRunnableAndBlocked(normalizedTasks);
+    return computeRunnableAndBlocked(tasksWithDeps);
   }
 
   /**
@@ -1035,8 +1029,7 @@ export class TaskService {
 
         const order = parseInt(taskMatch[1], 10);
         const rawName = taskMatch[2].trim();
-        const folderName = slugifyTaskName(rawName);
-        const folder = deriveTaskFolder(order, folderName);
+        const folder = deriveTaskFolder(order, rawName);
 
         currentTask = {
           folder,

@@ -13,6 +13,19 @@ describe('slug utilities', () => {
       expect(slugifyTaskName('---')).toBe('task-cb3f91d5');
       expect(slugifyTaskName('   ???   ')).toBe('task-9415a90b');
     });
+
+    it('collapses consecutive hyphens from special characters', () => {
+      expect(slugifyTaskName('Hello -- World')).toBe('hello-world');
+      expect(slugifyTaskName('API (v2) Setup')).toBe('api-v2-setup');
+      expect(slugifyTaskName('test___multiple___separators')).toBe('testmultipleseparators');
+    });
+
+    it('strips leading and trailing hyphens', () => {
+      expect(slugifyTaskName('-leading')).toBe('leading');
+      expect(slugifyTaskName('trailing-')).toBe('trailing');
+      expect(slugifyTaskName('-both-')).toBe('both');
+      expect(slugifyTaskName('--multiple-leading')).toBe('multiple-leading');
+    });
   });
 
   describe('deriveTaskFolder', () => {
@@ -20,6 +33,11 @@ describe('slug utilities', () => {
       expect(deriveTaskFolder(1, '!!!')).toBe('01-task-e84c538e');
       expect(deriveTaskFolder(2, '---')).toBe('02-task-cb3f91d5');
       expect(deriveTaskFolder(3, '   ???   ')).toBe('03-task-9415a90b');
+    });
+
+    it('produces clean folder names from names with special characters', () => {
+      expect(deriveTaskFolder(1, 'Hello -- World')).toBe('01-hello-world');
+      expect(deriveTaskFolder(2, 'API (v2) Setup')).toBe('02-api-v2-setup');
     });
   });
 });
