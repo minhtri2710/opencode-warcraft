@@ -33,4 +33,8 @@ describe('structuredToCommandString', () => {
   it('handles empty args', () => {
     expect(structuredToCommandString('ls', [])).toBe('ls');
   });
+
+  it('preserves plus signs and dots in args', () => {
+    expect(structuredToCommandString('cc', ['-O2', 'file.c', '-o', 'output'])).toBe('cc -O2 file.c -o output');
+  });
 });
