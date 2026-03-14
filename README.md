@@ -95,13 +95,13 @@ User approves plan via warcraft_plan_approve()
          ↓
 warcraft_tasks_sync() generates tasks from plan
          ↓
-warcraft_worktree_create(task) creates isolated worktree per task
-(spawns Mekkatorque worker in worktree)
+warcraft_worktree_create(task) prepares workspace, returns task() payload
+(issue task() call to launch Mekkatorque worker)
          ↓
-Worker executes in worktree → warcraft_worktree_commit(task, summary)
-(commits to task branch)
+Worker executes in workspace → warcraft_worktree_commit(task, summary)
+(finalizes work)
          ↓
-warcraft_merge(task) merges task branch into main
+warcraft_merge(task) integrates completed task work
          ↓
 warcraft_feature_complete() cleans up artifacts
 ```
@@ -114,9 +114,9 @@ warcraft_feature_complete() cleans up artifacts
 | --------------- | -------------------------------------------------------------- | --------- |
 | **Khadgar**     | Plans + orchestrates, detects phase, loads skills on-demand    | Unified   |
 | **Mimiron**     | Plans features, interviews, writes plans. NEVER executes       | Dedicated |
-| **Saurfang**    | Orchestrates execution, delegates, spawns workers, verifies    | Dedicated |
+| **Saurfang**    | Orchestrates execution, delegates tasks via task() calls, verifies | Dedicated |
 | **Brann**       | Researches codebase + external docs/data                       | Both      |
-| **Mekkatorque** | Executes tasks directly in isolated worktrees. Never delegates | Both      |
+| **Mekkatorque** | Executes tasks in assigned workspaces. Never delegates         | Both      |
 | **Algalon**     | Reviews plan/code quality. OKAY/REJECT verdict                 | Both      |
 
 **Agent Modes**:
@@ -450,7 +450,7 @@ Tasks are generated from `### N. Task Name` headers in the plan.
 # Preview runnable tasks
 opencode warcraft_batch_execute --mode preview
 
-# Create worktree and spawn worker
+# Prepare workspace and get task() delegation payload
 opencode warcraft_worktree_create --task-id "task-1"
 ```
 
@@ -498,27 +498,28 @@ opencode warcraft_feature_complete
 
 ### Phase 3: Execution
 
-1. **Create worktree**: `warcraft_worktree_create(task)` → work in worktree → `warcraft_worktree_commit(task, summary)`
-2. **Merge**: `warcraft_merge(task)` (commits changes to task branch, then merges to main)
+1. **Prepare workspace**: `warcraft_worktree_create(task)` → issue returned `task()` call → `warcraft_worktree_commit(task, summary)`
+2. **Integrate**: `warcraft_merge(task)` (integrates completed task work)
 
-**Important**: `warcraft_worktree_commit` commits changes to task branch but does NOT merge. Use `warcraft_merge` to explicitly integrate changes. Worktrees persist until manually removed.
+**Important**: `warcraft_worktree_commit` finalizes work but does NOT merge. Use `warcraft_merge` to explicitly integrate changes.
 
 ### Delegated Execution
 
-`warcraft_worktree_create` creates worktree and spawns worker automatically:
+`warcraft_worktree_create` prepares a workspace and returns a `task()` delegation payload:
 
-1. `warcraft_worktree_create(task)` → Creates worktree + spawns Mekkatorque (Worker/Coder)
-2. Worker executes → calls `warcraft_worktree_commit(status: "completed")`
-3. Worker blocked → calls `warcraft_worktree_commit(status: "blocked", blocker: {...})`
+1. `warcraft_worktree_create(task)` → Prepares workspace + returns `task()` call for Mekkatorque (Worker/Coder)
+2. Issue the returned `task()` call to launch the worker
+3. Worker executes → calls `warcraft_worktree_commit(status: "completed")`
+4. Worker blocked → calls `warcraft_worktree_commit(status: "blocked", blocker: {...})`
 
 **Handling blocked workers**:
 
 1. Check blockers with `warcraft_status()`
 2. Read blocker info (reason, options, recommendation, context)
 3. Answer via `question()` tool (auto-prompted)
-4. Resume with `warcraft_worktree_create(task, continueFrom: "blocked", decision: answer)`
+4. Resume with `warcraft_worktree_create(task, continueFrom: "blocked", decision: answer)` and issue the returned `task()` call
 
-**CRITICAL**: When resuming, a NEW worker spawns in the SAME worktree. The previous worker's progress is preserved.
+**CRITICAL**: When resuming, a NEW worker is launched in the SAME workspace. The previous worker's progress is preserved.
 
 ---
 
@@ -558,7 +559,7 @@ opencode warcraft_feature_complete
 
 #### Worktree Operations
 
-- **`warcraft_worktree_create`**: Create isolated worktree and spawn worker
+- **`warcraft_worktree_create`**: Prepare workspace and return task() delegation payload
 - **`warcraft_worktree_commit`**: Commit worktree changes with status
 - **`warcraft_worktree_discard`**: Discard worktree without merging
 

@@ -75,7 +75,7 @@ Parses `### N. Task Name` headers from the plan and creates task folders. Depend
 warcraft_worktree_create({ task: "01-setup-database" })
 ```
 
-Creates an isolated git worktree and spawns a Mekkatorque (worker) agent to execute the task.
+Prepares a workspace and returns a `task()` delegation payload. Issue the returned `task()` call to launch a Mekkatorque (worker) agent.
 
 **Parallel batch:**
 ```
@@ -83,7 +83,7 @@ warcraft_batch_execute({ mode: "preview" })    // See what's runnable
 warcraft_batch_execute({ mode: "execute", tasks: ["01-setup", "02-api"] })
 ```
 
-Workers execute in isolated worktrees with no shared state. Each calls `warcraft_worktree_commit` when done.
+Workers execute in assigned workspaces. Each calls `warcraft_worktree_commit` when done.
 
 ### 7. Monitor Progress
 
