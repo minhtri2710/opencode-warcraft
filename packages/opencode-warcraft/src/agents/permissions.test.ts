@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, mock, spyOn } from 'bun:test';
+import { readFileSync } from 'fs';
 import * as path from 'path';
 import { ConfigService } from 'warcraft-core';
 import plugin from '../index';
+import { WARCRAFT_TOOL_IDS } from './tool-permissions.js';
 
 type PluginInput = {
   directory: string;
@@ -417,5 +419,28 @@ describe('Granular warcraft tool permissions (dedicated mode)', () => {
     expect(perm?.warcraft_worktree_create).toBe('deny');
     expect(perm?.warcraft_worktree_commit).toBe('deny');
     expect(perm?.warcraft_merge).toBe('deny');
+  });
+});
+
+describe('WARCRAFT_TOOL_IDS covers all runtime-registered tools', () => {
+  const INDEX_PATH = path.resolve(import.meta.dir, '..', 'index.ts');
+  const indexSource = readFileSync(INDEX_PATH, 'utf-8');
+
+  function extractRuntimeTools(source: string): string[] {
+    const toolBlockMatch = source.match(/\btool:\s*\{([\s\S]*?)\n\s{4}\}/);
+    if (!toolBlockMatch) return [];
+    const block = toolBlockMatch[1];
+    const tools: string[] = [];
+    for (const m of block.matchAll(/\b(warcraft_\w+)\s*:/g)) {
+      tools.push(m[1]);
+    }
+    return tools.sort();
+  }
+
+  it('every runtime tool is in WARCRAFT_TOOL_IDS', () => {
+    const runtimeTools = extractRuntimeTools(indexSource);
+    const permissionTools = [...WARCRAFT_TOOL_IDS].sort();
+    const missing = runtimeTools.filter((t) => !(permissionTools as readonly string[]).includes(t));
+    expect(missing).toEqual([]);
   });
 });

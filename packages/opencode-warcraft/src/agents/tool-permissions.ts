@@ -21,6 +21,7 @@ export const WARCRAFT_TOOL_IDS = [
   'warcraft_batch_execute',
   'warcraft_context_write',
   'warcraft_status',
+  'warcraft_doctor',
   'warcraft_agents_md',
 ] as const;
 
