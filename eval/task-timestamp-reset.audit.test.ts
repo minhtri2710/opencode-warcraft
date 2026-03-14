@@ -17,4 +17,9 @@ describe('taskService timestamp reset on pending transition', () => {
   it('should clear completedAt when transitioning to pending', () => {
     expect(content).toMatch(/updates\.status\s*===\s*'pending'[\s\S]{0,200}completedAt\s*=\s*undefined/);
   });
+
+  it('should clear preparedAt when transitioning to pending', () => {
+    // dispatch_prepared → pending rollback should not leave stale preparedAt
+    expect(content).toMatch(/updates\.status\s*===\s*'pending'[\s\S]{0,300}preparedAt\s*=\s*undefined/);
+  });
 });

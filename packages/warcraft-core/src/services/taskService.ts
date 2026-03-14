@@ -558,9 +558,11 @@ export class TaskService {
     }
     // Reset execution-cycle timestamps when returning to pending (e.g. cancelled → pending re-queue).
     // Without this, a re-executed task keeps stale startedAt/completedAt from its first execution.
+    // Also clears preparedAt from dispatch_prepared → pending rollback.
     if (updates.status === 'pending') {
       updated.startedAt = undefined;
       updated.completedAt = undefined;
+      updated.preparedAt = undefined;
     }
 
     const statusChanged = updates.status !== undefined && updates.status !== current.status;
