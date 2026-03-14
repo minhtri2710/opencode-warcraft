@@ -52,7 +52,7 @@ describe('warcraft-core public API completeness', () => {
 
   it('all exports are defined (not undefined)', () => {
     const entries = Object.entries(index);
-    for (const [key, value] of entries) {
+    for (const [_key, value] of entries) {
       expect(value).toBeDefined();
     }
   });

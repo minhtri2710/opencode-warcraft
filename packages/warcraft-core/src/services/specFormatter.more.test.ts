@@ -71,7 +71,7 @@ describe('formatSpecContent additional edge cases', () => {
   });
 
   it('handles very long task folder names', () => {
-    const longFolder = '99-' + 'a'.repeat(200);
+    const longFolder = `99-${'a'.repeat(200)}`;
     const formatted = formatSpecContent(createSpecData({ task: { folder: longFolder, name: 'Long task', order: 99 } }));
     expect(formatted).toContain(`# Task: ${longFolder}`);
   });

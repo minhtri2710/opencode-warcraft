@@ -7,7 +7,6 @@ import {
   getTaskReportPath,
   getTaskStatusPath,
   getTasksPath,
-  getWarcraftDir,
   getWarcraftPath,
   sanitizeName,
 } from './paths.js';

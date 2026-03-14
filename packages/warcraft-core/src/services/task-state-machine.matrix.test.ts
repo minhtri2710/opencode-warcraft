@@ -54,7 +54,7 @@ describe('task-state-machine exhaustive matrix', () => {
     });
 
     it('done → cancelled is the only transition from done', () => {
-      expect(ALLOWED_TRANSITIONS['done']).toEqual(['cancelled']);
+      expect(ALLOWED_TRANSITIONS.done).toEqual(['cancelled']);
     });
 
     it('blocked → in_progress is allowed (unblock)', () => {

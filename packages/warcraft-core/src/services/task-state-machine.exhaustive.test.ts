@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import type { TaskStatusType } from '../types.js';
-import {
-  ALLOWED_TRANSITIONS,
-  InvalidTransitionError,
-  isTransitionAllowed,
-  validateTransition,
-} from './task-state-machine.js';
+import { ALLOWED_TRANSITIONS, isTransitionAllowed, validateTransition } from './task-state-machine.js';
 
 describe('task-state-machine exhaustive', () => {
   const ALL_STATES: TaskStatusType[] = [

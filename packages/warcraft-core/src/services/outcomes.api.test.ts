@@ -1,18 +1,14 @@
 import { describe, expect, it } from 'bun:test';
 import {
   collectOutcomes,
-  type Diagnostic,
   degraded,
   diagnostic,
   fatal,
   fromError,
   isUsable,
-  type OperationOutcome,
   ok,
   okVoid,
   type Severity,
-  withDiagnostics,
-  worstSeverity,
 } from './outcomes.js';
 
 describe('outcomes API completeness', () => {

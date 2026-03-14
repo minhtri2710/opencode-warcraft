@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'bun:test';
-import type { GitClient } from './git-client.js';
 import { SimpleGitClient } from './simple-git-client.js';
 
 describe('SimpleGitClient exhaustive', () => {
@@ -25,7 +24,7 @@ describe('SimpleGitClient exhaustive', () => {
     });
 
     it('accepts nested project path', () => {
-      const nested = process.cwd() + '/packages';
+      const nested = `${process.cwd()}/packages`;
       expect(new SimpleGitClient(nested)).toBeDefined();
     });
   });

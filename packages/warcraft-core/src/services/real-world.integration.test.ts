@@ -4,7 +4,6 @@ import * as os from 'os';
 import * as path from 'path';
 import { createNoopLogger } from '../utils/logger.js';
 import { getPlanPath, getWarcraftPath } from '../utils/paths.js';
-import { ConfigService } from './configService.js';
 import { ContextService } from './contextService.js';
 import { FeatureService } from './featureService.js';
 import { PlanService } from './planService.js';

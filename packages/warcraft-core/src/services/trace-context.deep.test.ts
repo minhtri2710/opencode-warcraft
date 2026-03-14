@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { createChildSpan, createTraceContext, type TraceContext } from './trace-context.js';
+import { createChildSpan, createTraceContext } from './trace-context.js';
 
 describe('trace-context deep validation', () => {
   describe('createTraceContext', () => {

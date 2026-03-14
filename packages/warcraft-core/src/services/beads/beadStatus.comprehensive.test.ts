@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'bun:test';
-import type { FeatureStatusType, TaskStatusType } from '../../types.js';
 import { mapBeadStatusToFeatureStatus, mapBeadStatusToTaskStatus } from './beadStatus.js';
 
 describe('beadStatus comprehensive', () => {

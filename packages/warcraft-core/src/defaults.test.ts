@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'bun:test';
 import { DEFAULT_AGENT_MODELS, DEFAULT_WARCRAFT_CONFIG } from './defaults.js';
-import type { WarcraftConfig } from './types.js';
 
 describe('defaults', () => {
   describe('DEFAULT_AGENT_MODELS', () => {
@@ -45,7 +44,7 @@ describe('defaults', () => {
 
     it('all agent configs have model and temperature', () => {
       const agents = DEFAULT_WARCRAFT_CONFIG.agents!;
-      for (const [name, config] of Object.entries(agents)) {
+      for (const [_name, config] of Object.entries(agents)) {
         expect(config.model).toBeDefined();
         expect(typeof config.temperature).toBe('number');
         expect(config.temperature).toBeGreaterThanOrEqual(0);

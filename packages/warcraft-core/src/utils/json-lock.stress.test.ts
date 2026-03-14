@@ -66,9 +66,9 @@ describe('json-lock stress', () => {
 
   it('writeJsonLockedSync preserves number precision', () => {
     const file = path.join(tempDir, 'precision.json');
-    writeJsonLockedSync(file, { pi: 3.141592653589793, big: 999999999999 });
+    writeJsonLockedSync(file, { pi: Math.PI, big: 999999999999 });
     const content = JSON.parse(fs.readFileSync(file, 'utf-8'));
-    expect(content.pi).toBe(3.141592653589793);
+    expect(content.pi).toBe(Math.PI);
     expect(content.big).toBe(999999999999);
   });
 

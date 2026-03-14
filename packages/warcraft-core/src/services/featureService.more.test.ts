@@ -1,7 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
-import * as fs from 'fs';
-import * as os from 'os';
-import * as path from 'path';
+import { describe, expect, it } from 'bun:test';
 import type { FeatureJson } from '../types.js';
 import { FeatureService } from './featureService.js';
 import type { FeatureStore } from './state/types.js';

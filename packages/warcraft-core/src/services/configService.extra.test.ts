@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { DEFAULT_WARCRAFT_CONFIG } from '../defaults.js';
 import { ConfigService } from './configService.js';
 
 let tempHome: string;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import type { Diagnostic, OperationOutcome } from './outcomes.js';
+import type { OperationOutcome } from './outcomes.js';
 import {
   collectOutcomes,
   degraded,
@@ -8,7 +8,6 @@ import {
   fromError,
   isUsable,
   ok,
-  okVoid,
   withDiagnostics,
   worstSeverity,
 } from './outcomes.js';

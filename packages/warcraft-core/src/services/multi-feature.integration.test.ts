@@ -15,7 +15,7 @@ import { TaskService } from './taskService.js';
 describe('Multi-feature workflow', () => {
   let tempDir: string;
   let featureService: FeatureService;
-  let planService: PlanService;
+  let _planService: PlanService;
   let taskService: TaskService;
   let contextService: ContextService;
 
@@ -26,7 +26,7 @@ describe('Multi-feature workflow', () => {
     const taskStore = new FilesystemTaskStore(tempDir);
     const provider = { getBeadsMode: () => 'off' as const };
     featureService = new FeatureService(tempDir, featureStore, 'off', taskStore);
-    planService = new PlanService(tempDir, planStore, 'off');
+    _planService = new PlanService(tempDir, planStore, 'off');
     taskService = new TaskService(tempDir, taskStore, 'off', createNoopLogger());
     contextService = new ContextService(tempDir, provider);
     fs.mkdirSync(getWarcraftPath(tempDir, 'off'), { recursive: true });

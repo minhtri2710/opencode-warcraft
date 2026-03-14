@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import type { TaskStatusType } from '../../types.js';
-import { getTaskBeadActions, type TaskBeadAction } from './beadMapping.js';
+import { getTaskBeadActions } from './beadMapping.js';
 
 describe('beadMapping comprehensive', () => {
   const ALL_STATUSES: TaskStatusType[] = [
@@ -87,7 +87,7 @@ describe('beadMapping comprehensive', () => {
 
   describe('label cleanup prevents accumulation', () => {
     it('blocked→failed removes blocked', () => {
-      const blocked = getTaskBeadActions('blocked');
+      const _blocked = getTaskBeadActions('blocked');
       const failed = getTaskBeadActions('failed');
       // Moving from blocked to failed should result in 'blocked' being removed
       expect(failed[0].removeLabels).toContain('blocked');

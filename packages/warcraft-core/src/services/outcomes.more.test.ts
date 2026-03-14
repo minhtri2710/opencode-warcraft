@@ -1,13 +1,11 @@
 import { describe, expect, it } from 'bun:test';
 import {
   collectOutcomes,
-  type Diagnostic,
   degraded,
   diagnostic,
   fatal,
   fromError,
   isUsable,
-  type OperationOutcome,
   ok,
   okVoid,
   withDiagnostics,
@@ -129,7 +127,7 @@ describe('outcomes comprehensive', () => {
     });
 
     it('returns fatal if any fatal diagnostic', () => {
-      const diags = ok(1).diagnostics;
+      const _diags = ok(1).diagnostics;
       // Test with actual fatal outcome diagnostics
       const fatalResult = fatal([diagnostic('e', 'boom')]);
       expect(fatalResult.severity).toBe('fatal');

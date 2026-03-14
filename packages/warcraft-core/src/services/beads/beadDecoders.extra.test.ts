@@ -4,7 +4,6 @@ import {
   decodeAuditLog,
   decodeComments,
   decodeDependentIssues,
-  decodeIdFromJson,
   decodeListItems,
   decodeShowPayload,
   extractBeadContent,

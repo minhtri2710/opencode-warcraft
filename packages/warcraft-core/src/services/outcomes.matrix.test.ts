@@ -1,14 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import {
-  type Diagnostic,
-  degraded,
-  diagnostic,
-  fatal,
-  isUsable,
-  ok,
-  type Severity,
-  worstSeverity,
-} from './outcomes.js';
+import { diagnostic, type Severity, worstSeverity } from './outcomes.js';
 
 describe('outcomes worstSeverity matrix', () => {
   const SEVERITIES: Severity[] = ['ok', 'degraded', 'fatal'];
