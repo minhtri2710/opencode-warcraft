@@ -8,7 +8,7 @@ export const TURN_TERMINATION_RULES = `### Turn Termination
 
 Valid endings:
 - Ask a concrete question
-- Worker delegation (warcraft_worktree_create)
+- Worker delegation (warcraft_worktree_create → issue returned task() call)
 - Status check (warcraft_status)
 - User question (question())
 - Merge (warcraft_merge)

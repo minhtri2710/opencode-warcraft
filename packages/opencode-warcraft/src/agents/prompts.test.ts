@@ -53,6 +53,10 @@ describe('Khadgar (Hybrid) prompt', () => {
       expect(KHADGAR_PROMPT).toContain('NEVER end with');
     });
 
+    it('worker delegation turn ending mentions the returned task() call', () => {
+      expect(KHADGAR_PROMPT).toMatch(/Worker delegation.*task\(\)/);
+    });
+
     it('separates hard blocks from anti-patterns', () => {
       expect(KHADGAR_PROMPT).toContain('### Hard Blocks');
       expect(KHADGAR_PROMPT).toContain('### Anti-Patterns');
