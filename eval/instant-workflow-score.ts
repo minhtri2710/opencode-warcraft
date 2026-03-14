@@ -614,6 +614,9 @@ async function checkPlanWriteCanMaterializeLightweightScaffold(): Promise<CheckR
     parsed.success === true &&
     parsed.data?.generatedFromManualTasks === true &&
     parsed.data?.planScaffoldMode === 'lightweight' &&
+    parsed.data?.planApproveArgs?.feature === 'doc-tune' &&
+    parsed.data?.taskSyncArgs?.feature === 'doc-tune' &&
+    parsed.data?.taskSyncArgs?.mode === 'sync' &&
     /Workflow Path: lightweight/i.test(String(writtenPlan?.content || '')) &&
     /## Ghost Diffs/.test(String(writtenPlan?.content || ''));
   return {
@@ -659,6 +662,9 @@ async function checkPlanWriteCanMaterializeStandardScaffold(): Promise<CheckResu
     parsed.success === true &&
     parsed.data?.generatedFromManualTasks === true &&
     parsed.data?.planScaffoldMode === 'standard' &&
+    parsed.data?.planApproveArgs?.feature === 'quick-fix' &&
+    parsed.data?.taskSyncArgs?.feature === 'quick-fix' &&
+    parsed.data?.taskSyncArgs?.mode === 'sync' &&
     !/Workflow Path: lightweight/i.test(String(writtenPlan?.content || '')) &&
     /### 3\. Polish status wording/.test(String(writtenPlan?.content || ''));
   return {
@@ -745,6 +751,9 @@ async function checkTaskExpandWritesPlanAndPreviewsPromotion(): Promise<CheckRes
   const pass =
     parsed.success === true &&
     parsed.data?.planScaffoldMode === 'lightweight' &&
+    parsed.data?.planApproveArgs?.feature === 'doc-tune' &&
+    parsed.data?.taskSyncArgs?.feature === 'doc-tune' &&
+    parsed.data?.taskSyncArgs?.mode === 'sync' &&
     /Workflow Path: lightweight/i.test(String(writtenPlan?.content || '')) &&
     Array.isArray(parsed.data?.syncPreview?.wouldReconcile) &&
     parsed.data.syncPreview.wouldReconcile.length === 2 &&

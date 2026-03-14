@@ -66,6 +66,8 @@ describe('PlanTools', () => {
     expect(parsed.data.content).toContain('## Non-Goals');
     expect(parsed.data.content).toContain('## Ghost Diffs');
     expect(parsed.data.content).toContain('### 1. Refresh docs wording');
+    expect(parsed.data.planApproveArgs).toEqual({ feature: 'test-feature' });
+    expect(parsed.data.taskSyncArgs).toEqual({ feature: 'test-feature', mode: 'sync' });
     expect(planService.getLastWrite()).toEqual({ feature: 'test-feature', content: parsed.data.content });
     expect(updateCalls).toContainEqual({ workflowPath: 'lightweight' });
   });
@@ -99,6 +101,8 @@ describe('PlanTools', () => {
 
     expect(parsed.success).toBe(true);
     expect(parsed.data.planScaffoldMode).toBe('standard');
+    expect(parsed.data.planApproveArgs).toEqual({ feature: 'test-feature' });
+    expect(parsed.data.taskSyncArgs).toEqual({ feature: 'test-feature', mode: 'sync' });
     expect(parsed.data.content).not.toContain('Workflow Path: lightweight');
     expect(parsed.data.content).toContain('### 3. Third tiny fix');
   });

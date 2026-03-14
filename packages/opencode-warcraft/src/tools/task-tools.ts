@@ -336,6 +336,8 @@ export class TaskTools {
           mergedIntoExistingPlan: !!existingPlan,
           planScaffold,
           planWriteArgs: { feature, content: planScaffold },
+          planApproveArgs: { feature },
+          taskSyncArgs: { feature, mode: 'sync' },
           syncPreview: {
             wouldCreate: preview.created,
             wouldRemove: preview.removed,

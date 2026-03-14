@@ -1,1 +1,1 @@
-- If `taskExpandArgs` is now the preferred promotion handoff, return ready-to-use follow-up args for `warcraft_plan_approve` and `warcraft_tasks_sync` as well, so agents can carry the reviewed promotion flow forward without reconstructing the next calls.
+- If scaffold promotion responses already return `planApproveArgs` / `taskSyncArgs`, surface the same ready-to-use follow-up args in `warcraft_status` once a draft or approved plan exists so agents can resume the promotion flow from status without reconstructing the next calls.

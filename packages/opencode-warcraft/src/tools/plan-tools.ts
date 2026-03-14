@@ -107,6 +107,8 @@ export class PlanTools {
           sourceTaskCount,
           planScaffoldMode: generatedFromManualTasks ? scaffoldMode : null,
           content: planContent,
+          planApproveArgs: { feature },
+          taskSyncArgs: { feature, mode: 'sync' },
           message: `Plan written to ${planPath}.`,
         });
       },

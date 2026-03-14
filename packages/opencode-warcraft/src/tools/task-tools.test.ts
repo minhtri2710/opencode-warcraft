@@ -524,6 +524,8 @@ describe('TaskTools', () => {
       expect(parsed.data.planScaffoldMode).toBe('lightweight');
       expect(parsed.data.planScaffold).toContain('Workflow Path: lightweight');
       expect(parsed.data.planPath).toBe('/tmp/test-feature/plan.md');
+      expect(parsed.data.planApproveArgs).toEqual({ feature: 'test-feature' });
+      expect(parsed.data.taskSyncArgs).toEqual({ feature: 'test-feature', mode: 'sync' });
       expect(parsed.data.syncPreview.wouldReconcile).toEqual([
         { from: '01-tiny-fix', to: '01-tiny-fix', planTitle: 'Tiny Fix', beadId: 'task-1' },
       ]);
@@ -639,6 +641,8 @@ describe('TaskTools', () => {
 
       expect(parsed.success).toBe(true);
       expect(parsed.data.mergedIntoExistingPlan).toBe(true);
+      expect(parsed.data.planApproveArgs).toEqual({ feature: 'test-feature' });
+      expect(parsed.data.taskSyncArgs).toEqual({ feature: 'test-feature', mode: 'sync' });
       expect(parsed.data.planScaffold).toContain('### 1. Existing Task');
       expect(parsed.data.planScaffold).toContain('### 2. Second Tiny Fix');
       expect(parsed.data.syncPreview.wouldReconcile).toEqual([
