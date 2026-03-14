@@ -213,7 +213,7 @@ export class TaskTools {
                   ? '\nThis manual task looks broad enough that the standard reviewed plan path is safer. Prefer warcraft_plan_write before dispatching it.'
                   : '';
         const scaffoldHint = planScaffold
-          ? '\nA draft reviewed-plan scaffold is included in `planScaffold`. You can materialize it directly with warcraft_plan_write({ useScaffold: true }).'
+          ? '\nA draft reviewed-plan scaffold is included in `planScaffold`. You can materialize and preview promotion directly with warcraft_task_expand, or write it with warcraft_plan_write({ useScaffold: true }).'
           : '';
 
         return toolSuccess({

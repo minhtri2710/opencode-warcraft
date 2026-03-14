@@ -63,6 +63,7 @@ The benchmark should reward real workflow improvements, not just prompt edits. I
 - end-to-end promotion from manual instant tasks into canonical planned tasks during `warcraft_tasks_sync`, avoiding duplicate task creation once scaffolded plans are approved
 - action guidance that points agents at the actual low-friction promotion command (`warcraft_plan_write({ useScaffold: true })`) once scaffold-based fallback is available
 - an actual `warcraft_task_expand` helper that writes the reviewed plan scaffold for pending manual tasks and previews the resulting promotion/reconciliation impact
+- guidance that points agents at `warcraft_task_expand` once that helper exists, instead of continuing to surface only lower-level scaffold-writing commands
 
 ## What's Been Tried
 - Added an initial behavior-oriented eval harness and baseline targeted tests.
@@ -72,4 +73,4 @@ The benchmark should reward real workflow improvements, not just prompt edits. I
 - Persisted `workflowRecommendation` on the feature so `warcraft_status` can guide the user toward the right next action (e.g. lightweight plan) even before a plan or task exists.
 - Added scaffolded-plan fallbacks: `planScaffold`, `planWriteArgs`, beads-aligned scaffold sections, and `warcraft_plan_write({ useScaffold: true })` so pending manual tasks can be promoted into a real reviewed plan without copy/paste.
 - Added an actual `warcraft_task_expand` helper that writes a scaffolded reviewed plan from pending manual tasks and previews how `warcraft_tasks_sync` will reconcile them.
-- Latest direction in progress: reduce the remaining friction in mixed workflows by letting that helper merge selected pending manual tasks into an existing draft/lightweight plan instead of only working when no plan exists.
+- Latest direction in progress: now that `warcraft_task_expand` exists, tighten the surrounding task/status guidance so agents are steered toward the helper itself rather than only lower-level `warcraft_plan_write({ useScaffold: true })` instructions.

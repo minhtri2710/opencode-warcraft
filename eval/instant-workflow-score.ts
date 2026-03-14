@@ -383,11 +383,7 @@ async function checkInstantWorkflowExpansionGuidance(): Promise<CheckResult> {
   })) as string;
   const parsed = parseToolResponse(raw);
   const nextAction = String(parsed.data?.nextAction || '');
-  const pass =
-    /outgrown/i.test(nextAction) &&
-    /lightweight/i.test(nextAction) &&
-    /warcraft_plan_write/i.test(nextAction) &&
-    /useScaffold/i.test(nextAction);
+  const pass = /outgrown/i.test(nextAction) && /lightweight/i.test(nextAction) && /warcraft_task_expand/i.test(nextAction);
   return {
     id: 'instant-workflow-expansion-guidance',
     pass,
@@ -431,10 +427,9 @@ async function checkInstantWorkflowEscalatesPastLightweightTaskLimit(): Promise<
   const pass =
     /more than two pending manual tasks/i.test(taskMessage) &&
     /standard reviewed plan path/i.test(taskMessage) &&
-    /useScaffold/i.test(taskMessage) &&
+    /warcraft_task_expand/i.test(taskMessage) &&
     /more than two pending tasks/i.test(nextAction) &&
-    /warcraft_plan_write/i.test(nextAction) &&
-    /useScaffold/i.test(nextAction) &&
+    /warcraft_task_expand/i.test(nextAction) &&
     !/Workflow Path: lightweight/i.test(nextAction);
   return {
     id: 'instant-workflow-standard-escalation',
