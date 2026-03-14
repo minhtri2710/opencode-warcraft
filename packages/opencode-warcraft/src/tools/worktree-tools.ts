@@ -372,6 +372,21 @@ The worker prompt is passed inline in \`taskToolCall.prompt\`.
         if (taskInfo.status !== 'in_progress' && taskInfo.status !== 'blocked')
           return toolError('Task not in progress');
 
+        // GATE: Blocked tasks can only re-report as blocked or be cancelled.
+        // Completing, failing, or marking partial requires the task to be resumed
+        // to in_progress first (via warcraft_worktree_create continueFrom: "blocked").
+        if (taskInfo.status === 'blocked' && status !== 'blocked') {
+          const allowed = ['cancelled'];
+          const finalCandidate = status === 'completed' ? 'done' : status;
+          if (!allowed.includes(finalCandidate)) {
+            return toolError(
+              `Cannot ${status === 'completed' ? 'complete' : `mark as ${status}`} a blocked task directly. ` +
+                'Resume the task first with warcraft_worktree_create(continueFrom: "blocked", decision: "..."), ' +
+                'then issue the returned task() call to restart the worker.',
+            );
+          }
+        }
+
         // GATE: Check for explicit build/test/lint pass evidence when completing
         if (status === 'completed') {
           // In best-effort mode, skip gate checks entirely — verification deferred to orchestrator
