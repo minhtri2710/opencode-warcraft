@@ -1,6 +1,6 @@
 import * as crypto from 'crypto';
 import type { FeatureJson } from '../../types.js';
-import { readJson } from '../../utils/fs.js';
+import { fileExists, readJson } from '../../utils/fs.js';
 import { updateJsonLockedSync } from '../../utils/json-lock.js';
 import { getFeatureJsonPath } from '../../utils/paths.js';
 import type { PlanStore } from './types.js';
@@ -24,6 +24,7 @@ export class FilesystemPlanStore implements PlanStore {
 
   approve(featureName: string, planContent: string, timestamp: string, _sessionId?: string): void {
     const filePath = getFeatureJsonPath(this.projectRoot, featureName, 'off');
+    if (!fileExists(filePath)) return; // Guard: no feature.json to update
     const planHash = computePlanHash(planContent);
     updateJsonLockedSync<FeatureJsonWithPlanState>(
       filePath,
@@ -51,6 +52,7 @@ export class FilesystemPlanStore implements PlanStore {
 
   revokeApproval(featureName: string): void {
     const filePath = getFeatureJsonPath(this.projectRoot, featureName, 'off');
+    if (!fileExists(filePath)) return; // Guard: no feature.json to update
     updateJsonLockedSync<FeatureJsonWithPlanState>(
       filePath,
       (current) => {
