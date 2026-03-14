@@ -5,11 +5,6 @@
       "args": ["-y", "grep-mcp"],
       "description": "GitHub code search via grep.app"
     },
-    "context7": {
-      "command": "npx",
-      "args": ["-y", "@upstash/context7-mcp"],
-      "description": "Library documentation lookup"
-    },
     "websearch_exa": {
       "command": "npx",
       "args": ["-y", "exa-mcp-server"],
