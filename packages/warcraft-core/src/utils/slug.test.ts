@@ -17,7 +17,12 @@ describe('slug utilities', () => {
     it('collapses consecutive hyphens from special characters', () => {
       expect(slugifyTaskName('Hello -- World')).toBe('hello-world');
       expect(slugifyTaskName('API (v2) Setup')).toBe('api-v2-setup');
-      expect(slugifyTaskName('test___multiple___separators')).toBe('testmultipleseparators');
+      expect(slugifyTaskName('test___multiple___separators')).toBe('test-multiple-separators');
+    });
+
+    it('converts underscores to hyphens', () => {
+      expect(slugifyTaskName('hello_world')).toBe('hello-world');
+      expect(slugifyTaskName('setup_api_client')).toBe('setup-api-client');
     });
 
     it('strips leading and trailing hyphens', () => {

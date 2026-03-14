@@ -7,9 +7,7 @@ import { createHash } from 'crypto';
 export function slugifyTaskName(name: string): string {
   const slug = name
     .toLowerCase()
-    .replace(/\s+/g, '-')
-    .replace(/[^a-z0-9-]/g, '')
-    .replace(/-{2,}/g, '-')
+    .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
 
   // Preserve existing slugs for normal task names, but never emit an empty or hyphen-only folder segment.
