@@ -89,3 +89,4 @@ bun test eval/feature-complete-irreversible.audit.test.ts --no-cache 2>&1
 bun test eval/warcraft-tools-docs-completeness.audit.test.ts --no-cache 2>&1
 bun test eval/readme-tool-completeness.audit.test.ts --no-cache 2>&1
 bun test eval/root-readme-tool-count.audit.test.ts --no-cache 2>&1
+bun test eval/agents-md-tool-count.audit.test.ts --no-cache 2>&1

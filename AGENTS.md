@@ -6,7 +6,7 @@
 
 ## Architecture
 - Bun monorepo with two packages: `warcraft-core` (domain logic: services, stores, types) and `opencode-warcraft` (OpenCode plugin: agents, tools, hooks, MCP, skills, DI container)
-- Service layer with DI (`container.ts`), pluggable storage (beads vs filesystem via `beadsMode`), 6 specialized agents (Khadgar, Mimiron, Saurfang, Brann, Mekkatorque, Algalon), 17 tools across 7 domain modules
+- Service layer with DI (`container.ts`), pluggable storage (beads vs filesystem via `beadsMode`), 6 specialized agents (Khadgar, Mimiron, Saurfang, Brann, Mekkatorque, Algalon), 19 tools across 8 domain modules
 - Data flow: feature create → plan write → plan approve (SHA-256 hash) → tasks sync → worktree create → worker executes → worktree commit → merge
 
 ## Code Style
