@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
-import plugin from '../index';
+import plugin from '../index.js';
 import { createTestOpencodeClient } from './helpers/opencode-client.js';
 
 const { client: OPENCODE_CLIENT } = createTestOpencodeClient();

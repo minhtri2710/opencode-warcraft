@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import type { PluginInput } from '@opencode-ai/plugin';
 import * as path from 'path';
-import plugin from '../index';
+import plugin from '../index.js';
 import { ensureFeatureExists } from './helpers/feature-setup.js';
 import { createTestOpencodeClient } from './helpers/opencode-client.js';
 import {

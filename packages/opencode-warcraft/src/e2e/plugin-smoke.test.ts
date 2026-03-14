@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import type { PluginInput } from '@opencode-ai/plugin';
 import * as fs from 'fs';
 import * as path from 'path';
-import plugin from '../index';
+import plugin from '../index.js';
 import { BUILTIN_SKILLS } from '../skills/registry.generated.js';
 import { ensureFeatureExists } from './helpers/feature-setup.js';
 import { createTestOpencodeClient } from './helpers/opencode-client.js';

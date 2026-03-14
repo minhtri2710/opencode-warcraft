@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import { detectContext } from './utils/detection';
-import { getWarcraftPath } from './utils/paths';
+import { detectContext } from './utils/detection.js';
+import { getWarcraftPath } from './utils/paths.js';
 
 describe('warcraft-core', () => {
   it('exports path helpers', () => {

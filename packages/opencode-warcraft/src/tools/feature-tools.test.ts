@@ -3,7 +3,7 @@ import * as child_process from 'child_process';
 import * as fs from 'fs';
 import type { FeatureService } from 'warcraft-core';
 import { ok } from 'warcraft-core';
-import { FeatureTools } from './feature-tools';
+import { FeatureTools } from './feature-tools.js';
 
 const TEST_DIR = `/tmp/opencode-warcraft-feature-tools-test-${process.pid}`;
 

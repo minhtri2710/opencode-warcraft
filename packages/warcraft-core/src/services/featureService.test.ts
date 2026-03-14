@@ -5,7 +5,7 @@ import * as os from 'os';
 import * as path from 'path';
 import type { FeatureJson, TaskInfo } from '../types.js';
 import type { BeadsRepository } from './beads/BeadsRepository.js';
-import { FeatureService } from './featureService';
+import { FeatureService } from './featureService.js';
 import type { OperationOutcome } from './outcomes.js';
 import { isUsable } from './outcomes.js';
 import { createStores } from './state/index.js';

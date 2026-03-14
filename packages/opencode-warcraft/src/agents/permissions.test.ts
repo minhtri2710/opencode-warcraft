@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, mock, spyOn } from 'bun:test';
 import { readFileSync } from 'fs';
 import * as path from 'path';
 import { ConfigService } from 'warcraft-core';
-import plugin from '../index';
+import plugin from '../index.js';
 import { WARCRAFT_TOOL_IDS } from './tool-permissions.js';
 
 type PluginInput = {

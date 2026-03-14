@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { createWorktreeService, WorktreeService } from './worktreeService';
+import { createWorktreeService, WorktreeService } from './worktreeService.js';
 
 // ============================================================================
 // Test Helpers

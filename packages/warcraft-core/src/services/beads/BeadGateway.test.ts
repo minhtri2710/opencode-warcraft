@@ -3,7 +3,7 @@ import * as childProcess from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { BeadGateway } from './BeadGateway';
+import { BeadGateway } from './BeadGateway.js';
 import { BeadGatewayError } from './BeadGateway.types.js';
 
 describe('BeadGateway', () => {

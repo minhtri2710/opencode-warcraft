@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { ensureDir, readJson } from './fs';
+import { ensureDir, readJson } from './fs.js';
 import {
   acquireLock,
   acquireLockSync,
@@ -14,7 +14,7 @@ import {
   writeJsonAtomic,
   writeJsonLocked,
   writeJsonLockedSync,
-} from './json-lock';
+} from './json-lock.js';
 import {
   getFeatureJsonPath,
   getFeaturePath,
@@ -28,7 +28,7 @@ import {
   listFeatureDirectories,
   normalizePath,
   sanitizeName,
-} from './paths';
+} from './paths.js';
 
 const TEST_DIR = `/tmp/warcraft-core-test-${process.pid}`;
 

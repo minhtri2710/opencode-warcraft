@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { DEFAULT_AGENT_MODELS, DEFAULT_WARCRAFT_CONFIG } from '../defaults';
-import type { Logger } from '../utils/logger';
-import { ConfigService } from './configService';
+import { DEFAULT_AGENT_MODELS, DEFAULT_WARCRAFT_CONFIG } from '../defaults.js';
+import type { Logger } from '../utils/logger.js';
+import { ConfigService } from './configService.js';
 
 let originalHome: string | undefined;
 let tempHome: string;

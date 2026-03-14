@@ -3,7 +3,7 @@ import * as child_process from 'child_process';
 import * as fs from 'fs';
 import type { FeatureService, PlanService, TaskService, TaskStatusType } from 'warcraft-core';
 import { createNoopEventLogger, InvalidTransitionError } from 'warcraft-core';
-import { TaskTools } from './task-tools';
+import { TaskTools } from './task-tools.js';
 
 const TEST_DIR = `/tmp/opencode-warcraft-task-tools-test-${process.pid}`;
 

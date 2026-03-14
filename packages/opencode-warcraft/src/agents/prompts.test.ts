@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'bun:test';
 import { readFileSync } from 'fs';
 import * as path from 'path';
-import { ALGALON_PROMPT } from './algalon';
-import { BRANN_PROMPT } from './brann';
-import { buildKhadgarPrompt, KHADGAR_PROMPT } from './khadgar';
-import { buildMekkatorquePrompt, MEKKATORQUE_PROMPT } from './mekkatorque';
-import { MIMIRON_PROMPT } from './mimiron';
-import { buildSaurfangPrompt, SAURFANG_PROMPT } from './saurfang';
+import { ALGALON_PROMPT } from './algalon.js';
+import { BRANN_PROMPT } from './brann.js';
+import { buildKhadgarPrompt, KHADGAR_PROMPT } from './khadgar.js';
+import { buildMekkatorquePrompt, MEKKATORQUE_PROMPT } from './mekkatorque.js';
+import { MIMIRON_PROMPT } from './mimiron.js';
+import { buildSaurfangPrompt, SAURFANG_PROMPT } from './saurfang.js';
 
 describe('Khadgar (Hybrid) prompt', () => {
   describe('delegation planning alignment', () => {

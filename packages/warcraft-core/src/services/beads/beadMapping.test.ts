@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { getTaskBeadActions } from './beadMapping';
+import { getTaskBeadActions } from './beadMapping.js';
 
 describe('getTaskBeadActions', () => {
   it('maps done to close action with removeLabels for transient labels', () => {
