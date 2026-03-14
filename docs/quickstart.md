@@ -111,7 +111,7 @@ warcraft_merge({ task: "01-setup-database", verify: true })
 warcraft_feature_complete()
 ```
 
-Marks the feature as completed (irreversible).
+Marks the feature as completed (may be auto-reopened if task statuses change).
 
 ## Verification Semantics
 
