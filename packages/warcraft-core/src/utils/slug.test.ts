@@ -32,7 +32,8 @@ describe('slug utilities', () => {
     });
 
     it('truncates very long names with hash suffix', () => {
-      const longName = 'Implement the comprehensive distributed event-driven microservice architecture with fault-tolerant state management';
+      const longName =
+        'Implement the comprehensive distributed event-driven microservice architecture with fault-tolerant state management';
       const result = slugifyTaskName(longName);
       expect(result.length).toBeLessThanOrEqual(60);
       // Should end with a 6-char hash
