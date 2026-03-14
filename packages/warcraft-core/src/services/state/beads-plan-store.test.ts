@@ -59,3 +59,70 @@ describe('BeadsPlanStore fail-fast behavior', () => {
     expect(() => store.syncPlanDescription('test-feature', '# Plan')).not.toThrow();
   });
 });
+
+describe('BeadsPlanStore approval workflow', () => {
+  it('isApproved returns true when label exists and description matches', () => {
+    const repository = {
+      getEpicByFeatureName: () => ({ success: true as const, value: 'epic-1' }),
+      hasWorkflowLabel: () => ({ success: true as const, value: true }),
+      getPlanDescription: () => ({ success: true as const, value: '# My Plan' }),
+    };
+
+    const store = new BeadsPlanStore(createTempProjectRoot(), repository as any);
+    expect(store.isApproved('test-feature', '# My Plan')).toBe(true);
+  });
+
+  it('isApproved returns false when description differs', () => {
+    const repository = {
+      getEpicByFeatureName: () => ({ success: true as const, value: 'epic-1' }),
+      hasWorkflowLabel: () => ({ success: true as const, value: true }),
+      getPlanDescription: () => ({ success: true as const, value: '# Old Plan' }),
+    };
+
+    const store = new BeadsPlanStore(createTempProjectRoot(), repository as any);
+    expect(store.isApproved('test-feature', '# New Plan')).toBe(false);
+  });
+
+  it('isApproved returns false when label is missing', () => {
+    const repository = {
+      getEpicByFeatureName: () => ({ success: true as const, value: 'epic-1' }),
+      hasWorkflowLabel: () => ({ success: true as const, value: false }),
+    };
+
+    const store = new BeadsPlanStore(createTempProjectRoot(), repository as any);
+    expect(store.isApproved('test-feature', '# Plan')).toBe(false);
+  });
+
+  it('isApproved returns false when epic cannot be resolved', () => {
+    const repository = {
+      getEpicByFeatureName: () => ({ success: true as const, value: null }),
+    };
+
+    const store = new BeadsPlanStore(createTempProjectRoot(), repository as any);
+    expect(store.isApproved('test-feature', '# Plan')).toBe(false);
+  });
+
+  it('revokeApproval removes the approved label', () => {
+    const removedLabels: string[] = [];
+    const repository = {
+      getEpicByFeatureName: () => ({ success: true as const, value: 'epic-1' }),
+      removeWorkflowLabel: (_beadId: string, label: string) => {
+        removedLabels.push(label);
+        return { success: true as const, value: undefined };
+      },
+    };
+
+    const store = new BeadsPlanStore(createTempProjectRoot(), repository as any);
+    store.revokeApproval('test-feature');
+    expect(removedLabels).toEqual(['approved']);
+  });
+
+  it('revokeApproval is safe when epic does not exist', () => {
+    const repository = {
+      getEpicByFeatureName: () => ({ success: true as const, value: null }),
+    };
+
+    const store = new BeadsPlanStore(createTempProjectRoot(), repository as any);
+    expect(() => store.revokeApproval('nonexistent')).not.toThrow();
+  });
+});
