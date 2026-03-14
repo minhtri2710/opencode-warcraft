@@ -25,6 +25,12 @@ describe('slug utilities', () => {
       expect(slugifyTaskName('setup_api_client')).toBe('setup-api-client');
     });
 
+    it('normalizes accented characters to ASCII equivalents', () => {
+      expect(slugifyTaskName('Café setup')).toBe('cafe-setup');
+      expect(slugifyTaskName('Résumé handler')).toBe('resume-handler');
+      expect(slugifyTaskName('naïve über task')).toBe('naive-uber-task');
+    });
+
     it('strips leading and trailing hyphens', () => {
       expect(slugifyTaskName('-leading')).toBe('leading');
       expect(slugifyTaskName('trailing-')).toBe('trailing');

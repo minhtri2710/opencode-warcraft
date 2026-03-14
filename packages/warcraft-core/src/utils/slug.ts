@@ -6,6 +6,8 @@ import { createHash } from 'crypto';
  */
 export function slugifyTaskName(name: string): string {
   const slug = name
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // strip combining diacritical marks
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
@@ -21,6 +23,8 @@ export function slugifyTaskName(name: string): string {
 
 export function slugifyIdentifierSegment(value: string): string {
   const slug = value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // strip combining diacritical marks
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
