@@ -1164,6 +1164,53 @@ Second depends on first (non-bold format).
       expect(task2Status?.dependsOn).toEqual(['01-first']);
     });
 
+    it('handles bullet-point prefixed Depends on format (off-mode)', () => {
+      const featureName = 'test-feature';
+      const featurePath = path.join(TEST_DIR, '.beads/artifacts', featureName);
+      fs.mkdirSync(featurePath, { recursive: true });
+
+      fs.writeFileSync(
+        path.join(featurePath, 'feature.json'),
+        JSON.stringify({
+          name: featureName,
+          epicBeadId: 'bd-epic-test',
+          status: 'executing',
+          createdAt: new Date().toISOString(),
+        }),
+      );
+
+      // Bullet-point formats: "- Depends on: 1" and "- **Depends on**: 1, 2"
+      const planContent = `# Plan
+
+### 1. Base
+
+Base task.
+
+### 2. Middle
+
+- Depends on: 1
+
+Middle task with bullet-point dependency.
+
+### 3. Top
+
+- **Depends on**: 1, 2
+
+Top task with bold bullet-point dependency.
+`;
+      fs.writeFileSync(path.join(featurePath, 'plan.md'), planContent);
+
+      const offStores = createStores(PROJECT_ROOT, 'off', createRepository('off'));
+      const offModeService = new TaskService(PROJECT_ROOT, offStores.taskStore, 'off');
+      const _result = offModeService.sync(featureName);
+
+      const task2Status = offModeService.getRawStatus(featureName, '02-middle');
+      expect(task2Status?.dependsOn).toEqual(['01-base']);
+
+      const task3Status = offModeService.getRawStatus(featureName, '03-top');
+      expect(task3Status?.dependsOn).toEqual(['01-base', '02-middle']);
+    });
+
     it('handles case insensitive none keyword (off-mode)', () => {
       const featureName = 'test-feature';
       const featurePath = path.join(TEST_DIR, '.beads/artifacts', featureName);

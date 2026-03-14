@@ -1019,7 +1019,8 @@ export class TaskService {
 
     // Regex to match "Depends on:" or "**Depends on**:" with optional markdown
     // Strips markdown formatting (**, *, etc.) and captures the value
-    const dependsOnRegex = /^\s*\*{0,2}Depends\s+on\*{0,2}\s*:\s*(.+)$/i;
+    // Also handles bullet-point prefixes like "- Depends on:" or "* **Depends on**:"
+    const dependsOnRegex = /^\s*(?:[-*]\s+)?\*{0,2}Depends\s+on\*{0,2}\s*:\s*(.+)$/i;
 
     for (const line of lines) {
       // Check for task header: ### N. Task Name
