@@ -59,6 +59,16 @@ bun test \
   ./eval/warcraft-skill-discard-table.audit.test.ts \
   ./eval/batch-preview-nonterminal.audit.test.ts \
   ./eval/context-dead-review-branch.audit.test.ts \
+  ./eval/mcp-esm-extensions.audit.test.ts \
+  ./eval/quickstart-merge-description.audit.test.ts \
+  ./eval/readme-skill-table-accuracy.audit.test.ts \
+  ./eval/skill-docker-subagent-workspace.audit.test.ts \
+  ./eval/skill-executing-plans-delegation.audit.test.ts \
+  ./eval/skill-finishing-branch-workspace.audit.test.ts \
+  ./eval/skill-parallel-exploration-ref.audit.test.ts \
+  ./eval/skill-registry-freshness.audit.test.ts \
+  ./eval/skill-warcraft-merge-description.audit.test.ts \
+  ./eval/task-timestamp-reset.audit.test.ts \
   ./eval/feature-complete-irreversible.audit.test.ts \
   ./eval/warcraft-tools-docs-completeness.audit.test.ts \
   ./eval/readme-tool-completeness.audit.test.ts \
