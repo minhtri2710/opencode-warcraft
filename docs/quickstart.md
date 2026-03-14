@@ -99,7 +99,7 @@ Returns a JSON snapshot with feature status, task states, runnable tasks, blocke
 warcraft_merge({ task: "01-setup-database" })
 ```
 
-Merges the task branch into the main branch. Supports `merge`, `squash`, and `rebase` strategies. Use `verify: true` to run build and tests after merge:
+Integrates completed task work into the current branch. In worktree mode, performs a git merge using the specified strategy (`merge`, `squash`, or `rebase`). In direct mode, confirms the task is complete. Use `verify: true` to run build and tests after integration:
 
 ```
 warcraft_merge({ task: "01-setup-database", verify: true })
