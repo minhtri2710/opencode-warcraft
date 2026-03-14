@@ -146,10 +146,27 @@ export class BatchTools {
         if (mode === 'preview') {
           const inProgress = allTasks.filter((t) => t.status === 'in_progress');
           const done = allTasks.filter((t) => t.status === 'done');
+          const nonTerminalStatuses = ['failed', 'partial', 'cancelled', 'blocked'] as const;
+          const needsAttention = allTasks.filter((t) =>
+            nonTerminalStatuses.includes(t.status as (typeof nonTerminalStatuses)[number]),
+          );
           const blockedTasks = Object.entries(blockedBy).map(([folder, deps]) => ({
             folder,
             waitingOn: deps,
           }));
+
+          // Determine next action advice
+          let nextAction: string;
+          if (runnable.length > 0) {
+            nextAction = `Call warcraft_batch_execute with mode "execute" and tasks: [${runnable.map((f) => `"${f}"`).join(', ')}], then issue all returned task() calls in the same assistant message.`;
+          } else if (inProgress.length > 0) {
+            nextAction = 'Wait for in-progress tasks to complete, then check again.';
+          } else if (needsAttention.length > 0) {
+            const summary = needsAttention.map((t) => `${t.folder} (${t.status})`).join(', ');
+            nextAction = `Tasks need attention: ${summary}. Re-dispatch failed/partial tasks or resolve blocked tasks.`;
+          } else {
+            nextAction = 'All tasks complete.';
+          }
 
           return toolSuccess({
             feature,
@@ -173,12 +190,7 @@ export class BatchTools {
               inProgress.length > 0
                 ? inProgress.map((t) => ({ folder: t.folder, name: t.planTitle ?? t.name }))
                 : undefined,
-            nextAction:
-              runnable.length > 0
-                ? `Call warcraft_batch_execute with mode "execute" and tasks: [${runnable.map((f) => `"${f}"`).join(', ')}], then issue all returned task() calls in the same assistant message.`
-                : inProgress.length > 0
-                  ? 'Wait for in-progress tasks to complete, then check again.'
-                  : 'All tasks complete or blocked by dependencies.',
+            nextAction,
           });
         }
 
