@@ -173,6 +173,35 @@ describe('PlanTools', () => {
     });
   });
 
+  it('blocks approval when manual tasks still sit outside the reviewed draft plan', async () => {
+    const approveCalls: string[] = [];
+    const tool = new PlanTools({
+      featureService: {} as unknown as FeatureService,
+      planService: {
+        read: () => ({ content: '# test-feature\n\nWorkflow Path: lightweight\n\n## Plan Review', status: 'planning' }),
+        approve: (feature: string) => {
+          approveCalls.push(feature);
+          return { severity: 'ok', diagnostics: [] };
+        },
+      } as unknown as PlanService,
+      taskService: {
+        previewSync: () => ({ created: [], removed: [], kept: [], reconciled: [], manual: ['01-follow-up'] }),
+      } as unknown as TaskService,
+      captureSession: () => {},
+      updateFeatureMetadata: () => {},
+      workflowGatesMode: 'warn',
+    }).approvePlanTool((name) => name ?? 'test-feature');
+
+    const raw = await tool.execute({ feature: 'test-feature' } as any, {} as any);
+    const parsed = JSON.parse(raw);
+
+    expect(parsed.success).toBe(false);
+    expect(parsed.error).toContain('Cannot approve plan');
+    expect(parsed.error).toContain('01-follow-up');
+    expect(parsed.error).toContain('warcraft_task_expand');
+    expect(approveCalls).toEqual([]);
+  });
+
   it('returns sync follow-up args after plan approval', async () => {
     const approveCalls: string[] = [];
     const tool = new PlanTools({
@@ -184,7 +213,9 @@ describe('PlanTools', () => {
           return { severity: 'ok', diagnostics: [] };
         },
       } as unknown as PlanService,
-      taskService: {} as unknown as TaskService,
+      taskService: {
+        previewSync: () => ({ created: [], removed: [], kept: [], reconciled: [], manual: [] }),
+      } as unknown as TaskService,
       captureSession: () => {},
       updateFeatureMetadata: () => {},
       workflowGatesMode: 'warn',

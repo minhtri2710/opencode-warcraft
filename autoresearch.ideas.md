@@ -1,1 +1,1 @@
-- If agents still try to approve incomplete drafts despite the new withheld `planApproveArgs` / `taskSyncArgs`, tighten `warcraft_plan_approve` itself so it warns or blocks when unmatched manual tasks still sit outside the reviewed draft plan.
+- If blocked promotion steps still create friction, consider extending structured tool-error payloads (or warning metadata) so approval blockers can return machine-readable follow-up args, not just prose, without weakening the explicit review gate.

@@ -161,7 +161,7 @@ export class PlanTools {
    */
   approvePlanTool(resolveFeature: (name?: string) => string | null): ToolDefinition {
     // Capture deps in closure to avoid 'this' binding issues
-    const { captureSession, planService, updateFeatureMetadata, workflowGatesMode } = this.deps;
+    const { captureSession, planService, taskService, updateFeatureMetadata, workflowGatesMode } = this.deps;
     return tool({
       description: 'Approve plan for execution',
       args: {
@@ -180,6 +180,21 @@ export class PlanTools {
         const checklistResult = validatePlanReviewChecklist(planResult.content);
         if (!checklistResult.ok && workflowGatesMode === 'enforce') {
           return toolError(formatPlanReviewChecklistIssues(checklistResult.issues));
+        }
+
+        if (typeof taskService.previewSync === 'function') {
+          const preview = taskService.previewSync(feature);
+          if (preview.manual.length > 0) {
+            const taskExpandArgs = {
+              feature,
+              tasks: preview.manual,
+              mode: detectWorkflowPath(planResult.content) === 'standard' ? 'standard' : 'lightweight',
+            };
+            return toolError(
+              `Cannot approve plan: ${preview.manual.length} pending manual task(s) still sit outside the reviewed draft plan (${preview.manual.join(', ')}). ` +
+                `Run warcraft_task_expand with ${JSON.stringify(taskExpandArgs)} before approval.`,
+            );
+          }
         }
 
         const approveOutcome = planService.approve(feature, undefined, planResult.content);

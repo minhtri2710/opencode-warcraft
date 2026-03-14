@@ -1031,6 +1031,76 @@ async function checkPlanApproveReturnsSyncFlow(): Promise<CheckResult> {
   };
 }
 
+async function checkPlanApproveRejectsRemainingManualTasks(): Promise<CheckResult> {
+  const ctx = createWorkspace();
+  ctx.featureService.create('doc-tune');
+  ctx.planService.write(
+    'doc-tune',
+    [
+      '# doc-tune',
+      '',
+      'Workflow Path: lightweight',
+      '',
+      '## Discovery',
+      '',
+      'Impact: existing plan',
+      'Safety: low',
+      'Verify: tests',
+      'Rollback: revert',
+      '',
+      '## Non-Goals',
+      '',
+      '- Keep scope tight.',
+      '',
+      '## Ghost Diffs',
+      '',
+      '- Skip alternatives for now.',
+      '',
+      '## Tasks',
+      '',
+      '### 1. Existing Task',
+      '',
+      '**Depends on**: none',
+      '',
+      '**What to do**:',
+      '- Keep existing behavior.',
+      '',
+      '**References**:',
+      '- Existing context.',
+      '',
+      '**Verify**:',
+      '- [ ] Run tests',
+      '',
+    ].join('\n'),
+  );
+  const createTask = ctx.taskTools.createTaskTool((name?: string) => name || 'doc-tune');
+  await createTask.execute({
+    feature: 'doc-tune',
+    name: 'Tiny Fix',
+    priority: 3,
+    description:
+      'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
+  } as any);
+
+  const raw = (await ctx.planTools.approvePlanTool((name?: string) => name || 'doc-tune').execute(
+    { feature: 'doc-tune' } as any,
+    {} as any,
+  )) as string;
+  const parsed = parseToolResponse(raw);
+  const pass =
+    parsed.success === false &&
+    /cannot approve plan/i.test(String(parsed.error || '')) &&
+    /01-tiny-fix/.test(String(parsed.error || '')) &&
+    /warcraft_task_expand/.test(String(parsed.error || ''));
+  return {
+    id: 'plan-approve-blocked-by-remaining-manual-tasks',
+    pass,
+    detail: pass
+      ? 'warcraft_plan_approve blocks incomplete drafts that still leave manual tasks outside the reviewed plan'
+      : `response=${JSON.stringify(parsed)}`,
+  };
+}
+
 async function checkPlanWriteCanMaterializeLightweightScaffold(): Promise<CheckResult> {
   const ctx = createWorkspace();
   ctx.featureService.create('doc-tune');
@@ -1503,6 +1573,7 @@ async function main() {
     checkStatusDraftPlanSurfacesRemainingManualPromotion(),
     checkStatusReturnsTaskSyncArgsAfterApproval(),
     checkPlanApproveReturnsSyncFlow(),
+    checkPlanApproveRejectsRemainingManualTasks(),
     checkPlanWriteCanMaterializeLightweightScaffold(),
     checkPlanWriteReturnsPromotionFlow(),
     checkPlanWriteCanMaterializeStandardScaffold(),
