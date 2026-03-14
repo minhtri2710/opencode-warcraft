@@ -70,7 +70,9 @@ export class FilesystemFeatureStore implements FeatureStore {
   }
 
   list(): string[] {
-    return listFeatureDirectories(this.projectRoot, 'off').sort();
+    return listFeatureDirectories(this.projectRoot, 'off')
+      .filter((name) => fileExists(getFeatureJsonPath(this.projectRoot, name, 'off')))
+      .sort();
   }
 
   save(feature: FeatureJson): void {

@@ -516,12 +516,16 @@ describe('FeatureService beadsMode off', () => {
     service.create('feature-a');
     service.create('feature-b');
 
+    // Create a non-feature directory (no feature.json) that should be excluded
+    fs.mkdirSync(path.join(testRoot, 'docs', 'architecture'), { recursive: true });
+
     // Reset spy after setup to only count list() calls
     execSpy.mockClear();
 
     const list = service.list();
     expect(list).toContain('feature-a');
     expect(list).toContain('feature-b');
+    expect(list).not.toContain('architecture');
 
     // BeadGateway should not be called in off mode
     expect(execSpy).not.toHaveBeenCalled();
