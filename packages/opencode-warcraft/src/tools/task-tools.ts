@@ -155,12 +155,22 @@ export class TaskTools {
           ? analyzeWorkflowRequest(buildTaskWorkflowAnalysisInput(name, description))
           : null;
 
+        const pendingManualTasks = !hasPlan
+          ? taskService
+              .list(feature)
+              .filter((task) => task.origin === 'manual' && task.status === 'pending')
+              .map((task) => task.folder)
+          : [];
+        const expansionRecommendation =
+          pendingManualTasks.length > 2 ? 'standard' : pendingManualTasks.length > 1 ? 'lightweight' : null;
+        const effectiveWorkflowRecommendation = expansionRecommendation ?? workflowAnalysis?.workflowPath;
+
         let instantWorkflowActivated = false;
         if (featureData && !hasPlan) {
           featureService.patchMetadata(feature, {
             workflowPath: 'instant',
-            ...(workflowAnalysis && workflowAnalysis.workflowPath !== 'instant'
-              ? { workflowRecommendation: workflowAnalysis.workflowPath }
+            ...(effectiveWorkflowRecommendation && effectiveWorkflowRecommendation !== 'instant'
+              ? { workflowRecommendation: effectiveWorkflowRecommendation }
               : {}),
           });
           if (featureData.status !== 'executing') {
@@ -169,34 +179,28 @@ export class TaskTools {
           instantWorkflowActivated = true;
         }
 
-        const pendingManualTasks = !hasPlan
-          ? taskService
-              .list(feature)
-              .filter((task) => task.origin === 'manual' && task.status === 'pending')
-              .map((task) => task.folder)
-          : [];
         const recommendationWarning =
-          workflowAnalysis?.workflowPath === 'lightweight'
-            ? '\nThis manual task looks a bit larger than the tiny instant path. Prefer warcraft_plan_write with Workflow Path: lightweight before dispatching it.'
-            : workflowAnalysis?.workflowPath === 'standard'
-              ? '\nThis manual task looks broad enough that the standard reviewed plan path is safer. Prefer warcraft_plan_write before dispatching it.'
-              : '';
-        const expansionWarning =
-          pendingManualTasks.length > 1
-            ? '\nThis feature now has multiple pending manual tasks and has likely outgrown the tiny-task path. Prefer warcraft_plan_write with Workflow Path: lightweight before dispatching more work.'
-            : '';
+          expansionRecommendation === 'standard'
+            ? '\nThis feature now has more than two pending manual tasks, so the lightweight path is no longer a good fit. Prefer the standard reviewed plan path with warcraft_plan_write before dispatching more work.'
+            : expansionRecommendation === 'lightweight'
+              ? '\nThis feature now has multiple pending manual tasks and has likely outgrown the tiny-task path. Prefer warcraft_plan_write with Workflow Path: lightweight before dispatching more work.'
+              : effectiveWorkflowRecommendation === 'lightweight'
+                ? '\nThis manual task looks a bit larger than the tiny instant path. Prefer warcraft_plan_write with Workflow Path: lightweight before dispatching it.'
+                : effectiveWorkflowRecommendation === 'standard'
+                  ? '\nThis manual task looks broad enough that the standard reviewed plan path is safer. Prefer warcraft_plan_write before dispatching it.'
+                  : '';
 
         return toolSuccess({
           feature,
           task: folder,
           workflowPath: instantWorkflowActivated ? 'instant' : featureData?.workflowPath ?? 'standard',
-          workflowRecommendation: workflowAnalysis?.workflowPath,
+          workflowRecommendation: effectiveWorkflowRecommendation,
           workflowRationale: workflowAnalysis?.rationale ?? [],
           pendingManualTasks,
           message:
             instantWorkflowActivated
-              ? `Manual task created: ${folder}\nInstant workflow activated for feature "${feature}" (no formal plan required for this small task). Include enough detail in the task description to make it self-contained, then call warcraft_worktree_create and issue the returned task() call.${recommendationWarning}${expansionWarning}`
-              : `Manual task created: ${folder}\nReminder: call warcraft_worktree_create to prepare the task workspace, then issue the returned task() call to start the worker in the assigned workspace.${recommendationWarning}${expansionWarning}`,
+              ? `Manual task created: ${folder}\nInstant workflow activated for feature "${feature}" (no formal plan required for this small task). Include enough detail in the task description to make it self-contained, then call warcraft_worktree_create and issue the returned task() call.${recommendationWarning}`
+              : `Manual task created: ${folder}\nReminder: call warcraft_worktree_create to prepare the task workspace, then issue the returned task() call to start the worker in the assigned workspace.${recommendationWarning}`,
         });
       },
     });

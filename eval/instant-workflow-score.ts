@@ -334,6 +334,52 @@ async function checkInstantWorkflowExpansionGuidance(): Promise<CheckResult> {
   };
 }
 
+async function checkInstantWorkflowEscalatesPastLightweightTaskLimit(): Promise<CheckResult> {
+  const ctx = createWorkspace();
+  ctx.featureService.create('quick-fix');
+  const createTask = ctx.taskTools.createTaskTool((name?: string) => name || 'quick-fix');
+  await createTask.execute({
+    feature: 'quick-fix',
+    name: 'Tighten prompt wording',
+    priority: 3,
+    description:
+      'Background: tiny wording fix. Impact: prompt text only. Safety: low risk. Verify: prompt tests. Rollback: revert.',
+  } as any);
+  await createTask.execute({
+    feature: 'quick-fix',
+    name: 'Refresh help text',
+    priority: 3,
+    description:
+      'Background: second tiny wording fix. Impact: prompt/help text only. Safety: low risk. Verify: prompt tests. Rollback: revert.',
+  } as any);
+  const thirdRaw = (await createTask.execute({
+    feature: 'quick-fix',
+    name: 'Polish status wording',
+    priority: 3,
+    description:
+      'Background: third tiny wording fix. Impact: another prompt/status text tweak. Safety: low risk. Verify: prompt tests. Rollback: revert.',
+  } as any)) as string;
+  const thirdParsed = parseToolResponse(thirdRaw);
+  const taskMessage = String(thirdParsed.data?.message || '');
+
+  const statusRaw = (await ctx.contextTools.getStatusTool((name?: string) => name || 'quick-fix').execute({
+    feature: 'quick-fix',
+  })) as string;
+  const statusParsed = parseToolResponse(statusRaw);
+  const nextAction = String(statusParsed.data?.nextAction || '');
+  const pass =
+    /more than two pending manual tasks/i.test(taskMessage) &&
+    /standard reviewed plan path/i.test(taskMessage) &&
+    /more than two pending tasks/i.test(nextAction) &&
+    /warcraft_plan_write/i.test(nextAction) &&
+    !/Workflow Path: lightweight/i.test(nextAction);
+  return {
+    id: 'instant-workflow-standard-escalation',
+    pass,
+    detail: pass ? `taskMessage=${taskMessage} | nextAction=${nextAction}` : `taskMessage=${taskMessage} | nextAction=${nextAction}`,
+  };
+}
+
 async function checkPromptsMentionInstantPath(): Promise<CheckResult> {
   const khadgar = buildKhadgarPrompt({ verificationModel: 'tdd' });
   const saurfang = buildSaurfangPrompt({ verificationModel: 'tdd' });
@@ -408,6 +454,7 @@ async function main() {
     checkStatusNextActionSupportsInstantPath(),
     checkStatusNextActionSupportsLightweightRecommendation(),
     checkInstantWorkflowExpansionGuidance(),
+    checkInstantWorkflowEscalatesPastLightweightTaskLimit(),
     checkPromptsMentionInstantPath(),
     checkBeadsModeManualBriefPersistence(),
   ]);

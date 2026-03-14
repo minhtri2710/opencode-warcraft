@@ -274,6 +274,40 @@ describe('ContextTools', () => {
       );
     });
 
+    it('suggests the standard path when instant work grows past the lightweight task-count limit', async () => {
+      const featureService = {
+        get: () => ({
+          name: 'test-feature',
+          status: 'executing',
+          workflowPath: 'instant',
+          ticket: null,
+          createdAt: '2025-01-01T00:00:00Z',
+        }),
+        list: () => ['test-feature'],
+      } as unknown as FeatureService;
+
+      const planService = {
+        read: () => null,
+      } as unknown as PlanService;
+
+      const taskService = {
+        list: () => [
+          { folder: '01-task', name: 'First tiny task', status: 'pending', origin: 'manual' },
+          { folder: '02-task', name: 'Second tiny task', status: 'pending', origin: 'manual' },
+          { folder: '03-task', name: 'Third tiny task', status: 'pending', origin: 'manual' },
+        ],
+        getRawStatus: () => null,
+        computeRunnableStatus: () => ({ runnable: ['01-task', '02-task', '03-task'], blocked: {} }),
+      } as unknown as TaskService;
+
+      const result = await getStatusHealth({ featureService, planService, taskService });
+
+      expect(result.success).toBe(true);
+      expect(result.data.nextAction).toBe(
+        'This instant workflow now has more than two pending tasks, so the lightweight path is no longer a good fit. Write or revise plan with warcraft_plan_write, then get approval before dispatching more work.',
+      );
+    });
+
     it('suggests a lightweight plan when the feature recommendation is lightweight and no plan exists yet', async () => {
       const featureService = {
         get: () => ({

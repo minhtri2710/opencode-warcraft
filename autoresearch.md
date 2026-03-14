@@ -55,6 +55,7 @@ The benchmark should reward real workflow improvements, not just prompt edits. I
 - escalation guidance when an instant workflow grows beyond a single tiny task and should fall back to a lightweight plan
 - creation-time warnings so `warcraft_task_create` nudges the user back toward a lightweight plan once a no-plan feature accumulates multiple pending manual tasks
 - direct-task scope analysis so non-tiny manual briefs can immediately recommend lightweight/standard planning before dispatch
+- fallback guidance that respects the lightweight path's own max-2-task constraint, escalating outgrown instant workflows to the standard path once they exceed that limit
 
 ## What's Been Tried
 - Added an initial behavior-oriented eval harness and baseline targeted tests.
@@ -62,4 +63,4 @@ The benchmark should reward real workflow improvements, not just prompt edits. I
 - Fixed the beads-mode/manual-task gap by preserving `brief` through the task-state artifact encode/decode path and adding explicit artifact schema coverage.
 - Added request analysis in `warcraft_feature_create` via `analyzeWorkflowRequest`, returning `recommendedWorkflowPath` + rationale for instant vs lightweight vs standard.
 - Persisted `workflowRecommendation` on the feature so `warcraft_status` can guide the user toward the right next action (e.g. lightweight plan) even before a plan or task exists.
-- Latest direction in progress: complement the multi-task expansion warning with direct-task scope analysis, so a single manual brief that no longer looks tiny can immediately recommend the lightweight/standard path in both `warcraft_task_create` and `warcraft_status` before dispatch.
+- Latest direction in progress: make the instant→plan fallback internally consistent with lightweight-plan constraints, so once manual-task buildup exceeds the lightweight max-2-task envelope the system escalates to the standard reviewed path instead of still recommending lightweight.

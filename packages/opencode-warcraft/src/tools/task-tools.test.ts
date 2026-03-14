@@ -387,8 +387,47 @@ describe('TaskTools', () => {
 
       expect(parsed.success).toBe(true);
       expect(parsed.data.pendingManualTasks).toEqual(['01-tiny-fix', '02-second-tiny-fix']);
+      expect(parsed.data.workflowRecommendation).toBe('lightweight');
       expect(parsed.data.message).toContain('multiple pending manual tasks');
       expect(parsed.data.message).toContain('Workflow Path: lightweight');
+    });
+
+    it('escalates to the standard path when more than two manual instant tasks pile up', async () => {
+      mockFeatureService.feature = {
+        ...mockFeatureService.feature,
+        status: 'planning',
+      };
+      mockPlanService.planResult = null;
+
+      const tool = taskTools.createTaskTool(resolveFeature);
+      await tool.execute({
+        name: 'Tiny Fix',
+        description: 'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
+        order: 1,
+        feature: undefined,
+        priority: 3,
+      });
+      await tool.execute({
+        name: 'Second Tiny Fix',
+        description: 'Background: second tiny change. Impact: help text only. Safety: low. Verify: prompt tests. Rollback: revert.',
+        order: 2,
+        feature: undefined,
+        priority: 3,
+      });
+      const raw = await tool.execute({
+        name: 'Third Tiny Fix',
+        description: 'Background: third tiny change. Impact: another small prompt tweak. Safety: low. Verify: prompt tests. Rollback: revert.',
+        order: 3,
+        feature: undefined,
+        priority: 3,
+      });
+      const parsed = JSON.parse(raw);
+
+      expect(parsed.success).toBe(true);
+      expect(parsed.data.pendingManualTasks).toEqual(['01-tiny-fix', '02-second-tiny-fix', '03-third-tiny-fix']);
+      expect(parsed.data.workflowRecommendation).toBe('standard');
+      expect(parsed.data.message).toContain('more than two pending manual tasks');
+      expect(parsed.data.message).toContain('standard reviewed plan path');
     });
   });
   describe('syncTasksTool', () => {

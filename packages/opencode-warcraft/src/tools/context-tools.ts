@@ -357,19 +357,17 @@ export class ContextTools {
       }
       const pendingCount = taskList.filter((t) => t.status === 'pending').length;
       if ((planStatus === 'instant' || planStatus === 'none' || !planStatus) && pendingCount > 0) {
+        if (workflowRecommendation === 'standard' || pendingCount > 2) {
+          return pendingCount > 2
+            ? 'This instant workflow now has more than two pending tasks, so the lightweight path is no longer a good fit. Write or revise plan with warcraft_plan_write, then get approval before dispatching more work.'
+            : 'This task looks broad enough for the standard reviewed path. Write or revise plan with warcraft_plan_write, then get approval before dispatching work.';
+        }
+        if ((workflowPath === 'instant' || workflowRecommendation === 'instant') && pendingCount > 1) {
+          return 'This instant workflow now has multiple pending tasks and has likely outgrown the tiny-task path. Write a short lightweight plan with warcraft_plan_write (include Workflow Path: lightweight), then approve it before dispatching more work.';
+        }
         if (workflowRecommendation === 'lightweight') {
           return 'This task no longer looks tiny enough for direct execution. Write a short lightweight plan with warcraft_plan_write (include Workflow Path: lightweight), then approve it before dispatching work.';
         }
-        if (workflowRecommendation === 'standard') {
-          return 'This task looks broad enough for the standard reviewed path. Write or revise plan with warcraft_plan_write, then get approval before dispatching work.';
-        }
-      }
-      if (
-        (workflowPath === 'instant' || workflowRecommendation === 'instant') &&
-        (planStatus === 'instant' || planStatus === 'none' || !planStatus) &&
-        pendingCount > 1
-      ) {
-        return 'This instant workflow now has multiple pending tasks and has likely outgrown the tiny-task path. Write a short lightweight plan with warcraft_plan_write (include Workflow Path: lightweight), then approve it before dispatching more work.';
       }
       if (runnableTasks.length > 1) {
         return `${runnableTasks.length} tasks are ready in parallel. Use warcraft_batch_execute preview/execute, then issue all returned task() calls in the same assistant message: ${runnableTasks.join(', ')}`;
