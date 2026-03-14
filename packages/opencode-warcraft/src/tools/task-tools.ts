@@ -221,6 +221,7 @@ export class TaskTools {
           workflowRationale: workflowAnalysis?.rationale ?? [],
           pendingManualTasks,
           planScaffold,
+          planWriteArgs: planScaffold ? { feature, content: planScaffold } : null,
           message:
             instantWorkflowActivated
               ? `Manual task created: ${folder}\nInstant workflow activated for feature "${feature}" (no formal plan required for this small task). Include enough detail in the task description to make it self-contained, then call warcraft_worktree_create and issue the returned task() call.${recommendationWarning}${scaffoldHint}`

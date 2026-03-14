@@ -1,1 +1,1 @@
-- If response-level `planScaffold` guidance still feels too manual, add an actual `warcraft_task_expand` helper that can take one or more rich manual briefs and write a reviewed plan scaffold / bead-style subtasks automatically instead of only suggesting the scaffold.
+- If `planScaffold` + ready-to-use `warcraft_plan_write` args still feel too manual, add an actual `warcraft_task_expand` helper that can take one or more rich manual briefs and write the reviewed plan scaffold / bead-style subtasks automatically instead of only returning the draft content.

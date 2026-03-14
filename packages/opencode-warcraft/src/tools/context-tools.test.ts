@@ -97,6 +97,7 @@ async function getStatusHealth(overrides: Partial<Record<string, unknown>> = {})
       hint: string;
     }> | null;
     planScaffold: string | null;
+    planWriteArgs: { feature: string; content: string } | null;
     nextAction: string;
   };
 }> {
@@ -160,7 +161,7 @@ describe('ContextTools', () => {
       expect(result.data.health.blockedMttrMs).toBeNull();
     });
 
-    it('health is sibling of feature, plan, tasks, context, worktreeHygiene, nextAction', async () => {
+    it('health is sibling of feature, plan, tasks, context, worktreeHygiene, planScaffold, planWriteArgs, nextAction', async () => {
       const result = await getStatusHealth();
 
       expect(result.success).toBe(true);
@@ -170,6 +171,8 @@ describe('ContextTools', () => {
       expect(dataKeys).toContain('tasks');
       expect(dataKeys).toContain('context');
       expect(dataKeys).toContain('worktreeHygiene');
+      expect(dataKeys).toContain('planScaffold');
+      expect(dataKeys).toContain('planWriteArgs');
       expect(dataKeys).toContain('nextAction');
       expect(dataKeys).toContain('health');
     });
@@ -273,6 +276,7 @@ describe('ContextTools', () => {
       expect(result.data.planScaffold).toContain('Workflow Path: lightweight');
       expect(result.data.planScaffold).toContain('### 1. First tiny task');
       expect(result.data.planScaffold).toContain('### 2. Second tiny task');
+      expect(result.data.planWriteArgs).toEqual({ feature: 'test-feature', content: result.data.planScaffold });
       expect(result.data.nextAction).toBe(
         'This instant workflow now has multiple pending tasks and has likely outgrown the tiny-task path. Write a short lightweight plan with warcraft_plan_write (include Workflow Path: lightweight), then approve it before dispatching more work.',
       );
@@ -310,6 +314,7 @@ describe('ContextTools', () => {
       expect(result.data.planScaffold).toContain('# test-feature');
       expect(result.data.planScaffold).not.toContain('Workflow Path: lightweight');
       expect(result.data.planScaffold).toContain('### 3. Third tiny task');
+      expect(result.data.planWriteArgs).toEqual({ feature: 'test-feature', content: result.data.planScaffold });
       expect(result.data.nextAction).toBe(
         'This instant workflow now has more than two pending tasks, so the lightweight path is no longer a good fit. Write or revise plan with warcraft_plan_write, then get approval before dispatching more work.',
       );
@@ -367,6 +372,7 @@ describe('ContextTools', () => {
       expect(result.success).toBe(true);
       expect(result.data.planScaffold).toContain('Workflow Path: lightweight');
       expect(result.data.planScaffold).toContain('### 1. Refresh docs wording');
+      expect(result.data.planWriteArgs).toEqual({ feature: 'test-feature', content: result.data.planScaffold });
       expect(result.data.nextAction).toBe(
         'This task no longer looks tiny enough for direct execution. Write a short lightweight plan with warcraft_plan_write (include Workflow Path: lightweight), then approve it before dispatching work.',
       );

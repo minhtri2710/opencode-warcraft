@@ -233,6 +233,28 @@ async function checkManualTaskReturnsPlanScaffoldWhenItNeedsReview(): Promise<Ch
   };
 }
 
+async function checkManualTaskReturnsPlanWriteArgsWhenItNeedsReview(): Promise<CheckResult> {
+  const ctx = createWorkspace();
+  ctx.featureService.create('doc-tune');
+  const raw = (await ctx.taskTools.createTaskTool((name?: string) => name || 'doc-tune').execute({
+    feature: 'doc-tune',
+    name: 'Refresh docs wording',
+    priority: 3,
+    description:
+      'Background: update the README and docs wording for the instant workflow path. Impact: README plus docs text. Safety: keep behavior unchanged. Verify: docs tests or snapshots still pass. Rollback: revert.',
+  } as any)) as string;
+  const parsed = parseToolResponse(raw);
+  const pass =
+    parsed.data?.planWriteArgs?.feature === 'doc-tune' && parsed.data?.planWriteArgs?.content === parsed.data?.planScaffold;
+  return {
+    id: 'manual-task-plan-write-args',
+    pass,
+    detail: pass
+      ? 'manual task creation returns ready-to-use warcraft_plan_write args alongside the scaffold'
+      : `planWriteArgs=${JSON.stringify(parsed.data?.planWriteArgs ?? null)}`,
+  };
+}
+
 async function checkManualTaskSpecIsSelfContained(): Promise<CheckResult> {
   const ctx = createWorkspace();
   ctx.featureService.create('quick-fix');
@@ -439,6 +461,48 @@ async function checkStatusReturnsPlanScaffoldForEscalatedInstantWork(): Promise<
   };
 }
 
+async function checkStatusReturnsPlanWriteArgsForEscalatedInstantWork(): Promise<CheckResult> {
+  const ctx = createWorkspace();
+  ctx.featureService.create('quick-fix');
+  const createTask = ctx.taskTools.createTaskTool((name?: string) => name || 'quick-fix');
+  await createTask.execute({
+    feature: 'quick-fix',
+    name: 'Tighten prompt wording',
+    priority: 3,
+    description:
+      'Background: tiny wording fix. Impact: prompt text only. Safety: low risk. Verify: prompt tests. Rollback: revert.',
+  } as any);
+  await createTask.execute({
+    feature: 'quick-fix',
+    name: 'Refresh help text',
+    priority: 3,
+    description:
+      'Background: second tiny wording fix. Impact: prompt/help text only. Safety: low risk. Verify: prompt tests. Rollback: revert.',
+  } as any);
+  await createTask.execute({
+    feature: 'quick-fix',
+    name: 'Polish status wording',
+    priority: 3,
+    description:
+      'Background: third tiny wording fix. Impact: another prompt/status text tweak. Safety: low risk. Verify: prompt tests. Rollback: revert.',
+  } as any);
+
+  const statusRaw = (await ctx.contextTools.getStatusTool((name?: string) => name || 'quick-fix').execute({
+    feature: 'quick-fix',
+  })) as string;
+  const statusParsed = parseToolResponse(statusRaw);
+  const pass =
+    statusParsed.data?.planWriteArgs?.feature === 'quick-fix' &&
+    statusParsed.data?.planWriteArgs?.content === statusParsed.data?.planScaffold;
+  return {
+    id: 'status-plan-write-args',
+    pass,
+    detail: pass
+      ? 'status returns ready-to-use warcraft_plan_write args alongside the scaffold'
+      : `planWriteArgs=${JSON.stringify(statusParsed.data?.planWriteArgs ?? null)}`,
+  };
+}
+
 async function checkPromptsMentionInstantPath(): Promise<CheckResult> {
   const khadgar = buildKhadgarPrompt({ verificationModel: 'tdd' });
   const saurfang = buildSaurfangPrompt({ verificationModel: 'tdd' });
@@ -510,12 +574,14 @@ async function main() {
     checkManualTaskWarnsWhenInstantWorkflowOutgrowsTinyPath(),
     checkManualTaskCreatesLightweightRecommendationForNonTinyBrief(),
     checkManualTaskReturnsPlanScaffoldWhenItNeedsReview(),
+    checkManualTaskReturnsPlanWriteArgsWhenItNeedsReview(),
     checkManualTaskSpecIsSelfContained(),
     checkStatusNextActionSupportsInstantPath(),
     checkStatusNextActionSupportsLightweightRecommendation(),
     checkInstantWorkflowExpansionGuidance(),
     checkInstantWorkflowEscalatesPastLightweightTaskLimit(),
     checkStatusReturnsPlanScaffoldForEscalatedInstantWork(),
+    checkStatusReturnsPlanWriteArgsForEscalatedInstantWork(),
     checkPromptsMentionInstantPath(),
     checkBeadsModeManualBriefPersistence(),
   ]);

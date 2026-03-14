@@ -93,6 +93,7 @@ interface StatusResponseData {
     blockedMttrMs: number | null;
   };
   planScaffold: string | null;
+  planWriteArgs: { feature: string; content: string } | null;
   nextAction: string;
 }
 
@@ -504,6 +505,7 @@ export class ContextTools {
         blockedMttrMs: trustMetrics.blockedMttrMs,
       },
       planScaffold,
+      planWriteArgs: planScaffold ? { feature: featureName, content: planScaffold } : null,
       nextAction: getNextAction(planStatus, tasksSummary, runnable, workflowPath, workflowRecommendation),
     };
   }
