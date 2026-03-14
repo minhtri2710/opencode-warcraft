@@ -62,6 +62,7 @@ bun test \
   ./eval/discard-task-existence-check.audit.test.ts \
   ./eval/worktree-response-dead-code.audit.test.ts \
   ./eval/worker-prompt-tool-completeness.audit.test.ts \
+  ./eval/batch-execute-nondispatchable-status.audit.test.ts \
   ./eval/mcp-esm-extensions.audit.test.ts \
   ./eval/quickstart-merge-description.audit.test.ts \
   ./eval/readme-skill-table-accuracy.audit.test.ts \

@@ -228,6 +228,18 @@ export class BatchTools {
             notRunnable.push(`${task} (already being dispatched)`);
             continue;
           }
+          if (taskInfo.status === 'failed') {
+            notRunnable.push(`${task} (failed — reset to pending with warcraft_task_update first)`);
+            continue;
+          }
+          if (taskInfo.status === 'partial') {
+            notRunnable.push(`${task} (partial — reset to pending with warcraft_task_update first)`);
+            continue;
+          }
+          if (taskInfo.status === 'cancelled') {
+            notRunnable.push(`${task} (cancelled — reset to pending with warcraft_task_update first)`);
+            continue;
+          }
           const depCheck = checkDependencies(feature, task);
           if (!depCheck.allowed) {
             notRunnable.push(`${task} (${depCheck.error || 'dependencies not met'})`);
