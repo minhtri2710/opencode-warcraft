@@ -85,6 +85,7 @@ bun test \
   ./eval/task-preparedat-central-stamp.audit.test.ts \
   ./eval/artifact-schema-preparedat.audit.test.ts \
   ./eval/bead-decoder-status-mapping.audit.test.ts \
+  ./eval/feature-patchmetadata-status-bypass.audit.test.ts \
   packages/opencode-warcraft/src/index.test.ts \
   >"$TMP_OUTPUT" 2>&1
 STATUS=$?
