@@ -241,6 +241,39 @@ describe('ContextTools', () => {
       );
     });
 
+    it('suggests expanding to a lightweight plan when instant work grows into multiple pending tasks', async () => {
+      const featureService = {
+        get: () => ({
+          name: 'test-feature',
+          status: 'executing',
+          workflowPath: 'instant',
+          ticket: null,
+          createdAt: '2025-01-01T00:00:00Z',
+        }),
+        list: () => ['test-feature'],
+      } as unknown as FeatureService;
+
+      const planService = {
+        read: () => null,
+      } as unknown as PlanService;
+
+      const taskService = {
+        list: () => [
+          { folder: '01-task', name: 'First tiny task', status: 'pending', origin: 'manual' },
+          { folder: '02-task', name: 'Second tiny task', status: 'pending', origin: 'manual' },
+        ],
+        getRawStatus: () => null,
+        computeRunnableStatus: () => ({ runnable: ['01-task', '02-task'], blocked: {} }),
+      } as unknown as TaskService;
+
+      const result = await getStatusHealth({ featureService, planService, taskService });
+
+      expect(result.success).toBe(true);
+      expect(result.data.nextAction).toBe(
+        'This instant workflow now has multiple pending tasks and has likely outgrown the tiny-task path. Write a short lightweight plan with warcraft_plan_write (include Workflow Path: lightweight), then approve it before dispatching more work.',
+      );
+    });
+
     it('suggests a lightweight plan when the feature recommendation is lightweight and no plan exists yet', async () => {
       const featureService = {
         get: () => ({

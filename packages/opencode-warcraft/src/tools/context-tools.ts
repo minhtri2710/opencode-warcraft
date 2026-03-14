@@ -355,6 +355,14 @@ export class ContextTools {
       if (inProgress) {
         return `Continue work on task: ${inProgress.folder}`;
       }
+      const pendingCount = taskList.filter((t) => t.status === 'pending').length;
+      if (
+        (workflowPath === 'instant' || workflowRecommendation === 'instant') &&
+        (planStatus === 'instant' || planStatus === 'none' || !planStatus) &&
+        pendingCount > 1
+      ) {
+        return 'This instant workflow now has multiple pending tasks and has likely outgrown the tiny-task path. Write a short lightweight plan with warcraft_plan_write (include Workflow Path: lightweight), then approve it before dispatching more work.';
+      }
       if (runnableTasks.length > 1) {
         return `${runnableTasks.length} tasks are ready in parallel. Use warcraft_batch_execute preview/execute, then issue all returned task() calls in the same assistant message: ${runnableTasks.join(', ')}`;
       }

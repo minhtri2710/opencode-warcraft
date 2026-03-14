@@ -1,1 +1,1 @@
-- Add an optional `warcraft_task_expand` / plan-to-beads helper that can take a dense markdown brief and fan it into richer bead-style subtasks when a task stops being "instant" mid-flight.
+- If the new status-based instant→lightweight escalation still feels too manual, add an actual `warcraft_task_expand` helper that can convert one or more rich manual briefs into a lightweight plan scaffold and bead-style subtasks.

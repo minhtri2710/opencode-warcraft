@@ -252,6 +252,38 @@ async function checkStatusNextActionSupportsLightweightRecommendation(): Promise
   };
 }
 
+async function checkInstantWorkflowExpansionGuidance(): Promise<CheckResult> {
+  const ctx = createWorkspace();
+  ctx.featureService.create('quick-fix');
+  const createTask = ctx.taskTools.createTaskTool((name?: string) => name || 'quick-fix');
+  await createTask.execute({
+    feature: 'quick-fix',
+    name: 'Tighten prompt wording',
+    priority: 3,
+    description:
+      'Background: tiny wording fix. Impact: prompt text only. Safety: low risk. Verify: prompt tests. Rollback: revert.',
+  } as any);
+  await createTask.execute({
+    feature: 'quick-fix',
+    name: 'Refresh help text',
+    priority: 3,
+    description:
+      'Background: second tiny wording fix. Impact: prompt/help text only. Safety: low risk. Verify: prompt tests. Rollback: revert.',
+  } as any);
+
+  const raw = (await ctx.contextTools.getStatusTool((name?: string) => name || 'quick-fix').execute({
+    feature: 'quick-fix',
+  })) as string;
+  const parsed = parseToolResponse(raw);
+  const nextAction = String(parsed.data?.nextAction || '');
+  const pass = /outgrown/i.test(nextAction) && /lightweight/i.test(nextAction) && /warcraft_plan_write/i.test(nextAction);
+  return {
+    id: 'instant-workflow-expansion-guidance',
+    pass,
+    detail: pass ? `nextAction=${nextAction}` : `nextAction did not steer expansion: ${nextAction}`,
+  };
+}
+
 async function checkPromptsMentionInstantPath(): Promise<CheckResult> {
   const khadgar = buildKhadgarPrompt({ verificationModel: 'tdd' });
   const saurfang = buildSaurfangPrompt({ verificationModel: 'tdd' });
@@ -323,6 +355,7 @@ async function main() {
     checkManualTaskSpecIsSelfContained(),
     checkStatusNextActionSupportsInstantPath(),
     checkStatusNextActionSupportsLightweightRecommendation(),
+    checkInstantWorkflowExpansionGuidance(),
     checkPromptsMentionInstantPath(),
     checkBeadsModeManualBriefPersistence(),
   ]);
