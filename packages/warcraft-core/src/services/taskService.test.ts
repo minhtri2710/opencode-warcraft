@@ -3468,7 +3468,8 @@ Second task description.
         origin: 'plan',
         planTitle: 'Second Tiny Fix',
         folder: '02-second-tiny-fix',
-        brief: 'Background: second tiny fix. Impact: help text only. Safety: low. Verify: prompt tests. Rollback: revert.',
+        brief:
+          'Background: second tiny fix. Impact: help text only. Safety: low. Verify: prompt tests. Rollback: revert.',
         dependsOn: ['01-tiny-fix'],
       });
     });

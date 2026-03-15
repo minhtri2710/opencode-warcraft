@@ -13,7 +13,9 @@ describe('analyzeWorkflowRequest', () => {
   });
 
   it('classifies broader but still small work as lightweight', () => {
-    const result = analyzeWorkflowRequest('Add a small status section to the README and docs so users can see the instant workflow path.');
+    const result = analyzeWorkflowRequest(
+      'Add a small status section to the README and docs so users can see the instant workflow path.',
+    );
     expect(result.workflowPath).toBe('lightweight');
   });
 

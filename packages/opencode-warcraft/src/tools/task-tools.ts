@@ -11,7 +11,11 @@ import {
 } from 'warcraft-core';
 import { toolError, toolSuccess } from '../types.js';
 import { appendTasksToPlanScaffold, buildPlanScaffold } from './manual-plan-scaffold.js';
-import { buildApprovedPlanSyncFlow, buildDraftPlanPromotionFlow, buildPendingManualPromotionFlow } from './promotion-flow.js';
+import {
+  buildApprovedPlanSyncFlow,
+  buildDraftPlanPromotionFlow,
+  buildPendingManualPromotionFlow,
+} from './promotion-flow.js';
 import { resolveFeatureInput, validateTaskInput } from './tool-input.js';
 
 export interface TaskToolsDependencies {
@@ -94,13 +98,18 @@ export class TaskTools {
                   taskExpandArgs,
                   planApproveArgs: { feature },
                   taskSyncArgs: { feature, mode: 'sync' as const },
-                  promotionFlow: buildPendingManualPromotionFlow(taskExpandArgs, { feature }, { feature, mode: 'sync' }),
+                  promotionFlow: buildPendingManualPromotionFlow(
+                    taskExpandArgs,
+                    { feature },
+                    { feature, mode: 'sync' },
+                  ),
                 },
                 warnings: [
                   {
                     type: 'plan_missing_for_sync',
                     severity: 'error',
-                    message: 'Tasks can only be synced after pending manual work has been promoted into a reviewed plan.',
+                    message:
+                      'Tasks can only be synced after pending manual work has been promoted into a reviewed plan.',
                     count: pendingManualTasks.length,
                   },
                 ],
@@ -241,9 +250,10 @@ export class TaskTools {
 
         const featureData = featureService.get(feature);
         const hasPlan = planService.read(feature) !== null;
-        const workflowAnalysis = !hasPlan && description?.trim()
-          ? analyzeWorkflowRequest(buildTaskWorkflowAnalysisInput(name, description))
-          : null;
+        const workflowAnalysis =
+          !hasPlan && description?.trim()
+            ? analyzeWorkflowRequest(buildTaskWorkflowAnalysisInput(name, description))
+            : null;
 
         const pendingManualTasks = !hasPlan
           ? taskService
@@ -289,7 +299,9 @@ export class TaskTools {
               })
           : [];
         const planScaffold =
-          planScaffoldMode && planScaffoldTasks.length > 0 ? buildPlanScaffold(feature, planScaffoldMode, planScaffoldTasks) : null;
+          planScaffoldMode && planScaffoldTasks.length > 0
+            ? buildPlanScaffold(feature, planScaffoldMode, planScaffoldTasks)
+            : null;
         const taskExpandArgs =
           planScaffoldMode && pendingManualTasks.length > 0
             ? { feature, tasks: pendingManualTasks, mode: planScaffoldMode }
@@ -314,7 +326,7 @@ export class TaskTools {
         return toolSuccess({
           feature,
           task: folder,
-          workflowPath: instantWorkflowActivated ? 'instant' : featureData?.workflowPath ?? 'standard',
+          workflowPath: instantWorkflowActivated ? 'instant' : (featureData?.workflowPath ?? 'standard'),
           workflowRecommendation: effectiveWorkflowRecommendation,
           workflowRationale: workflowAnalysis?.rationale ?? [],
           pendingManualTasks,
@@ -322,10 +334,9 @@ export class TaskTools {
           planWriteArgs: planScaffold ? { feature, content: planScaffold } : null,
           taskExpandArgs,
           promotionFlow,
-          message:
-            instantWorkflowActivated
-              ? `Manual task created: ${folder}\nInstant workflow activated for feature "${feature}" (no formal plan required for this small task). Include enough detail in the task description to make it self-contained, then call warcraft_worktree_create and issue the returned task() call.${recommendationWarning}${scaffoldHint}`
-              : `Manual task created: ${folder}\nReminder: call warcraft_worktree_create to prepare the task workspace, then issue the returned task() call to start the worker in the assigned workspace.${recommendationWarning}${scaffoldHint}`,
+          message: instantWorkflowActivated
+            ? `Manual task created: ${folder}\nInstant workflow activated for feature "${feature}" (no formal plan required for this small task). Include enough detail in the task description to make it self-contained, then call warcraft_worktree_create and issue the returned task() call.${recommendationWarning}${scaffoldHint}`
+            : `Manual task created: ${folder}\nReminder: call warcraft_worktree_create to prepare the task workspace, then issue the returned task() call to start the worker in the assigned workspace.${recommendationWarning}${scaffoldHint}`,
         });
       },
     });
@@ -475,7 +486,7 @@ export class TaskTools {
                   {
                     type: 'manual_task_selection_invalid',
                     severity: 'error',
-                    message: 'The requested manual task selection does not match the feature\'s pending manual tasks.',
+                    message: "The requested manual task selection does not match the feature's pending manual tasks.",
                     affected: taskFolder,
                     count: 1,
                   },
@@ -496,8 +507,8 @@ export class TaskTools {
         const existingWorkflowPath = existingPlan ? detectWorkflowPath(existingPlan.content) : null;
         const planScaffoldMode =
           selectedMode ??
-          (existingWorkflowPath ??
-            (featureData?.workflowRecommendation === 'standard' || selectedTasks.length > 2 ? 'standard' : 'lightweight'));
+          existingWorkflowPath ??
+          (featureData?.workflowRecommendation === 'standard' || selectedTasks.length > 2 ? 'standard' : 'lightweight');
         const planScaffold = existingPlan
           ? appendTasksToPlanScaffold(existingPlan.content, selectedTasks)
           : buildPlanScaffold(feature, planScaffoldMode, selectedTasks);
@@ -529,7 +540,8 @@ export class TaskTools {
                   {
                     type: 'draft_plan_tasks_section_missing',
                     severity: 'error',
-                    message: 'The existing draft plan is missing a `## Tasks` section, so pending manual tasks cannot be merged into it.',
+                    message:
+                      'The existing draft plan is missing a `## Tasks` section, so pending manual tasks cannot be merged into it.',
                     count: selectedTasks.length,
                   },
                 ],
@@ -563,7 +575,8 @@ export class TaskTools {
                   {
                     type: 'draft_plan_discovery_section_invalid',
                     severity: 'error',
-                    message: 'The existing draft plan is missing required discovery details, so merged manual work cannot be finalized yet.',
+                    message:
+                      'The existing draft plan is missing required discovery details, so merged manual work cannot be finalized yet.',
                     count: selectedTasks.length,
                   },
                 ],
@@ -577,7 +590,11 @@ export class TaskTools {
         if (resultingWorkflowPath === 'lightweight') {
           const lightweightIssues = validateLightweightPlan(planScaffold);
           if (lightweightIssues.length > 0) {
-            const retryTaskExpandArgs = { feature, tasks: selectedTasks.map((task) => task.folder), mode: 'standard' as const };
+            const retryTaskExpandArgs = {
+              feature,
+              tasks: selectedTasks.map((task) => task.folder),
+              mode: 'standard' as const,
+            };
             return toolError(
               `Cannot expand to a lightweight plan:\n${lightweightIssues.map((issue) => `- ${issue}`).join('\n')}`,
               [
@@ -608,7 +625,11 @@ export class TaskTools {
         const remainingManualTasks = preview.manual;
         const taskExpandArgs: { feature: string; tasks: string[]; mode: 'lightweight' | 'standard' } | null =
           remainingManualTasks.length > 0
-            ? { feature, tasks: remainingManualTasks, mode: resultingWorkflowPath === 'standard' ? 'standard' : 'lightweight' }
+            ? {
+                feature,
+                tasks: remainingManualTasks,
+                mode: resultingWorkflowPath === 'standard' ? 'standard' : 'lightweight',
+              }
             : null;
         const planApproveArgs = remainingManualTasks.length === 0 ? { feature } : null;
         const taskSyncArgs = remainingManualTasks.length === 0 ? { feature, mode: 'sync' as const } : null;

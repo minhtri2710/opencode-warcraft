@@ -444,7 +444,10 @@ export class ContextTools {
       }
     })();
     const pendingManualTasks =
-      (!plan && (workflowPath === 'instant' || workflowRecommendation === 'lightweight' || workflowRecommendation === 'standard')) ||
+      (!plan &&
+        (workflowPath === 'instant' ||
+          workflowRecommendation === 'lightweight' ||
+          workflowRecommendation === 'standard')) ||
       (planStatus === 'draft' && draftPreviewManualTasks.length > 0)
         ? tasks
             .filter(
@@ -477,14 +480,20 @@ export class ContextTools {
         ? buildPlanScaffold(featureName, planScaffoldMode, pendingManualTasks)
         : null;
     const planWriteArgs = planScaffold ? { feature: featureName, content: planScaffold } : null;
-    const planApproveArgs = plan && planStatus === 'draft' && pendingManualTasks.length === 0 ? { feature: featureName } : null;
-    const taskSyncArgs = plan && planStatus === 'approved' && tasks.length === 0 ? { feature: featureName, mode: 'sync' as const } : null;
+    const planApproveArgs =
+      plan && planStatus === 'draft' && pendingManualTasks.length === 0 ? { feature: featureName } : null;
+    const taskSyncArgs =
+      plan && planStatus === 'approved' && tasks.length === 0 ? { feature: featureName, mode: 'sync' as const } : null;
     const taskExpandArgs =
       planScaffoldMode && pendingManualTasks.length > 0
         ? { feature: featureName, tasks: pendingManualTasks.map((task) => task.folder), mode: planScaffoldMode }
         : null;
     const promotionFlow = taskExpandArgs
-      ? buildPendingManualPromotionFlow(taskExpandArgs, { feature: featureName }, { feature: featureName, mode: 'sync' })
+      ? buildPendingManualPromotionFlow(
+          taskExpandArgs,
+          { feature: featureName },
+          { feature: featureName, mode: 'sync' },
+        )
       : planApproveArgs
         ? buildDraftPlanPromotionFlow(planApproveArgs, { feature: featureName, mode: 'sync' })
         : taskSyncArgs

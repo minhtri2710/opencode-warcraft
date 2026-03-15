@@ -288,10 +288,12 @@ export class TaskService {
 
       const exactMatch = existingTasks.find(
         (existing) =>
-          this.isEligiblePlanMatch(existing, matchedExistingFolders, supportsReconciliation) && existing.folder === planTask.folder,
+          this.isEligiblePlanMatch(existing, matchedExistingFolders, supportsReconciliation) &&
+          existing.folder === planTask.folder,
       );
       const titleMatch =
-        exactMatch ?? this.findTitleMatchCandidate(planTask, existingTasks, matchedExistingFolders, supportsReconciliation);
+        exactMatch ??
+        this.findTitleMatchCandidate(planTask, existingTasks, matchedExistingFolders, supportsReconciliation);
 
       if (!titleMatch) {
         created.push(planTask.folder);
@@ -414,7 +416,8 @@ export class TaskService {
   ): TaskInfo | null {
     const matches = existingTasks.filter(
       (existing) =>
-        this.isEligiblePlanMatch(existing, matchedExistingFolders, supportsReconciliation) && existing.planTitle === planTask.name,
+        this.isEligiblePlanMatch(existing, matchedExistingFolders, supportsReconciliation) &&
+        existing.planTitle === planTask.name,
     );
 
     return matches.length === 1 ? matches[0] : null;

@@ -23,7 +23,9 @@ describe('PlanTools', () => {
   it('requires explicit content unless useScaffold is enabled', async () => {
     const planService = new MockPlanService();
     const tool = new PlanTools({
-      featureService: { get: () => ({ name: 'test-feature', workflowRecommendation: 'lightweight' }) } as unknown as FeatureService,
+      featureService: {
+        get: () => ({ name: 'test-feature', workflowRecommendation: 'lightweight' }),
+      } as unknown as FeatureService,
       planService: planService as unknown as PlanService,
       taskService: { list: () => [] } as unknown as TaskService,
       captureSession: () => {},
@@ -42,10 +44,14 @@ describe('PlanTools', () => {
   it('returns structured scaffold retry metadata when manual tasks already exist but content is omitted', async () => {
     const planService = new MockPlanService();
     const tool = new PlanTools({
-      featureService: { get: () => ({ name: 'test-feature', workflowRecommendation: 'lightweight' }) } as unknown as FeatureService,
+      featureService: {
+        get: () => ({ name: 'test-feature', workflowRecommendation: 'lightweight' }),
+      } as unknown as FeatureService,
       planService: planService as unknown as PlanService,
       taskService: {
-        list: () => [{ folder: '01-refresh-docs-wording', name: 'refresh-docs-wording', status: 'pending', origin: 'manual' }],
+        list: () => [
+          { folder: '01-refresh-docs-wording', name: 'refresh-docs-wording', status: 'pending', origin: 'manual' },
+        ],
         getRawStatus: () => ({
           planTitle: 'Refresh docs wording',
           brief:
@@ -85,10 +91,14 @@ describe('PlanTools', () => {
   it('returns structured plan-read recovery metadata when manual tasks exist but no plan has been written yet', async () => {
     const planService = new MockPlanService();
     const tool = new PlanTools({
-      featureService: { get: () => ({ name: 'test-feature', workflowRecommendation: 'lightweight' }) } as unknown as FeatureService,
+      featureService: {
+        get: () => ({ name: 'test-feature', workflowRecommendation: 'lightweight' }),
+      } as unknown as FeatureService,
       planService: planService as unknown as PlanService,
       taskService: {
-        list: () => [{ folder: '01-refresh-docs-wording', name: 'refresh-docs-wording', status: 'pending', origin: 'manual' }],
+        list: () => [
+          { folder: '01-refresh-docs-wording', name: 'refresh-docs-wording', status: 'pending', origin: 'manual' },
+        ],
       } as unknown as TaskService,
       captureSession: () => {},
       updateFeatureMetadata: () => {},
@@ -122,7 +132,9 @@ describe('PlanTools', () => {
   it('returns structured discovery recovery metadata when plan content fails validation', async () => {
     const planService = new MockPlanService();
     const tool = new PlanTools({
-      featureService: { get: () => ({ name: 'test-feature', workflowRecommendation: 'lightweight' }) } as unknown as FeatureService,
+      featureService: {
+        get: () => ({ name: 'test-feature', workflowRecommendation: 'lightweight' }),
+      } as unknown as FeatureService,
       planService: planService as unknown as PlanService,
       taskService: { list: () => [] } as unknown as TaskService,
       captureSession: () => {},
@@ -164,7 +176,10 @@ describe('PlanTools', () => {
       } as unknown as FeatureService,
       planService: {
         ...planService,
-        read: () => ({ content: '# test-feature\n\nWorkflow Path: lightweight\n\n## Tasks\n\n### 1. Existing Task', status: 'planning' }),
+        read: () => ({
+          content: '# test-feature\n\nWorkflow Path: lightweight\n\n## Tasks\n\n### 1. Existing Task',
+          status: 'planning',
+        }),
       } as unknown as PlanService,
       taskService: {
         list: () => [],
@@ -223,7 +238,10 @@ describe('PlanTools', () => {
       } as unknown as FeatureService,
       planService: {
         ...planService,
-        read: () => ({ content: '# test-feature\n\nWorkflow Path: lightweight\n\n## Tasks\n\n### 1. Existing Task', status: 'approved' }),
+        read: () => ({
+          content: '# test-feature\n\nWorkflow Path: lightweight\n\n## Tasks\n\n### 1. Existing Task',
+          status: 'approved',
+        }),
       } as unknown as PlanService,
       taskService: {
         list: () => [],
@@ -272,7 +290,9 @@ describe('PlanTools', () => {
       } as unknown as FeatureService,
       planService: planService as unknown as PlanService,
       taskService: {
-        list: () => [{ folder: '01-refresh-docs-wording', name: 'refresh-docs-wording', status: 'pending', origin: 'manual' }],
+        list: () => [
+          { folder: '01-refresh-docs-wording', name: 'refresh-docs-wording', status: 'pending', origin: 'manual' },
+        ],
         getRawStatus: () => ({
           planTitle: 'Refresh docs wording',
           brief:
@@ -378,7 +398,8 @@ describe('PlanTools', () => {
     const raw = await tool.execute(
       {
         feature: 'test-feature',
-        content: '# test-feature\n\nWorkflow Path: lightweight\n\n## Discovery\n\nImpact: docs\nSafety: low\nVerify: tests\nRollback: revert\n\n## Non-Goals\n\n- Keep scope tight.\n\n## Ghost Diffs\n\n- Skip alternatives for now.\n\n## Tasks\n\n### 1. Existing Task\n\n**Depends on**: none\n\n**What to do**:\n- Keep existing behavior.\n\n**References**:\n- Existing context.\n\n**Verify**:\n- [ ] Run tests\n',
+        content:
+          '# test-feature\n\nWorkflow Path: lightweight\n\n## Discovery\n\nImpact: docs\nSafety: low\nVerify: tests\nRollback: revert\n\n## Non-Goals\n\n- Keep scope tight.\n\n## Ghost Diffs\n\n- Skip alternatives for now.\n\n## Tasks\n\n### 1. Existing Task\n\n**Depends on**: none\n\n**What to do**:\n- Keep existing behavior.\n\n**References**:\n- Existing context.\n\n**Verify**:\n- [ ] Run tests\n',
       } as any,
       {} as any,
     );
@@ -475,7 +496,10 @@ describe('PlanTools', () => {
     const tool = new PlanTools({
       featureService: {} as unknown as FeatureService,
       planService: {
-        read: () => ({ content: '# test-feature\n\n## Plan Review Checklist\n- [ ] Discovery is complete and current', status: 'planning' }),
+        read: () => ({
+          content: '# test-feature\n\n## Plan Review Checklist\n- [ ] Discovery is complete and current',
+          status: 'planning',
+        }),
         approve: (feature: string) => {
           approveCalls.push(feature);
           return { severity: 'ok', diagnostics: [] };

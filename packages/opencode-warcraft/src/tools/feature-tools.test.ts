@@ -227,7 +227,8 @@ describe('FeatureTools', () => {
       const tool = featureTools.createFeatureTool();
       const raw = await tool.execute({
         name: 'test-feature',
-        request: 'Design a new workflow across packages, add a new tool, update beads integration, and refactor orchestration prompts.',
+        request:
+          'Design a new workflow across packages, add a new tool, update beads integration, and refactor orchestration prompts.',
         ticket: undefined,
         priority: 3,
       });

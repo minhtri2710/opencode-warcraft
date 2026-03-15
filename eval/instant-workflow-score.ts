@@ -2,6 +2,13 @@
 import { mkdtempSync, readFileSync, rmSync } from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+import { buildKhadgarPrompt } from '../packages/opencode-warcraft/src/agents/khadgar.js';
+import { MIMIRON_PROMPT } from '../packages/opencode-warcraft/src/agents/mimiron.js';
+import { buildSaurfangPrompt } from '../packages/opencode-warcraft/src/agents/saurfang.js';
+import { ContextTools } from '../packages/opencode-warcraft/src/tools/context-tools.js';
+import { FeatureTools } from '../packages/opencode-warcraft/src/tools/feature-tools.js';
+import { PlanTools } from '../packages/opencode-warcraft/src/tools/plan-tools.js';
+import { TaskTools } from '../packages/opencode-warcraft/src/tools/task-tools.js';
 import {
   createNoopEventLogger,
   FeatureService,
@@ -12,18 +19,8 @@ import {
   PlanService,
   TaskService,
 } from '../packages/warcraft-core/src/index.ts';
-import {
-  decodeTaskState,
-  encodeTaskState,
-} from '../packages/warcraft-core/src/services/beads/artifactSchemas.ts';
+import { decodeTaskState, encodeTaskState } from '../packages/warcraft-core/src/services/beads/artifactSchemas.ts';
 import { BeadsTaskStore } from '../packages/warcraft-core/src/services/state/beads-task-store.ts';
-import { buildKhadgarPrompt } from '../packages/opencode-warcraft/src/agents/khadgar.js';
-import { MIMIRON_PROMPT } from '../packages/opencode-warcraft/src/agents/mimiron.js';
-import { buildSaurfangPrompt } from '../packages/opencode-warcraft/src/agents/saurfang.js';
-import { ContextTools } from '../packages/opencode-warcraft/src/tools/context-tools.js';
-import { FeatureTools } from '../packages/opencode-warcraft/src/tools/feature-tools.js';
-import { PlanTools } from '../packages/opencode-warcraft/src/tools/plan-tools.js';
-import { TaskTools } from '../packages/opencode-warcraft/src/tools/task-tools.js';
 
 type CheckResult = { id: string; pass: boolean; detail: string };
 
@@ -32,21 +29,19 @@ const validateTaskStatus = (status: string) => {
   if (!VALID_STATUSES.has(status)) {
     throw new Error(`Invalid status: ${status}`);
   }
-  return status as
-    | 'pending'
-    | 'in_progress'
-    | 'done'
-    | 'blocked'
-    | 'failed'
-    | 'cancelled'
-    | 'partial';
+  return status as 'pending' | 'in_progress' | 'done' | 'blocked' | 'failed' | 'cancelled' | 'partial';
 };
 
 function parseToolResponse(raw: string): { success: boolean; data?: any; error?: string } {
   return JSON.parse(raw) as { success: boolean; data?: any; error?: string };
 }
 
-function matchesPendingManualPromotionFlow(flow: unknown, feature: string, tasks: string[], mode: 'lightweight' | 'standard'): boolean {
+function matchesPendingManualPromotionFlow(
+  flow: unknown,
+  feature: string,
+  tasks: string[],
+  mode: 'lightweight' | 'standard',
+): boolean {
   return (
     Array.isArray(flow) &&
     flow.length === 4 &&
@@ -182,7 +177,9 @@ async function checkFeatureCreateMentionsInstantPath(): Promise<CheckResult> {
   return {
     id: 'feature-create-guidance',
     pass,
-    detail: pass ? 'feature creation message mentions direct/instant path' : 'feature creation message is still plan-only',
+    detail: pass
+      ? 'feature creation message mentions direct/instant path'
+      : 'feature creation message is still plan-only',
   };
 }
 
@@ -207,7 +204,8 @@ async function checkFeatureCreateAnalyzesBroadRequest(): Promise<CheckResult> {
   const { featureTools } = createWorkspace();
   const raw = (await featureTools.createFeatureTool().execute({
     name: 'big-change',
-    request: 'Design a new workflow across packages, add a new tool, update beads integration, and refactor orchestration prompts.',
+    request:
+      'Design a new workflow across packages, add a new tool, update beads integration, and refactor orchestration prompts.',
   } as any)) as string;
   const parsed = parseToolResponse(raw);
   const pass = parsed.data?.recommendedWorkflowPath === 'standard';
@@ -223,13 +221,15 @@ async function checkFeatureCreateAnalyzesBroadRequest(): Promise<CheckResult> {
 async function checkManualTaskCanPromoteInstantWorkflow(): Promise<CheckResult> {
   const ctx = createWorkspace();
   ctx.featureService.create('quick-fix');
-  const raw = (await ctx.taskTools.createTaskTool((name?: string) => name || 'quick-fix').execute({
-    feature: 'quick-fix',
-    name: 'Tighten prompt wording',
-    priority: 3,
-    description:
-      'Background: this is a tiny wording fix. Impact: prompt text only. Safety: no runtime logic. Verify: prompt tests pass. Rollback: revert commit.',
-  } as any)) as string;
+  const raw = (await ctx.taskTools
+    .createTaskTool((name?: string) => name || 'quick-fix')
+    .execute({
+      feature: 'quick-fix',
+      name: 'Tighten prompt wording',
+      priority: 3,
+      description:
+        'Background: this is a tiny wording fix. Impact: prompt text only. Safety: no runtime logic. Verify: prompt tests pass. Rollback: revert commit.',
+    } as any)) as string;
   const parsed = parseToolResponse(raw);
   const feature = ctx.featureService.get('quick-fix');
   const pass =
@@ -269,23 +269,28 @@ async function checkManualTaskWarnsWhenInstantWorkflowOutgrowsTinyPath(): Promis
   return {
     id: 'manual-task-expansion-warning',
     pass,
-    detail: pass ? 'manual task creation warns when instant workflow has outgrown the tiny-task path' : `message=${message}`,
+    detail: pass
+      ? 'manual task creation warns when instant workflow has outgrown the tiny-task path'
+      : `message=${message}`,
   };
 }
 
 async function checkManualTaskCreatesLightweightRecommendationForNonTinyBrief(): Promise<CheckResult> {
   const ctx = createWorkspace();
   ctx.featureService.create('doc-tune');
-  const raw = (await ctx.taskTools.createTaskTool((name?: string) => name || 'doc-tune').execute({
-    feature: 'doc-tune',
-    name: 'Refresh docs wording',
-    priority: 3,
-    description:
-      'Background: update the README and docs wording for the instant workflow path. Impact: README plus docs text. Safety: keep behavior unchanged. Verify: docs tests or snapshots still pass. Rollback: revert.',
-  } as any)) as string;
+  const raw = (await ctx.taskTools
+    .createTaskTool((name?: string) => name || 'doc-tune')
+    .execute({
+      feature: 'doc-tune',
+      name: 'Refresh docs wording',
+      priority: 3,
+      description:
+        'Background: update the README and docs wording for the instant workflow path. Impact: README plus docs text. Safety: keep behavior unchanged. Verify: docs tests or snapshots still pass. Rollback: revert.',
+    } as any)) as string;
   const parsed = parseToolResponse(raw);
   const pass =
-    parsed.data?.workflowRecommendation === 'lightweight' && /Workflow Path: lightweight/i.test(String(parsed.data?.message || ''));
+    parsed.data?.workflowRecommendation === 'lightweight' &&
+    /Workflow Path: lightweight/i.test(String(parsed.data?.message || ''));
   return {
     id: 'manual-task-lightweight-recommendation',
     pass,
@@ -298,13 +303,15 @@ async function checkManualTaskCreatesLightweightRecommendationForNonTinyBrief():
 async function checkManualTaskReturnsPlanScaffoldWhenItNeedsReview(): Promise<CheckResult> {
   const ctx = createWorkspace();
   ctx.featureService.create('doc-tune');
-  const raw = (await ctx.taskTools.createTaskTool((name?: string) => name || 'doc-tune').execute({
-    feature: 'doc-tune',
-    name: 'Refresh docs wording',
-    priority: 3,
-    description:
-      'Background: update the README and docs wording for the instant workflow path. Impact: README plus docs text. Safety: keep behavior unchanged. Verify: docs tests or snapshots still pass. Rollback: revert.',
-  } as any)) as string;
+  const raw = (await ctx.taskTools
+    .createTaskTool((name?: string) => name || 'doc-tune')
+    .execute({
+      feature: 'doc-tune',
+      name: 'Refresh docs wording',
+      priority: 3,
+      description:
+        'Background: update the README and docs wording for the instant workflow path. Impact: README plus docs text. Safety: keep behavior unchanged. Verify: docs tests or snapshots still pass. Rollback: revert.',
+    } as any)) as string;
   const parsed = parseToolResponse(raw);
   const scaffold = String(parsed.data?.planScaffold || '');
   const pass =
@@ -315,23 +322,28 @@ async function checkManualTaskReturnsPlanScaffoldWhenItNeedsReview(): Promise<Ch
   return {
     id: 'manual-task-plan-scaffold',
     pass,
-    detail: pass ? 'manual task creation returns a reviewed-plan scaffold when direct work needs review' : `planScaffold=${scaffold}`,
+    detail: pass
+      ? 'manual task creation returns a reviewed-plan scaffold when direct work needs review'
+      : `planScaffold=${scaffold}`,
   };
 }
 
 async function checkManualTaskReturnsPlanWriteArgsWhenItNeedsReview(): Promise<CheckResult> {
   const ctx = createWorkspace();
   ctx.featureService.create('doc-tune');
-  const raw = (await ctx.taskTools.createTaskTool((name?: string) => name || 'doc-tune').execute({
-    feature: 'doc-tune',
-    name: 'Refresh docs wording',
-    priority: 3,
-    description:
-      'Background: update the README and docs wording for the instant workflow path. Impact: README plus docs text. Safety: keep behavior unchanged. Verify: docs tests or snapshots still pass. Rollback: revert.',
-  } as any)) as string;
+  const raw = (await ctx.taskTools
+    .createTaskTool((name?: string) => name || 'doc-tune')
+    .execute({
+      feature: 'doc-tune',
+      name: 'Refresh docs wording',
+      priority: 3,
+      description:
+        'Background: update the README and docs wording for the instant workflow path. Impact: README plus docs text. Safety: keep behavior unchanged. Verify: docs tests or snapshots still pass. Rollback: revert.',
+    } as any)) as string;
   const parsed = parseToolResponse(raw);
   const pass =
-    parsed.data?.planWriteArgs?.feature === 'doc-tune' && parsed.data?.planWriteArgs?.content === parsed.data?.planScaffold;
+    parsed.data?.planWriteArgs?.feature === 'doc-tune' &&
+    parsed.data?.planWriteArgs?.content === parsed.data?.planScaffold;
   return {
     id: 'manual-task-plan-write-args',
     pass,
@@ -344,13 +356,15 @@ async function checkManualTaskReturnsPlanWriteArgsWhenItNeedsReview(): Promise<C
 async function checkManualTaskReturnsTaskExpandArgsWhenItNeedsReview(): Promise<CheckResult> {
   const ctx = createWorkspace();
   ctx.featureService.create('doc-tune');
-  const raw = (await ctx.taskTools.createTaskTool((name?: string) => name || 'doc-tune').execute({
-    feature: 'doc-tune',
-    name: 'Refresh docs wording',
-    priority: 3,
-    description:
-      'Background: update the README and docs wording for the instant workflow path. Impact: README plus docs text. Safety: keep behavior unchanged. Verify: docs tests or snapshots still pass. Rollback: revert.',
-  } as any)) as string;
+  const raw = (await ctx.taskTools
+    .createTaskTool((name?: string) => name || 'doc-tune')
+    .execute({
+      feature: 'doc-tune',
+      name: 'Refresh docs wording',
+      priority: 3,
+      description:
+        'Background: update the README and docs wording for the instant workflow path. Impact: README plus docs text. Safety: keep behavior unchanged. Verify: docs tests or snapshots still pass. Rollback: revert.',
+    } as any)) as string;
   const parsed = parseToolResponse(raw);
   const pass =
     parsed.data?.taskExpandArgs?.feature === 'doc-tune' &&
@@ -369,13 +383,15 @@ async function checkManualTaskReturnsTaskExpandArgsWhenItNeedsReview(): Promise<
 async function checkManualTaskReturnsPromotionFlowWhenItNeedsReview(): Promise<CheckResult> {
   const ctx = createWorkspace();
   ctx.featureService.create('doc-tune');
-  const raw = (await ctx.taskTools.createTaskTool((name?: string) => name || 'doc-tune').execute({
-    feature: 'doc-tune',
-    name: 'Refresh docs wording',
-    priority: 3,
-    description:
-      'Background: update the README and docs wording for the instant workflow path. Impact: README plus docs text. Safety: keep behavior unchanged. Verify: docs tests or snapshots still pass. Rollback: revert.',
-  } as any)) as string;
+  const raw = (await ctx.taskTools
+    .createTaskTool((name?: string) => name || 'doc-tune')
+    .execute({
+      feature: 'doc-tune',
+      name: 'Refresh docs wording',
+      priority: 3,
+      description:
+        'Background: update the README and docs wording for the instant workflow path. Impact: README plus docs text. Safety: keep behavior unchanged. Verify: docs tests or snapshots still pass. Rollback: revert.',
+    } as any)) as string;
   const parsed = parseToolResponse(raw);
   const pass = matchesPendingManualPromotionFlow(
     parsed.data?.promotionFlow,
@@ -426,7 +442,9 @@ async function checkManualTaskSpecIsSelfContained(): Promise<CheckResult> {
   return {
     id: 'manual-task-spec-self-contained',
     pass,
-    detail: pass ? 'manual task spec captures direct-workflow context' : 'manual task spec still falls back to “No plan section available.”',
+    detail: pass
+      ? 'manual task spec captures direct-workflow context'
+      : 'manual task spec still falls back to “No plan section available.”',
   };
 }
 
@@ -451,9 +469,11 @@ async function checkStatusNextActionSupportsInstantPath(): Promise<CheckResult> 
   );
   ctx.featureService.updateStatus('quick-fix', 'executing');
   ctx.featureService.patchMetadata('quick-fix', { workflowPath: 'instant' as any });
-  const raw = (await ctx.contextTools.getStatusTool((name?: string) => name || 'quick-fix').execute({
-    feature: 'quick-fix',
-  })) as string;
+  const raw = (await ctx.contextTools
+    .getStatusTool((name?: string) => name || 'quick-fix')
+    .execute({
+      feature: 'quick-fix',
+    })) as string;
   const parsed = parseToolResponse(raw);
   const nextAction = String(parsed.data?.nextAction || '');
   const pass = /warcraft_worktree_create|warcraft_task_create|instant/i.test(nextAction);
@@ -468,9 +488,11 @@ async function checkStatusNextActionSupportsLightweightRecommendation(): Promise
   const ctx = createWorkspace();
   ctx.featureService.create('doc-tune');
   ctx.featureService.patchMetadata('doc-tune', { workflowRecommendation: 'lightweight' as any });
-  const raw = (await ctx.contextTools.getStatusTool((name?: string) => name || 'doc-tune').execute({
-    feature: 'doc-tune',
-  })) as string;
+  const raw = (await ctx.contextTools
+    .getStatusTool((name?: string) => name || 'doc-tune')
+    .execute({
+      feature: 'doc-tune',
+    })) as string;
   const parsed = parseToolResponse(raw);
   const nextAction = String(parsed.data?.nextAction || '');
   const pass = /lightweight/i.test(nextAction) && /warcraft_plan_write/i.test(nextAction);
@@ -484,108 +506,118 @@ async function checkStatusNextActionSupportsLightweightRecommendation(): Promise
 async function checkStatusReturnsPlanApproveArgsForDraftPlan(): Promise<CheckResult> {
   const ctx = createWorkspace();
   ctx.featureService.create('doc-tune');
-  await ctx.planTools.writePlanTool((name?: string) => name || 'doc-tune').execute(
-    {
+  await ctx.planTools
+    .writePlanTool((name?: string) => name || 'doc-tune')
+    .execute(
+      {
+        feature: 'doc-tune',
+        content: [
+          '# doc-tune',
+          '',
+          'Workflow Path: lightweight',
+          '',
+          '## Discovery',
+          '',
+          'Impact: docs text only',
+          'Safety: low',
+          'Verify: docs tests',
+          'Rollback: revert',
+          '',
+          '## Non-Goals',
+          '',
+          '- Keep scope tight.',
+          '',
+          '## Ghost Diffs',
+          '',
+          '- Skip alternatives for now.',
+          '',
+          '## Tasks',
+          '',
+          '### 1. Refresh docs wording',
+          '',
+          '**Depends on**: none',
+          '',
+          '**What to do**:',
+          '- Update docs wording.',
+          '',
+          '**References**:',
+          '- Existing context.',
+          '',
+          '**Verify**:',
+          '- [ ] docs tests',
+          '',
+        ].join('\n'),
+      } as any,
+      {} as any,
+    );
+  const raw = (await ctx.contextTools
+    .getStatusTool((name?: string) => name || 'doc-tune')
+    .execute({
       feature: 'doc-tune',
-      content: [
-        '# doc-tune',
-        '',
-        'Workflow Path: lightweight',
-        '',
-        '## Discovery',
-        '',
-        'Impact: docs text only',
-        'Safety: low',
-        'Verify: docs tests',
-        'Rollback: revert',
-        '',
-        '## Non-Goals',
-        '',
-        '- Keep scope tight.',
-        '',
-        '## Ghost Diffs',
-        '',
-        '- Skip alternatives for now.',
-        '',
-        '## Tasks',
-        '',
-        '### 1. Refresh docs wording',
-        '',
-        '**Depends on**: none',
-        '',
-        '**What to do**:',
-        '- Update docs wording.',
-        '',
-        '**References**:',
-        '- Existing context.',
-        '',
-        '**Verify**:',
-        '- [ ] docs tests',
-        '',
-      ].join('\n'),
-    } as any,
-    {} as any,
-  );
-  const raw = (await ctx.contextTools.getStatusTool((name?: string) => name || 'doc-tune').execute({
-    feature: 'doc-tune',
-  })) as string;
+    })) as string;
   const parsed = parseToolResponse(raw);
   const pass = parsed.data?.planApproveArgs?.feature === 'doc-tune';
   return {
     id: 'status-plan-approve-args',
     pass,
-    detail: pass ? 'status returns ready-to-use warcraft_plan_approve args for draft plans' : `planApproveArgs=${JSON.stringify(parsed.data?.planApproveArgs ?? null)}`,
+    detail: pass
+      ? 'status returns ready-to-use warcraft_plan_approve args for draft plans'
+      : `planApproveArgs=${JSON.stringify(parsed.data?.planApproveArgs ?? null)}`,
   };
 }
 
 async function checkStatusReturnsDraftPlanPromotionFlow(): Promise<CheckResult> {
   const ctx = createWorkspace();
   ctx.featureService.create('doc-tune');
-  await ctx.planTools.writePlanTool((name?: string) => name || 'doc-tune').execute(
-    {
+  await ctx.planTools
+    .writePlanTool((name?: string) => name || 'doc-tune')
+    .execute(
+      {
+        feature: 'doc-tune',
+        content: [
+          '# doc-tune',
+          '',
+          'Workflow Path: lightweight',
+          '',
+          '## Discovery',
+          '',
+          'Impact: docs text only',
+          'Safety: low',
+          'Verify: docs tests',
+          'Rollback: revert',
+          '',
+          '## Non-Goals',
+          '',
+          '- Keep scope tight.',
+          '',
+          '## Ghost Diffs',
+          '',
+          '- Skip alternatives for now.',
+          '',
+          '## Tasks',
+          '',
+          '### 1. Refresh docs wording',
+          '',
+          '**Depends on**: none',
+          '',
+          '**What to do**:',
+          '- Update docs wording.',
+          '',
+          '**References**:',
+          '- Existing context.',
+          '',
+          '**Verify**:',
+          '- [ ] docs tests',
+          '',
+        ].join('\n'),
+      } as any,
+      {} as any,
+    );
+  const raw = (await ctx.contextTools
+    .getStatusTool((name?: string) => name || 'doc-tune')
+    .execute({
       feature: 'doc-tune',
-      content: [
-        '# doc-tune',
-        '',
-        'Workflow Path: lightweight',
-        '',
-        '## Discovery',
-        '',
-        'Impact: docs text only',
-        'Safety: low',
-        'Verify: docs tests',
-        'Rollback: revert',
-        '',
-        '## Non-Goals',
-        '',
-        '- Keep scope tight.',
-        '',
-        '## Ghost Diffs',
-        '',
-        '- Skip alternatives for now.',
-        '',
-        '## Tasks',
-        '',
-        '### 1. Refresh docs wording',
-        '',
-        '**Depends on**: none',
-        '',
-        '**What to do**:',
-        '- Update docs wording.',
-        '',
-        '**References**:',
-        '- Existing context.',
-        '',
-        '**Verify**:',
-        '- [ ] docs tests',
-        '',
-      ].join('\n'),
-    } as any,
-    {} as any,
-  );
-  const raw = (await ctx.contextTools.getStatusTool((name?: string) => name || 'doc-tune').execute({
-    feature: 'doc-tune',
-  })) as string;
+    })) as string;
   const parsed = parseToolResponse(raw);
   const pass = matchesDraftPlanPromotionFlow(parsed.data?.promotionFlow, 'doc-tune');
   return {
@@ -616,12 +648,15 @@ async function checkInstantWorkflowExpansionGuidance(): Promise<CheckResult> {
       'Background: second tiny wording fix. Impact: prompt/help text only. Safety: low risk. Verify: prompt tests. Rollback: revert.',
   } as any);
 
-  const raw = (await ctx.contextTools.getStatusTool((name?: string) => name || 'quick-fix').execute({
-    feature: 'quick-fix',
-  })) as string;
+  const raw = (await ctx.contextTools
+    .getStatusTool((name?: string) => name || 'quick-fix')
+    .execute({
+      feature: 'quick-fix',
+    })) as string;
   const parsed = parseToolResponse(raw);
   const nextAction = String(parsed.data?.nextAction || '');
-  const pass = /outgrown/i.test(nextAction) && /lightweight/i.test(nextAction) && /warcraft_task_expand/i.test(nextAction);
+  const pass =
+    /outgrown/i.test(nextAction) && /lightweight/i.test(nextAction) && /warcraft_task_expand/i.test(nextAction);
   return {
     id: 'instant-workflow-expansion-guidance',
     pass,
@@ -657,9 +692,11 @@ async function checkInstantWorkflowEscalatesPastLightweightTaskLimit(): Promise<
   const thirdParsed = parseToolResponse(thirdRaw);
   const taskMessage = String(thirdParsed.data?.message || '');
 
-  const statusRaw = (await ctx.contextTools.getStatusTool((name?: string) => name || 'quick-fix').execute({
-    feature: 'quick-fix',
-  })) as string;
+  const statusRaw = (await ctx.contextTools
+    .getStatusTool((name?: string) => name || 'quick-fix')
+    .execute({
+      feature: 'quick-fix',
+    })) as string;
   const statusParsed = parseToolResponse(statusRaw);
   const nextAction = String(statusParsed.data?.nextAction || '');
   const pass =
@@ -672,7 +709,9 @@ async function checkInstantWorkflowEscalatesPastLightweightTaskLimit(): Promise<
   return {
     id: 'instant-workflow-standard-escalation',
     pass,
-    detail: pass ? `taskMessage=${taskMessage} | nextAction=${nextAction}` : `taskMessage=${taskMessage} | nextAction=${nextAction}`,
+    detail: pass
+      ? `taskMessage=${taskMessage} | nextAction=${nextAction}`
+      : `taskMessage=${taskMessage} | nextAction=${nextAction}`,
   };
 }
 
@@ -702,9 +741,11 @@ async function checkStatusReturnsPlanScaffoldForEscalatedInstantWork(): Promise<
       'Background: third tiny wording fix. Impact: another prompt/status text tweak. Safety: low risk. Verify: prompt tests. Rollback: revert.',
   } as any);
 
-  const statusRaw = (await ctx.contextTools.getStatusTool((name?: string) => name || 'quick-fix').execute({
-    feature: 'quick-fix',
-  })) as string;
+  const statusRaw = (await ctx.contextTools
+    .getStatusTool((name?: string) => name || 'quick-fix')
+    .execute({
+      feature: 'quick-fix',
+    })) as string;
   const statusParsed = parseToolResponse(statusRaw);
   const scaffold = String(statusParsed.data?.planScaffold || '');
   const pass =
@@ -746,9 +787,11 @@ async function checkStatusReturnsPlanWriteArgsForEscalatedInstantWork(): Promise
       'Background: third tiny wording fix. Impact: another prompt/status text tweak. Safety: low risk. Verify: prompt tests. Rollback: revert.',
   } as any);
 
-  const statusRaw = (await ctx.contextTools.getStatusTool((name?: string) => name || 'quick-fix').execute({
-    feature: 'quick-fix',
-  })) as string;
+  const statusRaw = (await ctx.contextTools
+    .getStatusTool((name?: string) => name || 'quick-fix')
+    .execute({
+      feature: 'quick-fix',
+    })) as string;
   const statusParsed = parseToolResponse(statusRaw);
   const pass =
     statusParsed.data?.planWriteArgs?.feature === 'quick-fix' &&
@@ -788,9 +831,11 @@ async function checkStatusReturnsTaskExpandArgsForEscalatedInstantWork(): Promis
       'Background: third tiny wording fix. Impact: another prompt/status text tweak. Safety: low risk. Verify: prompt tests. Rollback: revert.',
   } as any);
 
-  const statusRaw = (await ctx.contextTools.getStatusTool((name?: string) => name || 'quick-fix').execute({
-    feature: 'quick-fix',
-  })) as string;
+  const statusRaw = (await ctx.contextTools
+    .getStatusTool((name?: string) => name || 'quick-fix')
+    .execute({
+      feature: 'quick-fix',
+    })) as string;
   const statusParsed = parseToolResponse(statusRaw);
   const pass =
     statusParsed.data?.taskExpandArgs?.feature === 'quick-fix' &&
@@ -832,9 +877,11 @@ async function checkStatusReturnsPromotionFlowForEscalatedInstantWork(): Promise
       'Background: third tiny wording fix. Impact: another prompt/status text tweak. Safety: low risk. Verify: prompt tests. Rollback: revert.',
   } as any);
 
-  const raw = (await ctx.contextTools.getStatusTool((name?: string) => name || 'quick-fix').execute({
-    feature: 'quick-fix',
-  })) as string;
+  const raw = (await ctx.contextTools
+    .getStatusTool((name?: string) => name || 'quick-fix')
+    .execute({
+      feature: 'quick-fix',
+    })) as string;
   const parsed = parseToolResponse(raw);
   const pass = matchesPendingManualPromotionFlow(
     parsed.data?.promotionFlow,
@@ -898,8 +945,7 @@ async function checkStatusDraftPlanSurfacesRemainingManualPromotion(): Promise<C
     feature: 'doc-tune',
     name: 'Tiny Fix',
     priority: 3,
-    description:
-      'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
+    description: 'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
   } as any);
   await createTask.execute({
     feature: 'doc-tune',
@@ -908,14 +954,18 @@ async function checkStatusDraftPlanSurfacesRemainingManualPromotion(): Promise<C
     description:
       'Background: second tiny change. Impact: help text only. Safety: low. Verify: prompt tests. Rollback: revert.',
   } as any);
-  await ctx.taskTools.expandTaskTool((name?: string) => name || 'doc-tune').execute({
-    feature: 'doc-tune',
-    tasks: ['02-second-tiny-fix'],
-  } as any);
+  await ctx.taskTools
+    .expandTaskTool((name?: string) => name || 'doc-tune')
+    .execute({
+      feature: 'doc-tune',
+      tasks: ['02-second-tiny-fix'],
+    } as any);
 
-  const raw = (await ctx.contextTools.getStatusTool((name?: string) => name || 'doc-tune').execute({
-    feature: 'doc-tune',
-  })) as string;
+  const raw = (await ctx.contextTools
+    .getStatusTool((name?: string) => name || 'doc-tune')
+    .execute({
+      feature: 'doc-tune',
+    })) as string;
   const parsed = parseToolResponse(raw);
   const pass =
     parsed.data?.planApproveArgs == null &&
@@ -936,75 +986,86 @@ async function checkStatusDraftPlanSurfacesRemainingManualPromotion(): Promise<C
 async function checkStatusReturnsTaskSyncArgsAfterApproval(): Promise<CheckResult> {
   const ctx = createWorkspace();
   ctx.featureService.create('doc-tune');
-  await ctx.planTools.writePlanTool((name?: string) => name || 'doc-tune').execute(
-    {
+  await ctx.planTools
+    .writePlanTool((name?: string) => name || 'doc-tune')
+    .execute(
+      {
+        feature: 'doc-tune',
+        content: [
+          '# doc-tune',
+          '',
+          'Workflow Path: lightweight',
+          '',
+          '## Discovery',
+          '',
+          'Impact: docs text only',
+          'Safety: low',
+          'Verify: docs tests',
+          'Rollback: revert',
+          '',
+          '## Non-Goals',
+          '',
+          '- Keep scope tight.',
+          '',
+          '## Ghost Diffs',
+          '',
+          '- Skip alternatives for now.',
+          '',
+          '## Tasks',
+          '',
+          '### 1. Refresh docs wording',
+          '',
+          '**Depends on**: none',
+          '',
+          '**What to do**:',
+          '- Update docs wording.',
+          '',
+          '**References**:',
+          '- Existing context.',
+          '',
+          '**Verify**:',
+          '- [ ] docs tests',
+          '',
+        ].join('\n'),
+      } as any,
+      {} as any,
+    );
+  await ctx.planTools
+    .approvePlanTool((name?: string) => name || 'doc-tune')
+    .execute({ feature: 'doc-tune' } as any, {} as any);
+  const raw = (await ctx.contextTools
+    .getStatusTool((name?: string) => name || 'doc-tune')
+    .execute({
       feature: 'doc-tune',
-      content: [
-        '# doc-tune',
-        '',
-        'Workflow Path: lightweight',
-        '',
-        '## Discovery',
-        '',
-        'Impact: docs text only',
-        'Safety: low',
-        'Verify: docs tests',
-        'Rollback: revert',
-        '',
-        '## Non-Goals',
-        '',
-        '- Keep scope tight.',
-        '',
-        '## Ghost Diffs',
-        '',
-        '- Skip alternatives for now.',
-        '',
-        '## Tasks',
-        '',
-        '### 1. Refresh docs wording',
-        '',
-        '**Depends on**: none',
-        '',
-        '**What to do**:',
-        '- Update docs wording.',
-        '',
-        '**References**:',
-        '- Existing context.',
-        '',
-        '**Verify**:',
-        '- [ ] docs tests',
-        '',
-      ].join('\n'),
-    } as any,
-    {} as any,
-  );
-  await ctx.planTools.approvePlanTool((name?: string) => name || 'doc-tune').execute({ feature: 'doc-tune' } as any, {} as any);
-  const raw = (await ctx.contextTools.getStatusTool((name?: string) => name || 'doc-tune').execute({
-    feature: 'doc-tune',
-  })) as string;
+    })) as string;
   const parsed = parseToolResponse(raw);
   const pass = parsed.data?.taskSyncArgs?.feature === 'doc-tune' && parsed.data?.taskSyncArgs?.mode === 'sync';
   return {
     id: 'status-task-sync-args',
     pass,
-    detail: pass ? 'status returns ready-to-use warcraft_tasks_sync args after plan approval' : `taskSyncArgs=${JSON.stringify(parsed.data?.taskSyncArgs ?? null)}`,
+    detail: pass
+      ? 'status returns ready-to-use warcraft_tasks_sync args after plan approval'
+      : `taskSyncArgs=${JSON.stringify(parsed.data?.taskSyncArgs ?? null)}`,
   };
 }
 
 async function checkSyncTasksReturnsStructuredMissingPlanRecovery(): Promise<CheckResult> {
   const ctx = createWorkspace();
   ctx.featureService.create('doc-tune');
-  await ctx.taskTools.createTaskTool((name?: string) => name || 'doc-tune').execute({
-    feature: 'doc-tune',
-    name: 'Tiny Fix',
-    priority: 3,
-    description:
-      'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
-  } as any);
-  const raw = (await ctx.taskTools.syncTasksTool((name?: string) => name || 'doc-tune').execute({
-    feature: 'doc-tune',
-    mode: 'sync',
-  } as any)) as string;
+  await ctx.taskTools
+    .createTaskTool((name?: string) => name || 'doc-tune')
+    .execute({
+      feature: 'doc-tune',
+      name: 'Tiny Fix',
+      priority: 3,
+      description: 'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
+    } as any);
+  const raw = (await ctx.taskTools
+    .syncTasksTool((name?: string) => name || 'doc-tune')
+    .execute({
+      feature: 'doc-tune',
+      mode: 'sync',
+    } as any)) as string;
   const parsed = parseToolResponse(raw) as any;
   const pass =
     parsed.success === false &&
@@ -1034,52 +1095,56 @@ async function checkSyncTasksReturnsStructuredMissingPlanRecovery(): Promise<Che
 async function checkSyncTasksReturnsStructuredApprovalRecovery(): Promise<CheckResult> {
   const ctx = createWorkspace();
   ctx.featureService.create('doc-tune');
-  await ctx.planTools.writePlanTool((name?: string) => name || 'doc-tune').execute(
-    {
+  await ctx.planTools
+    .writePlanTool((name?: string) => name || 'doc-tune')
+    .execute(
+      {
+        feature: 'doc-tune',
+        content: [
+          '# doc-tune',
+          '',
+          'Workflow Path: lightweight',
+          '',
+          '## Discovery',
+          '',
+          'Impact: docs text only',
+          'Safety: low',
+          'Verify: docs tests',
+          'Rollback: revert',
+          '',
+          '## Non-Goals',
+          '',
+          '- Keep scope tight.',
+          '',
+          '## Ghost Diffs',
+          '',
+          '- Skip alternatives for now.',
+          '',
+          '## Tasks',
+          '',
+          '### 1. Refresh docs wording',
+          '',
+          '**Depends on**: none',
+          '',
+          '**What to do**:',
+          '- Update docs wording.',
+          '',
+          '**References**:',
+          '- Existing context.',
+          '',
+          '**Verify**:',
+          '- [ ] docs tests',
+          '',
+        ].join('\n'),
+      } as any,
+      {} as any,
+    );
+  const raw = (await ctx.taskTools
+    .syncTasksTool((name?: string) => name || 'doc-tune')
+    .execute({
       feature: 'doc-tune',
-      content: [
-        '# doc-tune',
-        '',
-        'Workflow Path: lightweight',
-        '',
-        '## Discovery',
-        '',
-        'Impact: docs text only',
-        'Safety: low',
-        'Verify: docs tests',
-        'Rollback: revert',
-        '',
-        '## Non-Goals',
-        '',
-        '- Keep scope tight.',
-        '',
-        '## Ghost Diffs',
-        '',
-        '- Skip alternatives for now.',
-        '',
-        '## Tasks',
-        '',
-        '### 1. Refresh docs wording',
-        '',
-        '**Depends on**: none',
-        '',
-        '**What to do**:',
-        '- Update docs wording.',
-        '',
-        '**References**:',
-        '- Existing context.',
-        '',
-        '**Verify**:',
-        '- [ ] docs tests',
-        '',
-      ].join('\n'),
-    } as any,
-    {} as any,
-  );
-  const raw = (await ctx.taskTools.syncTasksTool((name?: string) => name || 'doc-tune').execute({
-    feature: 'doc-tune',
-    mode: 'sync',
-  } as any)) as string;
+      mode: 'sync',
+    } as any)) as string;
   const parsed = parseToolResponse(raw) as any;
   const pass =
     parsed.success === false &&
@@ -1124,10 +1189,12 @@ async function checkSyncTasksReturnsStructuredLightweightRecovery(): Promise<Che
       detail: `approval failed unexpectedly: ${JSON.stringify(approvedPlan)}`,
     };
   }
-  const raw = (await enforceTaskTools.syncTasksTool((name?: string) => name || 'doc-tune').execute({
-    feature: 'doc-tune',
-    mode: 'sync',
-  } as any)) as string;
+  const raw = (await enforceTaskTools
+    .syncTasksTool((name?: string) => name || 'doc-tune')
+    .execute({
+      feature: 'doc-tune',
+      mode: 'sync',
+    } as any)) as string;
   const parsed = parseToolResponse(raw) as any;
   const pass =
     parsed.success === false &&
@@ -1157,16 +1224,22 @@ async function checkSyncTasksReturnsStructuredLightweightRecovery(): Promise<Che
 async function checkPlanApproveReturnsStructuredMissingPlanRecovery(): Promise<CheckResult> {
   const ctx = createWorkspace();
   ctx.featureService.create('doc-tune');
-  await ctx.taskTools.createTaskTool((name?: string) => name || 'doc-tune').execute({
-    feature: 'doc-tune',
-    name: 'Tiny Fix',
-    priority: 3,
-    description:
-      'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
-  } as any);
-  const raw = (await ctx.planTools.approvePlanTool((name?: string) => name || 'doc-tune').execute({
-    feature: 'doc-tune',
-  } as any, {} as any)) as string;
+  await ctx.taskTools
+    .createTaskTool((name?: string) => name || 'doc-tune')
+    .execute({
+      feature: 'doc-tune',
+      name: 'Tiny Fix',
+      priority: 3,
+      description: 'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
+    } as any);
+  const raw = (await ctx.planTools
+    .approvePlanTool((name?: string) => name || 'doc-tune')
+    .execute(
+      {
+        feature: 'doc-tune',
+      } as any,
+      {} as any,
+    )) as string;
   const parsed = parseToolResponse(raw) as any;
   const pass =
     parsed.success === false &&
@@ -1194,52 +1267,53 @@ async function checkPlanApproveReturnsStructuredMissingPlanRecovery(): Promise<C
 async function checkPlanApproveReturnsSyncFlow(): Promise<CheckResult> {
   const ctx = createWorkspace();
   ctx.featureService.create('doc-tune');
-  await ctx.planTools.writePlanTool((name?: string) => name || 'doc-tune').execute(
-    {
-      feature: 'doc-tune',
-      content: [
-        '# doc-tune',
-        '',
-        'Workflow Path: lightweight',
-        '',
-        '## Discovery',
-        '',
-        'Impact: docs text only',
-        'Safety: low',
-        'Verify: docs tests',
-        'Rollback: revert',
-        '',
-        '## Non-Goals',
-        '',
-        '- Keep scope tight.',
-        '',
-        '## Ghost Diffs',
-        '',
-        '- Skip alternatives for now.',
-        '',
-        '## Tasks',
-        '',
-        '### 1. Refresh docs wording',
-        '',
-        '**Depends on**: none',
-        '',
-        '**What to do**:',
-        '- Update docs wording.',
-        '',
-        '**References**:',
-        '- Existing context.',
-        '',
-        '**Verify**:',
-        '- [ ] docs tests',
-        '',
-      ].join('\n'),
-    } as any,
-    {} as any,
-  );
-  const raw = (await ctx.planTools.approvePlanTool((name?: string) => name || 'doc-tune').execute(
-    { feature: 'doc-tune' } as any,
-    {} as any,
-  )) as string;
+  await ctx.planTools
+    .writePlanTool((name?: string) => name || 'doc-tune')
+    .execute(
+      {
+        feature: 'doc-tune',
+        content: [
+          '# doc-tune',
+          '',
+          'Workflow Path: lightweight',
+          '',
+          '## Discovery',
+          '',
+          'Impact: docs text only',
+          'Safety: low',
+          'Verify: docs tests',
+          'Rollback: revert',
+          '',
+          '## Non-Goals',
+          '',
+          '- Keep scope tight.',
+          '',
+          '## Ghost Diffs',
+          '',
+          '- Skip alternatives for now.',
+          '',
+          '## Tasks',
+          '',
+          '### 1. Refresh docs wording',
+          '',
+          '**Depends on**: none',
+          '',
+          '**What to do**:',
+          '- Update docs wording.',
+          '',
+          '**References**:',
+          '- Existing context.',
+          '',
+          '**Verify**:',
+          '- [ ] docs tests',
+          '',
+        ].join('\n'),
+      } as any,
+      {} as any,
+    );
+  const raw = (await ctx.planTools
+    .approvePlanTool((name?: string) => name || 'doc-tune')
+    .execute({ feature: 'doc-tune' } as any, {} as any)) as string;
   const parsed = parseToolResponse(raw);
   const pass =
     parsed.data?.taskSyncArgs?.feature === 'doc-tune' &&
@@ -1272,10 +1346,9 @@ async function checkPlanApproveReturnsStructuredChecklistRecovery(): Promise<Che
     '# doc-tune\n\n## Plan Review Checklist\n- [ ] Discovery is complete and current\n',
   );
 
-  const raw = (await planTools.approvePlanTool((name?: string) => name || 'doc-tune').execute(
-    { feature: 'doc-tune' } as any,
-    {} as any,
-  )) as string;
+  const raw = (await planTools
+    .approvePlanTool((name?: string) => name || 'doc-tune')
+    .execute({ feature: 'doc-tune' } as any, {} as any)) as string;
   const parsed = parseToolResponse(raw) as any;
   const pass =
     parsed.success === false &&
@@ -1346,14 +1419,12 @@ async function checkPlanApproveRejectsRemainingManualTasks(): Promise<CheckResul
     feature: 'doc-tune',
     name: 'Tiny Fix',
     priority: 3,
-    description:
-      'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
+    description: 'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
   } as any);
 
-  const raw = (await ctx.planTools.approvePlanTool((name?: string) => name || 'doc-tune').execute(
-    { feature: 'doc-tune' } as any,
-    {} as any,
-  )) as string;
+  const raw = (await ctx.planTools
+    .approvePlanTool((name?: string) => name || 'doc-tune')
+    .execute({ feature: 'doc-tune' } as any, {} as any)) as string;
   const parsed = parseToolResponse(raw);
   const pass =
     parsed.success === false &&
@@ -1368,7 +1439,12 @@ async function checkPlanApproveRejectsRemainingManualTasks(): Promise<CheckResul
     (parsed as any).data?.taskExpandArgs?.feature === 'doc-tune' &&
     JSON.stringify((parsed as any).data?.taskExpandArgs?.tasks) === JSON.stringify(['01-tiny-fix']) &&
     (parsed as any).data?.retryArgs?.feature === 'doc-tune' &&
-    matchesPendingManualPromotionFlow((parsed as any).data?.promotionFlow, 'doc-tune', ['01-tiny-fix'], 'lightweight') &&
+    matchesPendingManualPromotionFlow(
+      (parsed as any).data?.promotionFlow,
+      'doc-tune',
+      ['01-tiny-fix'],
+      'lightweight',
+    ) &&
     Array.isArray((parsed as any).warnings) &&
     (parsed as any).warnings?.[0]?.type === 'manual_tasks_outside_plan';
   return {
@@ -1383,17 +1459,18 @@ async function checkPlanApproveRejectsRemainingManualTasks(): Promise<CheckResul
 async function checkPlanReadReturnsStructuredMissingPlanRecovery(): Promise<CheckResult> {
   const ctx = createWorkspace();
   ctx.featureService.create('doc-tune');
-  await ctx.taskTools.createTaskTool((name?: string) => name || 'doc-tune').execute({
-    feature: 'doc-tune',
-    name: 'Refresh docs wording',
-    priority: 3,
-    description:
-      'Background: update the README and docs wording for the instant workflow path. Impact: README plus docs text. Safety: keep behavior unchanged. Verify: docs tests or snapshots still pass. Rollback: revert.',
-  } as any);
-  const raw = (await ctx.planTools.readPlanTool((name?: string) => name || 'doc-tune').execute(
-    { feature: 'doc-tune' } as any,
-    {} as any,
-  )) as string;
+  await ctx.taskTools
+    .createTaskTool((name?: string) => name || 'doc-tune')
+    .execute({
+      feature: 'doc-tune',
+      name: 'Refresh docs wording',
+      priority: 3,
+      description:
+        'Background: update the README and docs wording for the instant workflow path. Impact: README plus docs text. Safety: keep behavior unchanged. Verify: docs tests or snapshots still pass. Rollback: revert.',
+    } as any);
+  const raw = (await ctx.planTools
+    .readPlanTool((name?: string) => name || 'doc-tune')
+    .execute({ feature: 'doc-tune' } as any, {} as any)) as string;
   const parsed = parseToolResponse(raw) as any;
   const pass =
     parsed.success === false &&
@@ -1418,17 +1495,18 @@ async function checkPlanReadReturnsStructuredMissingPlanRecovery(): Promise<Chec
 async function checkPlanWriteReturnsStructuredScaffoldRetryRecovery(): Promise<CheckResult> {
   const ctx = createWorkspace();
   ctx.featureService.create('doc-tune');
-  await ctx.taskTools.createTaskTool((name?: string) => name || 'doc-tune').execute({
-    feature: 'doc-tune',
-    name: 'Refresh docs wording',
-    priority: 3,
-    description:
-      'Background: update the README and docs wording for the instant workflow path. Impact: README plus docs text. Safety: keep behavior unchanged. Verify: docs tests or snapshots still pass. Rollback: revert.',
-  } as any);
-  const raw = (await ctx.planTools.writePlanTool((name?: string) => name || 'doc-tune').execute(
-    { feature: 'doc-tune' } as any,
-    {} as any,
-  )) as string;
+  await ctx.taskTools
+    .createTaskTool((name?: string) => name || 'doc-tune')
+    .execute({
+      feature: 'doc-tune',
+      name: 'Refresh docs wording',
+      priority: 3,
+      description:
+        'Background: update the README and docs wording for the instant workflow path. Impact: README plus docs text. Safety: keep behavior unchanged. Verify: docs tests or snapshots still pass. Rollback: revert.',
+    } as any);
+  const raw = (await ctx.planTools
+    .writePlanTool((name?: string) => name || 'doc-tune')
+    .execute({ feature: 'doc-tune' } as any, {} as any)) as string;
   const parsed = parseToolResponse(raw) as any;
   const pass =
     parsed.success === false &&
@@ -1457,10 +1535,9 @@ async function checkPlanWriteReturnsStructuredApprovedNoPendingScaffoldRecovery(
     '# doc-tune\n\nWorkflow Path: lightweight\n\n## Discovery\n\nImpact: existing plan\nSafety: low\nVerify: tests\nRollback: revert\n\n## Plan Review Checklist\n- [x] Discovery is complete and current\n- [x] Scope and non-goals are explicit\n- [x] Risks, rollout, and verification are defined\n- [x] Tasks and dependencies are actionable\n\n## Tasks\n\n### 1. Existing Task';
   ctx.planService.write('doc-tune', approvedPlan);
   ctx.planService.approve('doc-tune', undefined, approvedPlan);
-  const raw = (await ctx.planTools.writePlanTool((name?: string) => name || 'doc-tune').execute(
-    { feature: 'doc-tune', useScaffold: true } as any,
-    {} as any,
-  )) as string;
+  const raw = (await ctx.planTools
+    .writePlanTool((name?: string) => name || 'doc-tune')
+    .execute({ feature: 'doc-tune', useScaffold: true } as any, {} as any)) as string;
   const parsed = parseToolResponse(raw) as any;
   const pass =
     parsed.success === false &&
@@ -1485,15 +1562,11 @@ async function checkPlanWriteReturnsStructuredApprovedNoPendingScaffoldRecovery(
 async function checkPlanWriteReturnsStructuredNoPendingScaffoldRecovery(): Promise<CheckResult> {
   const ctx = createWorkspace();
   ctx.featureService.create('doc-tune');
-  ctx.planService.write(
-    'doc-tune',
-    '# doc-tune\n\nWorkflow Path: lightweight\n\n## Tasks\n\n### 1. Existing Task',
-  );
+  ctx.planService.write('doc-tune', '# doc-tune\n\nWorkflow Path: lightweight\n\n## Tasks\n\n### 1. Existing Task');
 
-  const raw = (await ctx.planTools.writePlanTool((name?: string) => name || 'doc-tune').execute(
-    { feature: 'doc-tune', useScaffold: true } as any,
-    {} as any,
-  )) as string;
+  const raw = (await ctx.planTools
+    .writePlanTool((name?: string) => name || 'doc-tune')
+    .execute({ feature: 'doc-tune', useScaffold: true } as any, {} as any)) as string;
   const parsed = parseToolResponse(raw) as any;
   const pass =
     parsed.success === false &&
@@ -1520,10 +1593,9 @@ async function checkPlanWriteReturnsStructuredDiscoveryRecovery(): Promise<Check
   const ctx = createWorkspace();
   ctx.featureService.create('doc-tune');
 
-  const raw = (await ctx.planTools.writePlanTool((name?: string) => name || 'doc-tune').execute(
-    { feature: 'doc-tune', content: '# doc-tune' } as any,
-    {} as any,
-  )) as string;
+  const raw = (await ctx.planTools
+    .writePlanTool((name?: string) => name || 'doc-tune')
+    .execute({ feature: 'doc-tune', content: '# doc-tune' } as any, {} as any)) as string;
   const parsed = parseToolResponse(raw) as any;
   const pass =
     parsed.success === false &&
@@ -1594,14 +1666,12 @@ async function checkPlanApproveReturnsStructuredBlockedRecovery(): Promise<Check
     feature: 'doc-tune',
     name: 'Tiny Fix',
     priority: 3,
-    description:
-      'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
+    description: 'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
   } as any);
 
-  const raw = (await ctx.planTools.approvePlanTool((name?: string) => name || 'doc-tune').execute(
-    { feature: 'doc-tune' } as any,
-    {} as any,
-  )) as string;
+  const raw = (await ctx.planTools
+    .approvePlanTool((name?: string) => name || 'doc-tune')
+    .execute({ feature: 'doc-tune' } as any, {} as any)) as string;
   const parsed = parseToolResponse(raw) as any;
   const pass =
     parsed.success === false &&
@@ -1626,18 +1696,25 @@ async function checkPlanApproveReturnsStructuredBlockedRecovery(): Promise<Check
 async function checkPlanWriteCanMaterializeLightweightScaffold(): Promise<CheckResult> {
   const ctx = createWorkspace();
   ctx.featureService.create('doc-tune');
-  await ctx.taskTools.createTaskTool((name?: string) => name || 'doc-tune').execute({
-    feature: 'doc-tune',
-    name: 'Refresh docs wording',
-    priority: 3,
-    description:
-      'Background: update the README and docs wording for the instant workflow path. Impact: README plus docs text. Safety: keep behavior unchanged. Verify: docs tests or snapshots still pass. Rollback: revert.',
-  } as any);
+  await ctx.taskTools
+    .createTaskTool((name?: string) => name || 'doc-tune')
+    .execute({
+      feature: 'doc-tune',
+      name: 'Refresh docs wording',
+      priority: 3,
+      description:
+        'Background: update the README and docs wording for the instant workflow path. Impact: README plus docs text. Safety: keep behavior unchanged. Verify: docs tests or snapshots still pass. Rollback: revert.',
+    } as any);
 
-  const raw = (await ctx.planTools.writePlanTool((name?: string) => name || 'doc-tune').execute({
-    feature: 'doc-tune',
-    useScaffold: true,
-  } as any, {} as any)) as string;
+  const raw = (await ctx.planTools
+    .writePlanTool((name?: string) => name || 'doc-tune')
+    .execute(
+      {
+        feature: 'doc-tune',
+        useScaffold: true,
+      } as any,
+      {} as any,
+    )) as string;
   const parsed = parseToolResponse(raw);
   const writtenPlan = ctx.planService.read('doc-tune');
   const pass =
@@ -1652,25 +1729,34 @@ async function checkPlanWriteCanMaterializeLightweightScaffold(): Promise<CheckR
   return {
     id: 'plan-write-use-scaffold-lightweight',
     pass,
-    detail: pass ? 'warcraft_plan_write can materialize a lightweight scaffold from pending manual tasks' : `writtenPlan=${String(writtenPlan?.content || '')}`,
+    detail: pass
+      ? 'warcraft_plan_write can materialize a lightweight scaffold from pending manual tasks'
+      : `writtenPlan=${String(writtenPlan?.content || '')}`,
   };
 }
 
 async function checkPlanWriteReturnsPromotionFlow(): Promise<CheckResult> {
   const ctx = createWorkspace();
   ctx.featureService.create('doc-tune');
-  await ctx.taskTools.createTaskTool((name?: string) => name || 'doc-tune').execute({
-    feature: 'doc-tune',
-    name: 'Refresh docs wording',
-    priority: 3,
-    description:
-      'Background: update the README and docs wording for the instant workflow path. Impact: README plus docs text. Safety: keep behavior unchanged. Verify: docs tests or snapshots still pass. Rollback: revert.',
-  } as any);
+  await ctx.taskTools
+    .createTaskTool((name?: string) => name || 'doc-tune')
+    .execute({
+      feature: 'doc-tune',
+      name: 'Refresh docs wording',
+      priority: 3,
+      description:
+        'Background: update the README and docs wording for the instant workflow path. Impact: README plus docs text. Safety: keep behavior unchanged. Verify: docs tests or snapshots still pass. Rollback: revert.',
+    } as any);
 
-  const raw = (await ctx.planTools.writePlanTool((name?: string) => name || 'doc-tune').execute({
-    feature: 'doc-tune',
-    useScaffold: true,
-  } as any, {} as any)) as string;
+  const raw = (await ctx.planTools
+    .writePlanTool((name?: string) => name || 'doc-tune')
+    .execute(
+      {
+        feature: 'doc-tune',
+        useScaffold: true,
+      } as any,
+      {} as any,
+    )) as string;
   const parsed = parseToolResponse(raw);
   const pass = matchesDraftPlanPromotionFlow(parsed.data?.promotionFlow, 'doc-tune');
   return {
@@ -1708,10 +1794,15 @@ async function checkPlanWriteCanMaterializeStandardScaffold(): Promise<CheckResu
       'Background: third tiny wording fix. Impact: another prompt/status text tweak. Safety: low risk. Verify: prompt tests. Rollback: revert.',
   } as any);
 
-  const raw = (await ctx.planTools.writePlanTool((name?: string) => name || 'quick-fix').execute({
-    feature: 'quick-fix',
-    useScaffold: true,
-  } as any, {} as any)) as string;
+  const raw = (await ctx.planTools
+    .writePlanTool((name?: string) => name || 'quick-fix')
+    .execute(
+      {
+        feature: 'quick-fix',
+        useScaffold: true,
+      } as any,
+      {} as any,
+    )) as string;
   const parsed = parseToolResponse(raw);
   const writtenPlan = ctx.planService.read('quick-fix');
   const pass =
@@ -1726,7 +1817,9 @@ async function checkPlanWriteCanMaterializeStandardScaffold(): Promise<CheckResu
   return {
     id: 'plan-write-use-scaffold-standard',
     pass,
-    detail: pass ? 'warcraft_plan_write can materialize a standard scaffold when instant work exceeds lightweight limits' : `writtenPlan=${String(writtenPlan?.content || '')}`,
+    detail: pass
+      ? 'warcraft_plan_write can materialize a standard scaffold when instant work exceeds lightweight limits'
+      : `writtenPlan=${String(writtenPlan?.content || '')}`,
   };
 }
 
@@ -1749,15 +1842,18 @@ async function checkScaffoldPromotionSyncsManualTasksIntoPlan(): Promise<CheckRe
       'Background: update inline help text for the instant workflow path. Impact: help text only. Safety: keep behavior unchanged. Verify: docs tests still pass. Rollback: revert.',
   } as any);
 
-  await ctx.planTools.writePlanTool((name?: string) => name || 'doc-tune').execute(
-    { feature: 'doc-tune', useScaffold: true } as any,
-    {} as any,
-  );
-  await ctx.planTools.approvePlanTool((name?: string) => name || 'doc-tune').execute({ feature: 'doc-tune' } as any, {} as any);
-  const syncRaw = (await ctx.taskTools.syncTasksTool((name?: string) => name || 'doc-tune').execute({
-    feature: 'doc-tune',
-    mode: 'sync',
-  } as any)) as string;
+  await ctx.planTools
+    .writePlanTool((name?: string) => name || 'doc-tune')
+    .execute({ feature: 'doc-tune', useScaffold: true } as any, {} as any);
+  await ctx.planTools
+    .approvePlanTool((name?: string) => name || 'doc-tune')
+    .execute({ feature: 'doc-tune' } as any, {} as any);
+  const syncRaw = (await ctx.taskTools
+    .syncTasksTool((name?: string) => name || 'doc-tune')
+    .execute({
+      feature: 'doc-tune',
+      mode: 'sync',
+    } as any)) as string;
   const parsed = parseToolResponse(syncRaw);
   const first = ctx.taskService.getRawStatus('doc-tune', '01-refresh-docs-wording');
   const second = ctx.taskService.getRawStatus('doc-tune', '02-refresh-help-text');
@@ -1799,9 +1895,11 @@ async function checkTaskExpandWritesPlanAndPreviewsPromotion(): Promise<CheckRes
       'Background: update inline help text for the instant workflow path. Impact: help text only. Safety: keep behavior unchanged. Verify: docs tests still pass. Rollback: revert.',
   } as any);
 
-  const raw = (await ctx.taskTools.expandTaskTool((name?: string) => name || 'doc-tune').execute({
-    feature: 'doc-tune',
-  } as any)) as string;
+  const raw = (await ctx.taskTools
+    .expandTaskTool((name?: string) => name || 'doc-tune')
+    .execute({
+      feature: 'doc-tune',
+    } as any)) as string;
   const parsed = parseToolResponse(raw);
   const writtenPlan = ctx.planService.read('doc-tune');
   const pass =
@@ -1842,9 +1940,11 @@ async function checkTaskExpandReturnsPromotionFlow(): Promise<CheckResult> {
       'Background: update inline help text for the instant workflow path. Impact: help text only. Safety: keep behavior unchanged. Verify: docs tests still pass. Rollback: revert.',
   } as any);
 
-  const raw = (await ctx.taskTools.expandTaskTool((name?: string) => name || 'doc-tune').execute({
-    feature: 'doc-tune',
-  } as any)) as string;
+  const raw = (await ctx.taskTools
+    .expandTaskTool((name?: string) => name || 'doc-tune')
+    .execute({
+      feature: 'doc-tune',
+    } as any)) as string;
   const parsed = parseToolResponse(raw);
   const pass = matchesDraftPlanPromotionFlow(parsed.data?.promotionFlow, 'doc-tune');
   return {
@@ -1903,8 +2003,7 @@ async function checkTaskExpandReturnsFollowUpExpansionForRemainingManualTasks():
     feature: 'doc-tune',
     name: 'Tiny Fix',
     priority: 3,
-    description:
-      'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
+    description: 'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
   } as any);
   await createTask.execute({
     feature: 'doc-tune',
@@ -1914,10 +2013,12 @@ async function checkTaskExpandReturnsFollowUpExpansionForRemainingManualTasks():
       'Background: second tiny change. Impact: help text only. Safety: low. Verify: prompt tests. Rollback: revert.',
   } as any);
 
-  const raw = (await ctx.taskTools.expandTaskTool((name?: string) => name || 'doc-tune').execute({
-    feature: 'doc-tune',
-    tasks: ['02-second-tiny-fix'],
-  } as any)) as string;
+  const raw = (await ctx.taskTools
+    .expandTaskTool((name?: string) => name || 'doc-tune')
+    .execute({
+      feature: 'doc-tune',
+      tasks: ['02-second-tiny-fix'],
+    } as any)) as string;
   const parsed = parseToolResponse(raw);
   const pass =
     JSON.stringify(parsed.data?.remainingManualTasks) === JSON.stringify(['01-tiny-fix']) &&
@@ -1944,8 +2045,7 @@ async function checkTaskExpandReturnsStructuredLightweightRecovery(): Promise<Ch
     feature: 'quick-fix',
     name: 'Tiny Fix',
     priority: 3,
-    description:
-      'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
+    description: 'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
   } as any);
   await createTask.execute({
     feature: 'quick-fix',
@@ -1962,10 +2062,12 @@ async function checkTaskExpandReturnsStructuredLightweightRecovery(): Promise<Ch
       'Background: third tiny change. Impact: status text only. Safety: low. Verify: prompt tests. Rollback: revert.',
   } as any);
 
-  const raw = (await ctx.taskTools.expandTaskTool((name?: string) => name || 'quick-fix').execute({
-    feature: 'quick-fix',
-    mode: 'lightweight',
-  } as any)) as string;
+  const raw = (await ctx.taskTools
+    .expandTaskTool((name?: string) => name || 'quick-fix')
+    .execute({
+      feature: 'quick-fix',
+      mode: 'lightweight',
+    } as any)) as string;
   const parsed = parseToolResponse(raw) as any;
   const pass =
     parsed.success === false &&
@@ -1996,18 +2098,21 @@ async function checkTaskExpandReturnsStructuredNonDraftRecovery(): Promise<Check
     '# doc-tune\n\nWorkflow Path: lightweight\n\n## Discovery\n\nImpact: existing plan\nSafety: low\nVerify: tests\nRollback: revert\n\n## Plan Review Checklist\n- [x] Discovery is complete and current\n- [x] Scope and non-goals are explicit\n- [x] Risks, rollout, and verification are defined\n- [x] Tasks and dependencies are actionable\n\n## Tasks\n\n### 1. Existing Task';
   ctx.planService.write('doc-tune', existingPlanContent);
   ctx.planService.approve('doc-tune', undefined, existingPlanContent);
-  await ctx.taskTools.createTaskTool((name?: string) => name || 'doc-tune').execute({
-    feature: 'doc-tune',
-    name: 'Tiny Fix',
-    priority: 3,
-    description:
-      'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
-  } as any);
+  await ctx.taskTools
+    .createTaskTool((name?: string) => name || 'doc-tune')
+    .execute({
+      feature: 'doc-tune',
+      name: 'Tiny Fix',
+      priority: 3,
+      description: 'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
+    } as any);
 
-  const raw = (await ctx.taskTools.expandTaskTool((name?: string) => name || 'doc-tune').execute({
-    feature: 'doc-tune',
-    mode: 'lightweight',
-  } as any)) as string;
+  const raw = (await ctx.taskTools
+    .expandTaskTool((name?: string) => name || 'doc-tune')
+    .execute({
+      feature: 'doc-tune',
+      mode: 'lightweight',
+    } as any)) as string;
   const parsed = parseToolResponse(raw) as any;
   const pass =
     parsed.success === false &&
@@ -2039,9 +2144,11 @@ async function checkTaskExpandReturnsStructuredNoPendingRecovery(): Promise<Chec
     'doc-tune',
     '# doc-tune\n\nWorkflow Path: lightweight\n\n## Discovery\n\nImpact: existing plan\nSafety: low\nVerify: tests\nRollback: revert\n\n## Tasks\n\n### 1. Existing Task',
   );
-  const raw = (await ctx.taskTools.expandTaskTool((name?: string) => name || 'doc-tune').execute({
-    feature: 'doc-tune',
-  } as any)) as string;
+  const raw = (await ctx.taskTools
+    .expandTaskTool((name?: string) => name || 'doc-tune')
+    .execute({
+      feature: 'doc-tune',
+    } as any)) as string;
   const parsed = parseToolResponse(raw) as any;
   const pass =
     parsed.success === false &&
@@ -2071,9 +2178,11 @@ async function checkTaskExpandReturnsStructuredApprovedNoPendingRecovery(): Prom
     '# doc-tune\n\nWorkflow Path: lightweight\n\n## Discovery\n\nImpact: existing plan\nSafety: low\nVerify: tests\nRollback: revert\n\n## Plan Review Checklist\n- [x] Discovery is complete and current\n- [x] Scope and non-goals are explicit\n- [x] Risks, rollout, and verification are defined\n- [x] Tasks and dependencies are actionable\n\n## Tasks\n\n### 1. Existing Task';
   ctx.planService.write('doc-tune', approvedPlan);
   ctx.planService.approve('doc-tune', undefined, approvedPlan);
-  const raw = (await ctx.taskTools.expandTaskTool((name?: string) => name || 'doc-tune').execute({
-    feature: 'doc-tune',
-  } as any)) as string;
+  const raw = (await ctx.taskTools
+    .expandTaskTool((name?: string) => name || 'doc-tune')
+    .execute({
+      feature: 'doc-tune',
+    } as any)) as string;
   const parsed = parseToolResponse(raw) as any;
   const pass =
     parsed.success === false &&
@@ -2103,8 +2212,7 @@ async function checkTaskExpandReturnsStructuredSelectionRecovery(): Promise<Chec
     feature: 'doc-tune',
     name: 'Tiny Fix',
     priority: 3,
-    description:
-      'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
+    description: 'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
   } as any);
   await createTask.execute({
     feature: 'doc-tune',
@@ -2114,10 +2222,12 @@ async function checkTaskExpandReturnsStructuredSelectionRecovery(): Promise<Chec
       'Background: second tiny change. Impact: help text only. Safety: low. Verify: prompt tests. Rollback: revert.',
   } as any);
 
-  const raw = (await ctx.taskTools.expandTaskTool((name?: string) => name || 'doc-tune').execute({
-    feature: 'doc-tune',
-    tasks: ['99-missing-task'],
-  } as any)) as string;
+  const raw = (await ctx.taskTools
+    .expandTaskTool((name?: string) => name || 'doc-tune')
+    .execute({
+      feature: 'doc-tune',
+      tasks: ['99-missing-task'],
+    } as any)) as string;
   const parsed = parseToolResponse(raw) as any;
   const pass =
     parsed.success === false &&
@@ -2144,17 +2254,21 @@ async function checkTaskExpandReturnsStructuredDraftDiscoveryRecovery(): Promise
   const ctx = createWorkspace();
   ctx.featureService.create('doc-tune');
   ctx.planService.write('doc-tune', '# doc-tune\n\nWorkflow Path: lightweight\n\n## Tasks\n\n### 1. Existing Task');
-  await ctx.taskTools.createTaskTool((name?: string) => name || 'doc-tune').execute({
-    feature: 'doc-tune',
-    name: 'Second Tiny Fix',
-    priority: 3,
-    description:
-      'Background: second tiny change. Impact: help text only. Safety: low. Verify: prompt tests. Rollback: revert.',
-  } as any);
-  const raw = (await ctx.taskTools.expandTaskTool((name?: string) => name || 'doc-tune').execute({
-    feature: 'doc-tune',
-    tasks: ['01-second-tiny-fix'],
-  } as any)) as string;
+  await ctx.taskTools
+    .createTaskTool((name?: string) => name || 'doc-tune')
+    .execute({
+      feature: 'doc-tune',
+      name: 'Second Tiny Fix',
+      priority: 3,
+      description:
+        'Background: second tiny change. Impact: help text only. Safety: low. Verify: prompt tests. Rollback: revert.',
+    } as any);
+  const raw = (await ctx.taskTools
+    .expandTaskTool((name?: string) => name || 'doc-tune')
+    .execute({
+      feature: 'doc-tune',
+      tasks: ['01-second-tiny-fix'],
+    } as any)) as string;
   const parsed = parseToolResponse(raw) as any;
   const pass =
     parsed.success === false &&
@@ -2193,10 +2307,12 @@ async function checkTaskExpandReturnsStructuredDraftRepairRecovery(): Promise<Ch
       'Background: second tiny change. Impact: help text only. Safety: low. Verify: prompt tests. Rollback: revert.',
   } as any);
 
-  const raw = (await ctx.taskTools.expandTaskTool((name?: string) => name || 'doc-tune').execute({
-    feature: 'doc-tune',
-    tasks: ['01-second-tiny-fix'],
-  } as any)) as string;
+  const raw = (await ctx.taskTools
+    .expandTaskTool((name?: string) => name || 'doc-tune')
+    .execute({
+      feature: 'doc-tune',
+      tasks: ['01-second-tiny-fix'],
+    } as any)) as string;
   const parsed = parseToolResponse(raw) as any;
   const pass =
     parsed.success === false &&
@@ -2273,9 +2389,11 @@ async function checkTaskExpandCanMergeIntoDraftPlan(): Promise<CheckResult> {
       'Background: update inline help text for the instant workflow path. Impact: help text only. Safety: keep behavior unchanged. Verify: docs tests still pass. Rollback: revert.',
   } as any);
 
-  const raw = (await ctx.taskTools.expandTaskTool((name?: string) => name || 'doc-tune').execute({
-    feature: 'doc-tune',
-  } as any)) as string;
+  const raw = (await ctx.taskTools
+    .expandTaskTool((name?: string) => name || 'doc-tune')
+    .execute({
+      feature: 'doc-tune',
+    } as any)) as string;
   const parsed = parseToolResponse(raw);
   const writtenPlan = ctx.planService.read('doc-tune');
   const planContent = String(writtenPlan?.content || '');
@@ -2289,7 +2407,9 @@ async function checkTaskExpandCanMergeIntoDraftPlan(): Promise<CheckResult> {
   return {
     id: 'task-expand-merge-draft-plan',
     pass,
-    detail: pass ? 'warcraft_task_expand can merge pending manual work into an existing draft plan' : `response=${JSON.stringify(parsed.data ?? null)} writtenPlan=${planContent}`,
+    detail: pass
+      ? 'warcraft_task_expand can merge pending manual work into an existing draft plan'
+      : `response=${JSON.stringify(parsed.data ?? null)} writtenPlan=${planContent}`,
   };
 }
 
@@ -2305,7 +2425,9 @@ async function checkPromptsMentionInstantPath(): Promise<CheckResult> {
   return {
     id: 'prompts-mention-instant-path',
     pass,
-    detail: pass ? 'system + agent prompts describe the instant/manual path' : 'prompts still emphasize only plan-first/lightweight paths',
+    detail: pass
+      ? 'system + agent prompts describe the instant/manual path'
+      : 'prompts still emphasize only plan-first/lightweight paths',
   };
 }
 

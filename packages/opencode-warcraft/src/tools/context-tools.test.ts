@@ -101,12 +101,10 @@ async function getStatusHealth(overrides: Partial<Record<string, unknown>> = {})
     planApproveArgs: { feature: string } | null;
     taskSyncArgs: { feature: string; mode: 'sync' } | null;
     taskExpandArgs: { feature: string; tasks: string[]; mode: 'lightweight' | 'standard' } | null;
-    promotionFlow:
-      | Array<
-          | { type: 'tool'; tool: string; args: Record<string, unknown>; purpose: string }
-          | { type: 'review'; message: string }
-        >
-      | null;
+    promotionFlow: Array<
+      | { type: 'tool'; tool: string; args: Record<string, unknown>; purpose: string }
+      | { type: 'review'; message: string }
+    > | null;
     nextAction: string;
   };
 }> {

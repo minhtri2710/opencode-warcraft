@@ -51,7 +51,9 @@ export class PlanTools {
         useScaffold: tool.schema
           .boolean()
           .optional()
-          .describe('When true, build plan content from pending manual-task briefs instead of requiring explicit markdown.'),
+          .describe(
+            'When true, build plan content from pending manual-task briefs instead of requiring explicit markdown.',
+          ),
         feature: tool.schema.string().optional().describe('Feature name (defaults to detection or single feature)'),
       },
       async execute({ content, useScaffold, feature: explicitFeature }, toolContext: ToolContext) {
@@ -150,7 +152,8 @@ export class PlanTools {
                     {
                       type: 'approved_plan_has_no_pending_manual_tasks_for_scaffold',
                       severity: 'info',
-                      message: 'The approved plan has no remaining manual tasks to materialize into a scaffolded draft.',
+                      message:
+                        'The approved plan has no remaining manual tasks to materialize into a scaffolded draft.',
                     },
                   ],
                 },
@@ -161,7 +164,9 @@ export class PlanTools {
 
           sourceTaskCount = pendingManualTasks.length;
           scaffoldMode =
-            featureData?.workflowRecommendation === 'standard' || pendingManualTasks.length > 2 ? 'standard' : 'lightweight';
+            featureData?.workflowRecommendation === 'standard' || pendingManualTasks.length > 2
+              ? 'standard'
+              : 'lightweight';
           planContent = buildPlanScaffold(feature, scaffoldMode, pendingManualTasks) ?? '';
           generatedFromManualTasks = true;
 
@@ -329,7 +334,11 @@ export class PlanTools {
                   pendingManualTasks,
                   taskExpandArgs,
                   retryArgs: { feature },
-                  promotionFlow: buildPendingManualPromotionFlow(taskExpandArgs, { feature }, { feature, mode: 'sync' }),
+                  promotionFlow: buildPendingManualPromotionFlow(
+                    taskExpandArgs,
+                    { feature },
+                    { feature, mode: 'sync' },
+                  ),
                 },
                 warnings: [
                   {
@@ -393,7 +402,11 @@ export class PlanTools {
                   remainingManualTasks: preview.manual,
                   taskExpandArgs,
                   retryArgs: { feature },
-                  promotionFlow: buildPendingManualPromotionFlow(taskExpandArgs, { feature }, { feature, mode: 'sync' }),
+                  promotionFlow: buildPendingManualPromotionFlow(
+                    taskExpandArgs,
+                    { feature },
+                    { feature, mode: 'sync' },
+                  ),
                 },
                 warnings: [
                   {

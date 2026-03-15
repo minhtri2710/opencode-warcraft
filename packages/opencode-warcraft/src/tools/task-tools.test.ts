@@ -138,12 +138,10 @@ class MockFeatureService implements Partial<FeatureService> {
 }
 
 class MockPlanService implements Partial<PlanService> {
-  planResult:
-    | {
-        content: string;
-        status: 'approved' | 'planning';
-      }
-    | null = {
+  planResult: {
+    content: string;
+    status: 'approved' | 'planning';
+  } | null = {
     content: '# Plan\n\n### 1. Test Task\n\nDescription.',
     status: 'approved',
   };
@@ -345,7 +343,8 @@ describe('TaskTools', () => {
       const tool = taskTools.createTaskTool(resolveFeature);
       const result = await tool.execute({
         name: 'Tiny Fix',
-        description: 'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
+        description:
+          'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
         order: undefined,
         feature: undefined,
         priority: 3,
@@ -416,7 +415,10 @@ describe('TaskTools', () => {
       expect(parsed.data.message).toContain('Workflow Path: lightweight');
       expect(parsed.data.message).toContain('warcraft_task_expand');
       expect(parsed.data.message).toContain('warcraft_plan_write({ useScaffold: true })');
-      expect(mockFeatureService.patchCalls).toContainEqual({ workflowPath: 'instant', workflowRecommendation: 'lightweight' });
+      expect(mockFeatureService.patchCalls).toContainEqual({
+        workflowPath: 'instant',
+        workflowRecommendation: 'lightweight',
+      });
     });
 
     it('warns when instant work grows into multiple pending manual tasks', async () => {
@@ -429,14 +431,16 @@ describe('TaskTools', () => {
       const tool = taskTools.createTaskTool(resolveFeature);
       await tool.execute({
         name: 'Tiny Fix',
-        description: 'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
+        description:
+          'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
         order: 1,
         feature: undefined,
         priority: 3,
       });
       const raw = await tool.execute({
         name: 'Second Tiny Fix',
-        description: 'Background: second tiny change. Impact: help text only. Safety: low. Verify: prompt tests. Rollback: revert.',
+        description:
+          'Background: second tiny change. Impact: help text only. Safety: low. Verify: prompt tests. Rollback: revert.',
         order: 2,
         feature: undefined,
         priority: 3,
@@ -473,21 +477,24 @@ describe('TaskTools', () => {
       const tool = taskTools.createTaskTool(resolveFeature);
       await tool.execute({
         name: 'Tiny Fix',
-        description: 'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
+        description:
+          'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
         order: 1,
         feature: undefined,
         priority: 3,
       });
       await tool.execute({
         name: 'Second Tiny Fix',
-        description: 'Background: second tiny change. Impact: help text only. Safety: low. Verify: prompt tests. Rollback: revert.',
+        description:
+          'Background: second tiny change. Impact: help text only. Safety: low. Verify: prompt tests. Rollback: revert.',
         order: 2,
         feature: undefined,
         priority: 3,
       });
       const raw = await tool.execute({
         name: 'Third Tiny Fix',
-        description: 'Background: third tiny change. Impact: another small prompt tweak. Safety: low. Verify: prompt tests. Rollback: revert.',
+        description:
+          'Background: third tiny change. Impact: another small prompt tweak. Safety: low. Verify: prompt tests. Rollback: revert.',
         order: 3,
         feature: undefined,
         priority: 3,
@@ -534,7 +541,8 @@ describe('TaskTools', () => {
       const createTool = taskTools.createTaskTool(resolveFeature);
       await createTool.execute({
         name: 'Tiny Fix',
-        description: 'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
+        description:
+          'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
         order: 1,
         feature: undefined,
         priority: 3,
@@ -588,7 +596,8 @@ describe('TaskTools', () => {
       const createTool = taskTools.createTaskTool(resolveFeature);
       await createTool.execute({
         name: 'Tiny Fix',
-        description: 'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
+        description:
+          'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
         order: 1,
         feature: undefined,
         priority: 3,
@@ -601,7 +610,10 @@ describe('TaskTools', () => {
       expect(parsed.success).toBe(false);
       expect(parsed.error).toContain('Only draft plans can be expanded');
       expect(parsed.hints).toEqual([
-        'Revise the existing plan with warcraft_plan_write using {"feature":"test-feature","content":"# test-feature\n\nWorkflow Path: lightweight\n\n## Tasks\n\n### 1. Existing Task"}.'.replace(/\n/g, '\\n'),
+        'Revise the existing plan with warcraft_plan_write using {"feature":"test-feature","content":"# test-feature\n\nWorkflow Path: lightweight\n\n## Tasks\n\n### 1. Existing Task"}.'.replace(
+          /\n/g,
+          '\\n',
+        ),
         'After the plan is back in draft form, retry warcraft_task_expand with {"feature":"test-feature","tasks":["01-tiny-fix"],"mode":"lightweight"}.',
       ]);
       expect(parsed.data).toEqual({
@@ -679,14 +691,16 @@ describe('TaskTools', () => {
       const createTool = taskTools.createTaskTool(resolveFeature);
       await createTool.execute({
         name: 'Tiny Fix',
-        description: 'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
+        description:
+          'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
         order: 1,
         feature: undefined,
         priority: 3,
       });
       await createTool.execute({
         name: 'Second Tiny Fix',
-        description: 'Background: second tiny change. Impact: help text only. Safety: low. Verify: prompt tests. Rollback: revert.',
+        description:
+          'Background: second tiny change. Impact: help text only. Safety: low. Verify: prompt tests. Rollback: revert.',
         order: 2,
         feature: undefined,
         priority: 3,
@@ -728,7 +742,8 @@ describe('TaskTools', () => {
         status: 'planning',
       };
       mockPlanService.planResult = {
-        content: '# test-feature\n\nWorkflow Path: lightweight\n\n## Discovery\n\nImpact: existing plan\nSafety: low\nVerify: tests\nRollback: revert\n\n## Tasks\n\n### 1. Existing Task',
+        content:
+          '# test-feature\n\nWorkflow Path: lightweight\n\n## Discovery\n\nImpact: existing plan\nSafety: low\nVerify: tests\nRollback: revert\n\n## Tasks\n\n### 1. Existing Task',
         status: 'planning',
       };
       mockTaskService.tasks = [];
@@ -786,14 +801,16 @@ describe('TaskTools', () => {
       const createTool = taskTools.createTaskTool(resolveFeature);
       await createTool.execute({
         name: 'Tiny Fix',
-        description: 'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
+        description:
+          'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
         order: 1,
         feature: undefined,
         priority: 3,
       });
       await createTool.execute({
         name: 'Second Tiny Fix',
-        description: 'Background: second tiny change. Impact: help text only. Safety: low. Verify: prompt tests. Rollback: revert.',
+        description:
+          'Background: second tiny change. Impact: help text only. Safety: low. Verify: prompt tests. Rollback: revert.',
         order: 2,
         feature: undefined,
         priority: 3,
@@ -819,21 +836,24 @@ describe('TaskTools', () => {
       const createTool = taskTools.createTaskTool(resolveFeature);
       await createTool.execute({
         name: 'Tiny Fix',
-        description: 'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
+        description:
+          'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
         order: 1,
         feature: undefined,
         priority: 3,
       });
       await createTool.execute({
         name: 'Second Tiny Fix',
-        description: 'Background: second tiny change. Impact: help text only. Safety: low. Verify: prompt tests. Rollback: revert.',
+        description:
+          'Background: second tiny change. Impact: help text only. Safety: low. Verify: prompt tests. Rollback: revert.',
         order: 2,
         feature: undefined,
         priority: 3,
       });
       await createTool.execute({
         name: 'Third Tiny Fix',
-        description: 'Background: third tiny change. Impact: status text only. Safety: low. Verify: prompt tests. Rollback: revert.',
+        description:
+          'Background: third tiny change. Impact: status text only. Safety: low. Verify: prompt tests. Rollback: revert.',
         order: 3,
         feature: undefined,
         priority: 3,
@@ -873,14 +893,16 @@ describe('TaskTools', () => {
         status: 'planning',
       };
       mockPlanService.planResult = {
-        content: '# test-feature\n\nWorkflow Path: lightweight\n\n## Discovery\n\nImpact: existing plan\nSafety: low\nVerify: tests\nRollback: revert',
+        content:
+          '# test-feature\n\nWorkflow Path: lightweight\n\n## Discovery\n\nImpact: existing plan\nSafety: low\nVerify: tests\nRollback: revert',
         status: 'planning',
       };
 
       const createTool = taskTools.createTaskTool(resolveFeature);
       await createTool.execute({
         name: 'Second Tiny Fix',
-        description: 'Background: second tiny change. Impact: help text only. Safety: low. Verify: prompt tests. Rollback: revert.',
+        description:
+          'Background: second tiny change. Impact: help text only. Safety: low. Verify: prompt tests. Rollback: revert.',
         order: 2,
         feature: undefined,
         priority: 3,
@@ -893,7 +915,10 @@ describe('TaskTools', () => {
       expect(parsed.success).toBe(false);
       expect(parsed.error).toContain('## Tasks section');
       expect(parsed.hints).toEqual([
-        'Repair the draft with warcraft_plan_write using {"feature":"test-feature","content":"# test-feature\n\nWorkflow Path: lightweight\n\n## Discovery\n\nImpact: existing plan\nSafety: low\nVerify: tests\nRollback: revert\n\n## Tasks\n"} so the plan contains a `## Tasks` section.'.replace(/\n/g, '\\n'),
+        'Repair the draft with warcraft_plan_write using {"feature":"test-feature","content":"# test-feature\n\nWorkflow Path: lightweight\n\n## Discovery\n\nImpact: existing plan\nSafety: low\nVerify: tests\nRollback: revert\n\n## Tasks\n"} so the plan contains a `## Tasks` section.'.replace(
+          /\n/g,
+          '\\n',
+        ),
         'Then retry warcraft_task_expand with {"feature":"test-feature","tasks":["02-second-tiny-fix"],"mode":"lightweight"}.',
       ]);
       expect(parsed.data).toEqual({
@@ -914,7 +939,8 @@ describe('TaskTools', () => {
         {
           type: 'draft_plan_tasks_section_missing',
           severity: 'error',
-          message: 'The existing draft plan is missing a `## Tasks` section, so pending manual tasks cannot be merged into it.',
+          message:
+            'The existing draft plan is missing a `## Tasks` section, so pending manual tasks cannot be merged into it.',
           count: 1,
         },
       ]);
@@ -933,7 +959,8 @@ describe('TaskTools', () => {
       const createTool = taskTools.createTaskTool(resolveFeature);
       await createTool.execute({
         name: 'Second Tiny Fix',
-        description: 'Background: second tiny change. Impact: help text only. Safety: low. Verify: prompt tests. Rollback: revert.',
+        description:
+          'Background: second tiny change. Impact: help text only. Safety: low. Verify: prompt tests. Rollback: revert.',
         order: 2,
         feature: undefined,
         priority: 3,
@@ -964,7 +991,8 @@ describe('TaskTools', () => {
         {
           type: 'draft_plan_discovery_section_invalid',
           severity: 'error',
-          message: 'The existing draft plan is missing required discovery details, so merged manual work cannot be finalized yet.',
+          message:
+            'The existing draft plan is missing required discovery details, so merged manual work cannot be finalized yet.',
           count: 1,
         },
       ]);
@@ -1018,21 +1046,25 @@ describe('TaskTools', () => {
         created: [],
         removed: [],
         kept: ['01-existing-task'],
-        reconciled: [{ from: '02-second-tiny-fix', to: '02-second-tiny-fix', planTitle: 'Second Tiny Fix', beadId: 'task-2' }],
+        reconciled: [
+          { from: '02-second-tiny-fix', to: '02-second-tiny-fix', planTitle: 'Second Tiny Fix', beadId: 'task-2' },
+        ],
         manual: ['01-tiny-fix'],
       };
 
       const createTool = taskTools.createTaskTool(resolveFeature);
       await createTool.execute({
         name: 'Tiny Fix',
-        description: 'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
+        description:
+          'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
         order: 1,
         feature: undefined,
         priority: 3,
       });
       await createTool.execute({
         name: 'Second Tiny Fix',
-        description: 'Background: second tiny change. Impact: help text only. Safety: low. Verify: prompt tests. Rollback: revert.',
+        description:
+          'Background: second tiny change. Impact: help text only. Safety: low. Verify: prompt tests. Rollback: revert.',
         order: 2,
         feature: undefined,
         priority: 3,

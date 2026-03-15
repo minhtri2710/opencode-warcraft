@@ -46,7 +46,9 @@ function renderDiscoveryField(label: string, values: string[], fallback: string)
 
 function buildTaskSection(task: ManualPlanScaffoldTask, index: number, startNumber: number = 1): string[] {
   const sections = parseBriefSections(task.brief);
-  const briefSummary = uniqueNonEmpty([sections.background, sections.impact, sections.reasoning, sections.scope]).join(' ');
+  const briefSummary = uniqueNonEmpty([sections.background, sections.impact, sections.reasoning, sections.scope]).join(
+    ' ',
+  );
   const verify = sections.verify ?? 'Review and replace with the exact verification command(s) before approval.';
   const taskNumber = startNumber + index;
   const dependsOnNumber = taskNumber - 1;
@@ -89,7 +91,11 @@ export function buildPlanScaffold(
     ...(mode === 'lightweight' ? ['Workflow Path: lightweight', ''] : []),
     '## Discovery',
     '',
-    ...renderDiscoveryField('Background', background, 'Summarize why the instant/manual task(s) should move into a reviewed plan.'),
+    ...renderDiscoveryField(
+      'Background',
+      background,
+      'Summarize why the instant/manual task(s) should move into a reviewed plan.',
+    ),
     ...renderDiscoveryField('Impact', impact, 'List the files or behaviors expected to change.'),
     ...renderDiscoveryField('Safety', safety, 'Capture the main risks and invariants to preserve.'),
     ...renderDiscoveryField('Verify', verify, 'Replace this with exact verification commands before approval.'),
