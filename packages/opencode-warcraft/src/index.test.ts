@@ -29,7 +29,7 @@ describe('Warcraft Plugin Tool Registration', () => {
     expect(typeof plugin).toBe('function');
   });
 
-  it('should have all 20 warcraft tools registered', () => {
+  it('should have all 19 warcraft tools registered', () => {
     const tools = pluginInstance.tool;
     expect(tools).toBeDefined();
 
