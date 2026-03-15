@@ -273,6 +273,75 @@ describe('PlanTools', () => {
     });
   });
 
+  it('returns structured promotion recovery metadata when approval is attempted before any plan exists', async () => {
+    const approveCalls: string[] = [];
+    const tool = new PlanTools({
+      featureService: {} as unknown as FeatureService,
+      planService: {
+        read: () => null,
+        approve: (feature: string) => {
+          approveCalls.push(feature);
+          return { severity: 'ok', diagnostics: [] };
+        },
+      } as unknown as PlanService,
+      taskService: {
+        list: () => [{ folder: '01-tiny-fix', name: 'Tiny Fix', status: 'pending', origin: 'manual' }],
+      } as unknown as TaskService,
+      captureSession: () => {},
+      updateFeatureMetadata: () => {},
+      workflowGatesMode: 'warn',
+    }).approvePlanTool((name) => name ?? 'test-feature');
+
+    const raw = await tool.execute({ feature: 'test-feature' } as any, {} as any);
+    const parsed = JSON.parse(raw);
+
+    expect(parsed.success).toBe(false);
+    expect(parsed.error).toContain('No plan.md found');
+    expect(parsed.hints).toEqual([
+      'Promote the pending manual tasks with warcraft_task_expand using {"feature":"test-feature","tasks":["01-tiny-fix"],"mode":"lightweight"}.',
+      'After the draft is written and reviewed, retry warcraft_plan_approve.',
+    ]);
+    expect(parsed.data).toEqual({
+      blockedReason: 'plan_missing_for_approval',
+      pendingManualTasks: ['01-tiny-fix'],
+      taskExpandArgs: { feature: 'test-feature', tasks: ['01-tiny-fix'], mode: 'lightweight' },
+      retryArgs: { feature: 'test-feature' },
+      promotionFlow: [
+        {
+          type: 'tool',
+          tool: 'warcraft_task_expand',
+          args: { feature: 'test-feature', tasks: ['01-tiny-fix'], mode: 'lightweight' },
+          purpose: 'Promote the pending manual tasks into a reviewed draft plan.',
+        },
+        {
+          type: 'review',
+          message: 'Review or refine the drafted plan before approval so the reviewed path stays intentional.',
+        },
+        {
+          type: 'tool',
+          tool: 'warcraft_plan_approve',
+          args: { feature: 'test-feature' },
+          purpose: 'Approve the reviewed plan once it is ready to execute.',
+        },
+        {
+          type: 'tool',
+          tool: 'warcraft_tasks_sync',
+          args: { feature: 'test-feature', mode: 'sync' },
+          purpose: 'Generate or reconcile canonical tasks from the approved plan.',
+        },
+      ],
+    });
+    expect(parsed.warnings).toEqual([
+      {
+        type: 'plan_missing_for_approval',
+        severity: 'error',
+        message: 'A reviewed plan is required before approval can succeed.',
+        count: 1,
+      },
+    ]);
+    expect(approveCalls).toEqual([]);
+  });
+
   it('returns structured checklist recovery metadata when approval is blocked in enforce mode', async () => {
     const approveCalls: string[] = [];
     const tool = new PlanTools({
