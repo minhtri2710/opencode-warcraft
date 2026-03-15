@@ -1,1 +1,3 @@
-- Remaining structured-recovery work should stay narrow and behavior-led. Only pursue blockers that can return an exact next command or continuation flow with real user value. If no remaining promotion/tooling failure clearly meets that bar, stop extending metadata rather than growing the benchmark for its own sake.
+- Remaining structured-recovery work should stay narrow and behavior-led. Only pursue blockers that can return an exact next command or continuation flow with real user value.
+- Candidate to inspect next: early `warcraft_plan_approve` attempts with no `plan.md` on features that already have pending manual tasks may be able to return a real promotion handoff (`warcraft_task_expand` / reviewed-plan flow) instead of only a missing-plan error.
+- If that path turns out to be ambiguous or low-value, stop rather than extending metadata for benchmark-only gains.

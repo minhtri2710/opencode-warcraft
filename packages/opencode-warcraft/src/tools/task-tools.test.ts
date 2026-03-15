@@ -977,6 +977,67 @@ describe('TaskTools', () => {
   });
 
   describe('syncTasksTool', () => {
+    it('returns structured promotion recovery metadata when no plan exists but manual tasks can be promoted', async () => {
+      mockPlanService.planResult = null;
+      await taskTools.createTaskTool(resolveFeature).execute({
+        feature: 'test-feature',
+        name: 'Tiny Fix',
+        priority: 3,
+        description:
+          'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
+      });
+
+      const tool = taskTools.syncTasksTool(resolveFeature);
+      const result = await tool.execute({ feature: undefined, mode: 'sync' });
+      const parsed = JSON.parse(result as string);
+
+      expect(parsed.success).toBe(false);
+      expect(parsed.error).toContain('No plan.md found');
+      expect(parsed.hints).toEqual([
+        'Promote the pending manual tasks with warcraft_task_expand using {"feature":"test-feature","tasks":["01-tiny-fix"],"mode":"lightweight"}.',
+        'Then review the draft, run warcraft_plan_approve, and retry warcraft_tasks_sync.',
+      ]);
+      expect(parsed.data).toEqual({
+        blockedReason: 'plan_missing_for_sync',
+        pendingManualTasks: ['01-tiny-fix'],
+        taskExpandArgs: { feature: 'test-feature', tasks: ['01-tiny-fix'], mode: 'lightweight' },
+        planApproveArgs: { feature: 'test-feature' },
+        taskSyncArgs: { feature: 'test-feature', mode: 'sync' },
+        promotionFlow: [
+          {
+            type: 'tool',
+            tool: 'warcraft_task_expand',
+            args: { feature: 'test-feature', tasks: ['01-tiny-fix'], mode: 'lightweight' },
+            purpose: 'Promote the pending manual tasks into a reviewed draft plan.',
+          },
+          {
+            type: 'review',
+            message: 'Review or refine the drafted plan before approval so the reviewed path stays intentional.',
+          },
+          {
+            type: 'tool',
+            tool: 'warcraft_plan_approve',
+            args: { feature: 'test-feature' },
+            purpose: 'Approve the reviewed plan once it is ready to execute.',
+          },
+          {
+            type: 'tool',
+            tool: 'warcraft_tasks_sync',
+            args: { feature: 'test-feature', mode: 'sync' },
+            purpose: 'Generate or reconcile canonical tasks from the approved plan.',
+          },
+        ],
+      });
+      expect(parsed.warnings).toEqual([
+        {
+          type: 'plan_missing_for_sync',
+          severity: 'error',
+          message: 'Tasks can only be synced after pending manual work has been promoted into a reviewed plan.',
+          count: 1,
+        },
+      ]);
+    });
+
     it('returns structured approval recovery metadata when plan is not approved yet', async () => {
       mockPlanService.planResult = {
         content: '# test-feature\n\nWorkflow Path: lightweight\n\n## Tasks\n\n### 1. Existing Task',

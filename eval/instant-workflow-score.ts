@@ -980,6 +980,46 @@ async function checkStatusReturnsTaskSyncArgsAfterApproval(): Promise<CheckResul
   };
 }
 
+async function checkSyncTasksReturnsStructuredMissingPlanRecovery(): Promise<CheckResult> {
+  const ctx = createWorkspace();
+  ctx.featureService.create('doc-tune');
+  await ctx.taskTools.createTaskTool((name?: string) => name || 'doc-tune').execute({
+    feature: 'doc-tune',
+    name: 'Tiny Fix',
+    priority: 3,
+    description:
+      'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
+  } as any);
+  const raw = (await ctx.taskTools.syncTasksTool((name?: string) => name || 'doc-tune').execute({
+    feature: 'doc-tune',
+    mode: 'sync',
+  } as any)) as string;
+  const parsed = parseToolResponse(raw) as any;
+  const pass =
+    parsed.success === false &&
+    parsed.data?.blockedReason === 'plan_missing_for_sync' &&
+    JSON.stringify(parsed.data?.pendingManualTasks) === JSON.stringify(['01-tiny-fix']) &&
+    parsed.data?.taskExpandArgs?.feature === 'doc-tune' &&
+    JSON.stringify(parsed.data?.taskExpandArgs?.tasks) === JSON.stringify(['01-tiny-fix']) &&
+    parsed.data?.taskExpandArgs?.mode === 'lightweight' &&
+    parsed.data?.planApproveArgs?.feature === 'doc-tune' &&
+    parsed.data?.taskSyncArgs?.feature === 'doc-tune' &&
+    parsed.data?.taskSyncArgs?.mode === 'sync' &&
+    matchesPendingManualPromotionFlow(parsed.data?.promotionFlow, 'doc-tune', ['01-tiny-fix'], 'lightweight') &&
+    Array.isArray(parsed.hints) &&
+    /warcraft_task_expand/.test(String(parsed.hints?.[0] || '')) &&
+    /warcraft_plan_approve/.test(String(parsed.hints?.[1] || '')) &&
+    Array.isArray(parsed.warnings) &&
+    parsed.warnings[0]?.type === 'plan_missing_for_sync';
+  return {
+    id: 'task-sync-missing-plan-structured-recovery',
+    pass,
+    detail: pass
+      ? 'warcraft_tasks_sync returns structured promotion recovery metadata when pending manual work exists but no plan has been written yet'
+      : `response=${JSON.stringify(parsed)}`,
+  };
+}
+
 async function checkSyncTasksReturnsStructuredApprovalRecovery(): Promise<CheckResult> {
   const ctx = createWorkspace();
   ctx.featureService.create('doc-tune');
@@ -2071,6 +2111,7 @@ async function main() {
     checkStatusReturnsPromotionFlowForEscalatedInstantWork(),
     checkStatusDraftPlanSurfacesRemainingManualPromotion(),
     checkStatusReturnsTaskSyncArgsAfterApproval(),
+    checkSyncTasksReturnsStructuredMissingPlanRecovery(),
     checkSyncTasksReturnsStructuredApprovalRecovery(),
     checkPlanApproveReturnsSyncFlow(),
     checkPlanApproveReturnsStructuredChecklistRecovery(),

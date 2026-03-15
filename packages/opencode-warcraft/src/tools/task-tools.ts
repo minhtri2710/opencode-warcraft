@@ -68,6 +68,45 @@ export class TaskTools {
 
         const planResult = planService.read(feature);
         if (!planResult) {
+          const pendingManualTasks = taskService
+            .list(feature)
+            .filter((task) => task.origin === 'manual' && task.status === 'pending')
+            .map((task) => task.folder);
+          if (pendingManualTasks.length > 0) {
+            const taskExpandArgs = {
+              feature,
+              tasks: pendingManualTasks,
+              mode:
+                featureData.workflowRecommendation === 'standard' || pendingManualTasks.length > 2
+                  ? ('standard' as const)
+                  : ('lightweight' as const),
+            };
+            return toolError(
+              'No plan.md found. Pending manual tasks must be promoted into a reviewed plan before they can be synced.',
+              [
+                `Promote the pending manual tasks with warcraft_task_expand using ${JSON.stringify(taskExpandArgs)}.`,
+                'Then review the draft, run warcraft_plan_approve, and retry warcraft_tasks_sync.',
+              ],
+              {
+                data: {
+                  blockedReason: 'plan_missing_for_sync',
+                  pendingManualTasks,
+                  taskExpandArgs,
+                  planApproveArgs: { feature },
+                  taskSyncArgs: { feature, mode: 'sync' as const },
+                  promotionFlow: buildPendingManualPromotionFlow(taskExpandArgs, { feature }, { feature, mode: 'sync' }),
+                },
+                warnings: [
+                  {
+                    type: 'plan_missing_for_sync',
+                    severity: 'error',
+                    message: 'Tasks can only be synced after pending manual work has been promoted into a reviewed plan.',
+                    count: pendingManualTasks.length,
+                  },
+                ],
+              },
+            );
+          }
           return toolError('No plan.md found');
         }
 
