@@ -1642,6 +1642,51 @@ async function checkTaskExpandReturnsStructuredLightweightRecovery(): Promise<Ch
   };
 }
 
+async function checkTaskExpandReturnsStructuredSelectionRecovery(): Promise<CheckResult> {
+  const ctx = createWorkspace();
+  ctx.featureService.create('doc-tune');
+  const createTask = ctx.taskTools.createTaskTool((name?: string) => name || 'doc-tune');
+  await createTask.execute({
+    feature: 'doc-tune',
+    name: 'Tiny Fix',
+    priority: 3,
+    description:
+      'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
+  } as any);
+  await createTask.execute({
+    feature: 'doc-tune',
+    name: 'Second Tiny Fix',
+    priority: 3,
+    description:
+      'Background: second tiny change. Impact: help text only. Safety: low. Verify: prompt tests. Rollback: revert.',
+  } as any);
+
+  const raw = (await ctx.taskTools.expandTaskTool((name?: string) => name || 'doc-tune').execute({
+    feature: 'doc-tune',
+    tasks: ['99-missing-task'],
+  } as any)) as string;
+  const parsed = parseToolResponse(raw) as any;
+  const pass =
+    parsed.success === false &&
+    parsed.data?.blockedReason === 'manual_task_selection_invalid' &&
+    parsed.data?.requestedTask === '99-missing-task' &&
+    JSON.stringify(parsed.data?.availableManualTasks) === JSON.stringify(['01-tiny-fix', '02-second-tiny-fix']) &&
+    parsed.data?.retryTaskExpandArgs?.feature === 'doc-tune' &&
+    JSON.stringify(parsed.data?.retryTaskExpandArgs?.tasks) === JSON.stringify(['01-tiny-fix', '02-second-tiny-fix']) &&
+    Array.isArray(parsed.hints) &&
+    /Available pending manual tasks/.test(String(parsed.hints?.[0] || '')) &&
+    /warcraft_task_expand/.test(String(parsed.hints?.[1] || '')) &&
+    Array.isArray(parsed.warnings) &&
+    parsed.warnings[0]?.type === 'manual_task_selection_invalid';
+  return {
+    id: 'task-expand-selection-structured-recovery',
+    pass,
+    detail: pass
+      ? 'warcraft_task_expand returns structured recovery metadata when selected manual tasks are invalid'
+      : `response=${JSON.stringify(parsed)}`,
+  };
+}
+
 async function checkTaskExpandReturnsStructuredDraftRepairRecovery(): Promise<CheckResult> {
   const ctx = createWorkspace();
   ctx.featureService.create('doc-tune');
@@ -1858,6 +1903,7 @@ async function main() {
     checkTaskExpandReturnsPromotionFlow(),
     checkTaskExpandReturnsFollowUpExpansionForRemainingManualTasks(),
     checkTaskExpandReturnsStructuredLightweightRecovery(),
+    checkTaskExpandReturnsStructuredSelectionRecovery(),
     checkTaskExpandReturnsStructuredDraftRepairRecovery(),
     checkTaskExpandCanMergeIntoDraftPlan(),
     checkPromptsMentionInstantPath(),

@@ -279,7 +279,8 @@ export class TaskTools {
           return toolError('No pending manual tasks are available to expand.');
         }
 
-        const requestedTasks = tasks?.length ? tasks : pendingManualTasks.map((task) => task.folder);
+        const availableManualTasks = pendingManualTasks.map((task) => task.folder);
+        const requestedTasks = tasks?.length ? tasks : availableManualTasks;
         for (const taskFolder of requestedTasks) {
           validateTaskInput(taskFolder);
         }
@@ -288,7 +289,38 @@ export class TaskTools {
         for (const taskFolder of requestedTasks) {
           const task = pendingManualTasks.find((item) => item.folder === taskFolder);
           if (!task) {
-            return toolError(`Task '${taskFolder}' is not a pending manual task for feature '${feature}'.`);
+            const retryTaskExpandArgs =
+              mode && mode !== 'auto'
+                ? { feature, tasks: availableManualTasks, mode }
+                : { feature, tasks: availableManualTasks };
+            return toolError(
+              `Task '${taskFolder}' is not a pending manual task for feature '${feature}'.`,
+              [
+                availableManualTasks.length > 0
+                  ? `Available pending manual tasks: ${availableManualTasks.join(', ')}.`
+                  : 'There are no pending manual tasks available to expand.',
+                availableManualTasks.length > 0
+                  ? `Retry warcraft_task_expand with ${JSON.stringify(retryTaskExpandArgs)}.`
+                  : 'Create or restore pending manual tasks before retrying warcraft_task_expand.',
+              ],
+              {
+                data: {
+                  blockedReason: 'manual_task_selection_invalid',
+                  requestedTask: taskFolder,
+                  availableManualTasks,
+                  retryTaskExpandArgs,
+                },
+                warnings: [
+                  {
+                    type: 'manual_task_selection_invalid',
+                    severity: 'error',
+                    message: 'The requested manual task selection does not match the feature\'s pending manual tasks.',
+                    affected: taskFolder,
+                    count: 1,
+                  },
+                ],
+              },
+            );
           }
           const rawStatus = taskService.getRawStatus(feature, task.folder);
           selectedTasks.push({
