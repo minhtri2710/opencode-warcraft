@@ -47,7 +47,12 @@ export class FilesystemTaskStore implements TaskStore {
       beadId = deriveDeterministicLocalId(featureName, folder);
     }
 
-    const statusWithBead: TaskStatus = { ...status, beadId };
+    const statusWithBead: TaskStatus = {
+      schemaVersion: TASK_STATUS_SCHEMA_VERSION,
+      ...status,
+      beadId,
+      folder,
+    };
 
     const taskPath = getTaskPath(this.projectRoot, featureName, folder);
     ensureDir(taskPath);
