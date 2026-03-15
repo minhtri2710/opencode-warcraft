@@ -977,6 +977,55 @@ describe('TaskTools', () => {
   });
 
   describe('syncTasksTool', () => {
+    it('returns structured approval recovery metadata when plan is not approved yet', async () => {
+      mockPlanService.planResult = {
+        content: '# test-feature\n\nWorkflow Path: lightweight\n\n## Tasks\n\n### 1. Existing Task',
+        status: 'planning',
+      };
+
+      const tool = taskTools.syncTasksTool(resolveFeature);
+      const result = await tool.execute({ feature: undefined, mode: 'sync' });
+      const parsed = JSON.parse(result as string);
+
+      expect(parsed.success).toBe(false);
+      expect(parsed.error).toContain('Plan must be approved first');
+      expect(parsed.hints).toEqual([
+        'Review the draft plan and complete any required checklist items.',
+        'Then run warcraft_plan_approve with {"feature":"test-feature"} before retrying warcraft_tasks_sync.',
+      ]);
+      expect(parsed.data).toEqual({
+        blockedReason: 'plan_not_approved',
+        planStatus: 'planning',
+        planApproveArgs: { feature: 'test-feature' },
+        taskSyncArgs: { feature: 'test-feature', mode: 'sync' },
+        promotionFlow: [
+          {
+            type: 'review',
+            message: 'Review or refine the drafted plan before approval so the reviewed path stays intentional.',
+          },
+          {
+            type: 'tool',
+            tool: 'warcraft_plan_approve',
+            args: { feature: 'test-feature' },
+            purpose: 'Approve the reviewed plan once it is ready to execute.',
+          },
+          {
+            type: 'tool',
+            tool: 'warcraft_tasks_sync',
+            args: { feature: 'test-feature', mode: 'sync' },
+            purpose: 'Generate or reconcile canonical tasks from the approved plan.',
+          },
+        ],
+      });
+      expect(parsed.warnings).toEqual([
+        {
+          type: 'plan_not_approved',
+          severity: 'error',
+          message: 'Tasks can only be synced from an approved plan.',
+        },
+      ]);
+    });
+
     it('preview surfaces reconciliations', async () => {
       mockTaskService.previewResult = {
         created: [],

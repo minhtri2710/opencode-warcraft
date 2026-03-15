@@ -980,6 +980,78 @@ async function checkStatusReturnsTaskSyncArgsAfterApproval(): Promise<CheckResul
   };
 }
 
+async function checkSyncTasksReturnsStructuredApprovalRecovery(): Promise<CheckResult> {
+  const ctx = createWorkspace();
+  ctx.featureService.create('doc-tune');
+  await ctx.planTools.writePlanTool((name?: string) => name || 'doc-tune').execute(
+    {
+      feature: 'doc-tune',
+      content: [
+        '# doc-tune',
+        '',
+        'Workflow Path: lightweight',
+        '',
+        '## Discovery',
+        '',
+        'Impact: docs text only',
+        'Safety: low',
+        'Verify: docs tests',
+        'Rollback: revert',
+        '',
+        '## Non-Goals',
+        '',
+        '- Keep scope tight.',
+        '',
+        '## Ghost Diffs',
+        '',
+        '- Skip alternatives for now.',
+        '',
+        '## Tasks',
+        '',
+        '### 1. Refresh docs wording',
+        '',
+        '**Depends on**: none',
+        '',
+        '**What to do**:',
+        '- Update docs wording.',
+        '',
+        '**References**:',
+        '- Existing context.',
+        '',
+        '**Verify**:',
+        '- [ ] docs tests',
+        '',
+      ].join('\n'),
+    } as any,
+    {} as any,
+  );
+  const raw = (await ctx.taskTools.syncTasksTool((name?: string) => name || 'doc-tune').execute({
+    feature: 'doc-tune',
+    mode: 'sync',
+  } as any)) as string;
+  const parsed = parseToolResponse(raw) as any;
+  const pass =
+    parsed.success === false &&
+    parsed.data?.blockedReason === 'plan_not_approved' &&
+    parsed.data?.planStatus === 'planning' &&
+    parsed.data?.planApproveArgs?.feature === 'doc-tune' &&
+    parsed.data?.taskSyncArgs?.feature === 'doc-tune' &&
+    parsed.data?.taskSyncArgs?.mode === 'sync' &&
+    matchesDraftPlanPromotionFlow(parsed.data?.promotionFlow, 'doc-tune') &&
+    Array.isArray(parsed.hints) &&
+    /required checklist/i.test(String(parsed.hints?.[0] || '')) &&
+    /warcraft_plan_approve/.test(String(parsed.hints?.[1] || '')) &&
+    Array.isArray(parsed.warnings) &&
+    parsed.warnings[0]?.type === 'plan_not_approved';
+  return {
+    id: 'task-sync-approval-structured-recovery',
+    pass,
+    detail: pass
+      ? 'warcraft_tasks_sync returns structured approval recovery metadata when the plan is still draft'
+      : `response=${JSON.stringify(parsed)}`,
+  };
+}
+
 async function checkPlanApproveReturnsSyncFlow(): Promise<CheckResult> {
   const ctx = createWorkspace();
   ctx.featureService.create('doc-tune');
@@ -1999,6 +2071,7 @@ async function main() {
     checkStatusReturnsPromotionFlowForEscalatedInstantWork(),
     checkStatusDraftPlanSurfacesRemainingManualPromotion(),
     checkStatusReturnsTaskSyncArgsAfterApproval(),
+    checkSyncTasksReturnsStructuredApprovalRecovery(),
     checkPlanApproveReturnsSyncFlow(),
     checkPlanApproveReturnsStructuredChecklistRecovery(),
     checkPlanApproveRejectsRemainingManualTasks(),

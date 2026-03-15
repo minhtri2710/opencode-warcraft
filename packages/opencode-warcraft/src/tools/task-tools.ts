@@ -72,7 +72,30 @@ export class TaskTools {
         }
 
         if (planResult.status !== 'approved') {
-          return toolError('Plan must be approved first');
+          const planApproveArgs = { feature };
+          return toolError(
+            'Plan must be approved first',
+            [
+              'Review the draft plan and complete any required checklist items.',
+              `Then run warcraft_plan_approve with ${JSON.stringify(planApproveArgs)} before retrying warcraft_tasks_sync.`,
+            ],
+            {
+              data: {
+                blockedReason: 'plan_not_approved',
+                planStatus: planResult.status,
+                planApproveArgs,
+                taskSyncArgs: { feature, mode: 'sync' as const },
+                promotionFlow: buildDraftPlanPromotionFlow(planApproveArgs, { feature, mode: 'sync' }),
+              },
+              warnings: [
+                {
+                  type: 'plan_not_approved',
+                  severity: 'error',
+                  message: 'Tasks can only be synced from an approved plan.',
+                },
+              ],
+            },
+          );
         }
 
         if (mode === 'preview') {
