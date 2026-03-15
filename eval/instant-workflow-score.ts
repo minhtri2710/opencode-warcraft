@@ -1169,6 +1169,40 @@ async function checkPlanApproveRejectsRemainingManualTasks(): Promise<CheckResul
   };
 }
 
+async function checkPlanWriteReturnsStructuredNoPendingScaffoldRecovery(): Promise<CheckResult> {
+  const ctx = createWorkspace();
+  ctx.featureService.create('doc-tune');
+  ctx.planService.write(
+    'doc-tune',
+    '# doc-tune\n\nWorkflow Path: lightweight\n\n## Tasks\n\n### 1. Existing Task',
+  );
+
+  const raw = (await ctx.planTools.writePlanTool((name?: string) => name || 'doc-tune').execute(
+    { feature: 'doc-tune', useScaffold: true } as any,
+    {} as any,
+  )) as string;
+  const parsed = parseToolResponse(raw) as any;
+  const pass =
+    parsed.success === false &&
+    parsed.data?.blockedReason === 'no_pending_manual_tasks_for_scaffold' &&
+    parsed.data?.planApproveArgs?.feature === 'doc-tune' &&
+    parsed.data?.taskSyncArgs?.feature === 'doc-tune' &&
+    parsed.data?.taskSyncArgs?.mode === 'sync' &&
+    matchesDraftPlanPromotionFlow(parsed.data?.promotionFlow, 'doc-tune') &&
+    Array.isArray(parsed.hints) &&
+    /draft plan already covers/i.test(String(parsed.hints?.[0] || '')) &&
+    /warcraft_plan_approve/i.test(String(parsed.hints?.[1] || '')) &&
+    Array.isArray(parsed.warnings) &&
+    parsed.warnings[0]?.type === 'no_pending_manual_tasks_for_scaffold';
+  return {
+    id: 'plan-write-no-pending-scaffold-structured-recovery',
+    pass,
+    detail: pass
+      ? 'warcraft_plan_write returns structured continuation metadata when useScaffold has nothing left to materialize'
+      : `response=${JSON.stringify(parsed)}`,
+  };
+}
+
 async function checkPlanWriteReturnsStructuredDiscoveryRecovery(): Promise<CheckResult> {
   const ctx = createWorkspace();
   ctx.featureService.create('doc-tune');
@@ -1642,6 +1676,38 @@ async function checkTaskExpandReturnsStructuredLightweightRecovery(): Promise<Ch
   };
 }
 
+async function checkTaskExpandReturnsStructuredNoPendingRecovery(): Promise<CheckResult> {
+  const ctx = createWorkspace();
+  ctx.featureService.create('doc-tune');
+  ctx.planService.write(
+    'doc-tune',
+    '# doc-tune\n\nWorkflow Path: lightweight\n\n## Discovery\n\nImpact: existing plan\nSafety: low\nVerify: tests\nRollback: revert\n\n## Tasks\n\n### 1. Existing Task',
+  );
+  const raw = (await ctx.taskTools.expandTaskTool((name?: string) => name || 'doc-tune').execute({
+    feature: 'doc-tune',
+  } as any)) as string;
+  const parsed = parseToolResponse(raw) as any;
+  const pass =
+    parsed.success === false &&
+    parsed.data?.blockedReason === 'no_pending_manual_tasks_to_expand' &&
+    parsed.data?.planApproveArgs?.feature === 'doc-tune' &&
+    parsed.data?.taskSyncArgs?.feature === 'doc-tune' &&
+    parsed.data?.taskSyncArgs?.mode === 'sync' &&
+    matchesDraftPlanPromotionFlow(parsed.data?.promotionFlow, 'doc-tune') &&
+    Array.isArray(parsed.hints) &&
+    /draft plan already covers/i.test(String(parsed.hints?.[0] || '')) &&
+    /warcraft_plan_approve/i.test(String(parsed.hints?.[1] || '')) &&
+    Array.isArray(parsed.warnings) &&
+    parsed.warnings[0]?.type === 'no_pending_manual_tasks_to_expand';
+  return {
+    id: 'task-expand-no-pending-structured-recovery',
+    pass,
+    detail: pass
+      ? 'warcraft_task_expand returns structured continuation metadata when a draft plan has nothing left to expand'
+      : `response=${JSON.stringify(parsed)}`,
+  };
+}
+
 async function checkTaskExpandReturnsStructuredSelectionRecovery(): Promise<CheckResult> {
   const ctx = createWorkspace();
   ctx.featureService.create('doc-tune');
@@ -1894,6 +1960,7 @@ async function main() {
     checkPlanApproveReturnsStructuredChecklistRecovery(),
     checkPlanApproveRejectsRemainingManualTasks(),
     checkPlanApproveReturnsStructuredBlockedRecovery(),
+    checkPlanWriteReturnsStructuredNoPendingScaffoldRecovery(),
     checkPlanWriteReturnsStructuredDiscoveryRecovery(),
     checkPlanWriteCanMaterializeLightweightScaffold(),
     checkPlanWriteReturnsPromotionFlow(),
@@ -1903,6 +1970,7 @@ async function main() {
     checkTaskExpandReturnsPromotionFlow(),
     checkTaskExpandReturnsFollowUpExpansionForRemainingManualTasks(),
     checkTaskExpandReturnsStructuredLightweightRecovery(),
+    checkTaskExpandReturnsStructuredNoPendingRecovery(),
     checkTaskExpandReturnsStructuredSelectionRecovery(),
     checkTaskExpandReturnsStructuredDraftRepairRecovery(),
     checkTaskExpandCanMergeIntoDraftPlan(),

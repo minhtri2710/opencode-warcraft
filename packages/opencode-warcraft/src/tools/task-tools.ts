@@ -276,6 +276,30 @@ export class TaskTools {
           .list(feature)
           .filter((task) => task.origin === 'manual' && task.status === 'pending');
         if (pendingManualTasks.length === 0) {
+          if (existingPlan?.status === 'planning') {
+            return toolError(
+              'No pending manual tasks are available to expand.',
+              [
+                'The draft plan already covers the pending manual work that can be promoted right now.',
+                'Review the draft and continue with warcraft_plan_approve when it is ready.',
+              ],
+              {
+                data: {
+                  blockedReason: 'no_pending_manual_tasks_to_expand',
+                  planApproveArgs: { feature },
+                  taskSyncArgs: { feature, mode: 'sync' as const },
+                  promotionFlow: buildDraftPlanPromotionFlow({ feature }, { feature, mode: 'sync' }),
+                },
+                warnings: [
+                  {
+                    type: 'no_pending_manual_tasks_to_expand',
+                    severity: 'info',
+                    message: 'There are no pending manual tasks left to merge into the current draft plan.',
+                  },
+                ],
+              },
+            );
+          }
           return toolError('No pending manual tasks are available to expand.');
         }
 

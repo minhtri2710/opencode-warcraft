@@ -5,6 +5,10 @@ import { PlanTools } from './plan-tools.js';
 class MockPlanService implements Partial<PlanService> {
   written: Array<{ feature: string; content: string }> = [];
 
+  read() {
+    return null;
+  }
+
   write(feature: string, content: string) {
     this.written.push({ feature, content });
     return `/tmp/${feature}/plan.md`;
@@ -70,6 +74,65 @@ describe('PlanTools', () => {
       },
     ]);
     expect(planService.written).toHaveLength(0);
+  });
+
+  it('returns structured continuation metadata when useScaffold is requested but a draft already covers the manual work', async () => {
+    const planService = new MockPlanService();
+    const tool = new PlanTools({
+      featureService: {
+        get: () => ({ name: 'test-feature', workflowRecommendation: 'lightweight' }),
+      } as unknown as FeatureService,
+      planService: {
+        ...planService,
+        read: () => ({ content: '# test-feature\n\nWorkflow Path: lightweight\n\n## Tasks\n\n### 1. Existing Task', status: 'planning' }),
+      } as unknown as PlanService,
+      taskService: {
+        list: () => [],
+      } as unknown as TaskService,
+      captureSession: () => {},
+      updateFeatureMetadata: () => {},
+      workflowGatesMode: 'warn',
+    }).writePlanTool((name) => name ?? 'test-feature');
+
+    const raw = await tool.execute({ feature: 'test-feature', useScaffold: true } as any, {} as any);
+    const parsed = JSON.parse(raw);
+
+    expect(parsed.success).toBe(false);
+    expect(parsed.error).toContain('No pending manual tasks are available to build a plan scaffold.');
+    expect(parsed.hints).toEqual([
+      'The draft plan already covers the pending manual work that can be promoted right now.',
+      'Review the draft and continue with warcraft_plan_approve when it is ready.',
+    ]);
+    expect(parsed.data).toEqual({
+      blockedReason: 'no_pending_manual_tasks_for_scaffold',
+      planApproveArgs: { feature: 'test-feature' },
+      taskSyncArgs: { feature: 'test-feature', mode: 'sync' },
+      promotionFlow: [
+        {
+          type: 'review',
+          message: 'Review or refine the drafted plan before approval so the reviewed path stays intentional.',
+        },
+        {
+          type: 'tool',
+          tool: 'warcraft_plan_approve',
+          args: { feature: 'test-feature' },
+          purpose: 'Approve the reviewed plan once it is ready to execute.',
+        },
+        {
+          type: 'tool',
+          tool: 'warcraft_tasks_sync',
+          args: { feature: 'test-feature', mode: 'sync' },
+          purpose: 'Generate or reconcile canonical tasks from the approved plan.',
+        },
+      ],
+    });
+    expect(parsed.warnings).toEqual([
+      {
+        type: 'no_pending_manual_tasks_for_scaffold',
+        severity: 'info',
+        message: 'There are no pending manual tasks left to materialize into a scaffolded draft plan.',
+      },
+    ]);
   });
 
   it('builds and writes a lightweight scaffold from pending manual tasks', async () => {

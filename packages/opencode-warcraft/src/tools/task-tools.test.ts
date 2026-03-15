@@ -629,6 +629,59 @@ describe('TaskTools', () => {
       ]);
     });
 
+    it('returns structured recovery metadata when a draft plan has nothing left to expand', async () => {
+      mockFeatureService.feature = {
+        ...mockFeatureService.feature,
+        status: 'planning',
+      };
+      mockPlanService.planResult = {
+        content: '# test-feature\n\nWorkflow Path: lightweight\n\n## Discovery\n\nImpact: existing plan\nSafety: low\nVerify: tests\nRollback: revert\n\n## Tasks\n\n### 1. Existing Task',
+        status: 'planning',
+      };
+      mockTaskService.tasks = [];
+
+      const expandTool = taskTools.expandTaskTool(resolveFeature);
+      const raw = await expandTool.execute({ feature: undefined });
+      const parsed = JSON.parse(raw);
+
+      expect(parsed.success).toBe(false);
+      expect(parsed.error).toContain('No pending manual tasks are available to expand.');
+      expect(parsed.hints).toEqual([
+        'The draft plan already covers the pending manual work that can be promoted right now.',
+        'Review the draft and continue with warcraft_plan_approve when it is ready.',
+      ]);
+      expect(parsed.data).toEqual({
+        blockedReason: 'no_pending_manual_tasks_to_expand',
+        planApproveArgs: { feature: 'test-feature' },
+        taskSyncArgs: { feature: 'test-feature', mode: 'sync' },
+        promotionFlow: [
+          {
+            type: 'review',
+            message: 'Review or refine the drafted plan before approval so the reviewed path stays intentional.',
+          },
+          {
+            type: 'tool',
+            tool: 'warcraft_plan_approve',
+            args: { feature: 'test-feature' },
+            purpose: 'Approve the reviewed plan once it is ready to execute.',
+          },
+          {
+            type: 'tool',
+            tool: 'warcraft_tasks_sync',
+            args: { feature: 'test-feature', mode: 'sync' },
+            purpose: 'Generate or reconcile canonical tasks from the approved plan.',
+          },
+        ],
+      });
+      expect(parsed.warnings).toEqual([
+        {
+          type: 'no_pending_manual_tasks_to_expand',
+          severity: 'info',
+          message: 'There are no pending manual tasks left to merge into the current draft plan.',
+        },
+      ]);
+    });
+
     it('can target a selected subset of pending manual tasks', async () => {
       mockFeatureService.feature = {
         ...mockFeatureService.feature,
