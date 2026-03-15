@@ -65,10 +65,6 @@ export class PlanTools {
         let sourceTaskCount = 0;
 
         if (!planContent) {
-          if (!useScaffold) {
-            return toolError('Plan content is required unless useScaffold is true.');
-          }
-
           const featureData = featureService.get(feature);
           const existingPlan = planService.read(feature);
           const pendingManualTasks = taskService
@@ -82,6 +78,35 @@ export class PlanTools {
                 brief: rawStatus?.brief ?? null,
               };
             });
+
+          if (!useScaffold) {
+            if (pendingManualTasks.length > 0) {
+              const retryArgs = { feature, useScaffold: true };
+              return toolError(
+                'Plan content is required unless useScaffold is true.',
+                [
+                  `Pending manual tasks already exist. Retry warcraft_plan_write with ${JSON.stringify(retryArgs)} to scaffold the reviewed draft from them.`,
+                  'If you do not want scaffolded content, provide explicit plan markdown instead.',
+                ],
+                {
+                  data: {
+                    blockedReason: 'plan_content_required_for_manual_tasks',
+                    pendingManualTasks: pendingManualTasks.map((task) => task.folder),
+                    retryArgs,
+                  },
+                  warnings: [
+                    {
+                      type: 'plan_content_required_for_manual_tasks',
+                      severity: 'info',
+                      message: 'Pending manual tasks can be promoted directly into a scaffolded reviewed plan.',
+                      count: pendingManualTasks.length,
+                    },
+                  ],
+                },
+              );
+            }
+            return toolError('Plan content is required unless useScaffold is true.');
+          }
 
           if (pendingManualTasks.length === 0) {
             if (existingPlan?.status === 'planning') {
@@ -192,7 +217,7 @@ export class PlanTools {
    */
   readPlanTool(resolveFeature: (name?: string) => string | null): ToolDefinition {
     // Capture deps in closure to avoid 'this' binding issues
-    const { captureSession, planService } = this.deps;
+    const { captureSession, planService, taskService } = this.deps;
     return tool({
       description: 'Read plan.md content and approval status',
       args: {
@@ -204,7 +229,38 @@ export class PlanTools {
         const feature = resolution.feature;
         captureSession(feature, toolContext);
         const result = planService.read(feature);
-        if (!result) return toolError('No plan.md found');
+        if (!result) {
+          const pendingManualTasks = taskService
+            .list(feature)
+            .filter((task) => task.origin === 'manual' && task.status === 'pending')
+            .map((task) => task.folder);
+          if (pendingManualTasks.length > 0) {
+            const retryArgs = { feature, useScaffold: true };
+            return toolError(
+              'No plan.md found. Pending manual tasks can be promoted into a reviewed draft plan first.',
+              [
+                `Create the draft plan with warcraft_plan_write using ${JSON.stringify(retryArgs)}.`,
+                'After the scaffold is written, read the draft again or continue with approval when ready.',
+              ],
+              {
+                data: {
+                  blockedReason: 'plan_missing_for_read',
+                  pendingManualTasks,
+                  retryArgs,
+                },
+                warnings: [
+                  {
+                    type: 'plan_missing_for_read',
+                    severity: 'info',
+                    message: 'Pending manual tasks can be scaffolded into a reviewed draft plan before it can be read.',
+                    count: pendingManualTasks.length,
+                  },
+                ],
+              },
+            );
+          }
+          return toolError('No plan.md found');
+        }
         return toolSuccess(result);
       },
     });

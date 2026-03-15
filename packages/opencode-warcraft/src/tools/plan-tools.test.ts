@@ -39,6 +39,86 @@ describe('PlanTools', () => {
     expect(planService.written).toHaveLength(0);
   });
 
+  it('returns structured scaffold retry metadata when manual tasks already exist but content is omitted', async () => {
+    const planService = new MockPlanService();
+    const tool = new PlanTools({
+      featureService: { get: () => ({ name: 'test-feature', workflowRecommendation: 'lightweight' }) } as unknown as FeatureService,
+      planService: planService as unknown as PlanService,
+      taskService: {
+        list: () => [{ folder: '01-refresh-docs-wording', name: 'refresh-docs-wording', status: 'pending', origin: 'manual' }],
+        getRawStatus: () => ({
+          planTitle: 'Refresh docs wording',
+          brief:
+            'Background: update the README and docs wording for the instant workflow path. Impact: README plus docs text. Safety: keep behavior unchanged. Verify: docs tests or snapshots still pass. Rollback: revert.',
+        }),
+      } as unknown as TaskService,
+      captureSession: () => {},
+      updateFeatureMetadata: () => {},
+      workflowGatesMode: 'warn',
+    }).writePlanTool((name) => name ?? 'test-feature');
+
+    const raw = await tool.execute({ feature: 'test-feature' } as any, {} as any);
+    const parsed = JSON.parse(raw);
+
+    expect(parsed.success).toBe(false);
+    expect(parsed.error).toContain('Plan content is required unless useScaffold is true.');
+    expect(parsed.hints).toEqual([
+      'Pending manual tasks already exist. Retry warcraft_plan_write with {"feature":"test-feature","useScaffold":true} to scaffold the reviewed draft from them.',
+      'If you do not want scaffolded content, provide explicit plan markdown instead.',
+    ]);
+    expect(parsed.data).toEqual({
+      blockedReason: 'plan_content_required_for_manual_tasks',
+      pendingManualTasks: ['01-refresh-docs-wording'],
+      retryArgs: { feature: 'test-feature', useScaffold: true },
+    });
+    expect(parsed.warnings).toEqual([
+      {
+        type: 'plan_content_required_for_manual_tasks',
+        severity: 'info',
+        message: 'Pending manual tasks can be promoted directly into a scaffolded reviewed plan.',
+        count: 1,
+      },
+    ]);
+    expect(planService.written).toHaveLength(0);
+  });
+
+  it('returns structured plan-read recovery metadata when manual tasks exist but no plan has been written yet', async () => {
+    const planService = new MockPlanService();
+    const tool = new PlanTools({
+      featureService: { get: () => ({ name: 'test-feature', workflowRecommendation: 'lightweight' }) } as unknown as FeatureService,
+      planService: planService as unknown as PlanService,
+      taskService: {
+        list: () => [{ folder: '01-refresh-docs-wording', name: 'refresh-docs-wording', status: 'pending', origin: 'manual' }],
+      } as unknown as TaskService,
+      captureSession: () => {},
+      updateFeatureMetadata: () => {},
+      workflowGatesMode: 'warn',
+    }).readPlanTool((name) => name ?? 'test-feature');
+
+    const raw = await tool.execute({ feature: 'test-feature' } as any, {} as any);
+    const parsed = JSON.parse(raw);
+
+    expect(parsed.success).toBe(false);
+    expect(parsed.error).toContain('No plan.md found');
+    expect(parsed.hints).toEqual([
+      'Create the draft plan with warcraft_plan_write using {"feature":"test-feature","useScaffold":true}.',
+      'After the scaffold is written, read the draft again or continue with approval when ready.',
+    ]);
+    expect(parsed.data).toEqual({
+      blockedReason: 'plan_missing_for_read',
+      pendingManualTasks: ['01-refresh-docs-wording'],
+      retryArgs: { feature: 'test-feature', useScaffold: true },
+    });
+    expect(parsed.warnings).toEqual([
+      {
+        type: 'plan_missing_for_read',
+        severity: 'info',
+        message: 'Pending manual tasks can be scaffolded into a reviewed draft plan before it can be read.',
+        count: 1,
+      },
+    ]);
+  });
+
   it('returns structured discovery recovery metadata when plan content fails validation', async () => {
     const planService = new MockPlanService();
     const tool = new PlanTools({

@@ -1,3 +1,3 @@
-- Remaining structured-recovery work should stay narrow and behavior-led. Only pursue blockers that can return an exact next command or continuation flow with real user value.
-- Candidate to inspect next: `warcraft_plan_write` without explicit content currently only says content is required. If pending manual tasks already exist, it may be able to return an exact retry handoff like `{ useScaffold: true }` instead of leaving the agent to rediscover scaffold mode.
-- If that path turns out to be ambiguous or low-value, stop rather than extending metadata for benchmark-only gains.
+- Remaining structured-recovery work is now very thin. Only pursue another blocker if it can return a genuinely valuable exact next command or continuation flow.
+- Plausible remaining candidate: `warcraft_tasks_sync` lightweight-gate failures currently return prose only in enforce mode; inspect whether that blocker can safely return exact revision/retry args without guessing or encouraging invalid lightweight plans.
+- If that path feels ambiguous or benchmark-only, stop rather than decorating more generic errors.

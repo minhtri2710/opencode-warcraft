@@ -1318,6 +1318,76 @@ async function checkPlanApproveRejectsRemainingManualTasks(): Promise<CheckResul
   };
 }
 
+async function checkPlanReadReturnsStructuredMissingPlanRecovery(): Promise<CheckResult> {
+  const ctx = createWorkspace();
+  ctx.featureService.create('doc-tune');
+  await ctx.taskTools.createTaskTool((name?: string) => name || 'doc-tune').execute({
+    feature: 'doc-tune',
+    name: 'Refresh docs wording',
+    priority: 3,
+    description:
+      'Background: update the README and docs wording for the instant workflow path. Impact: README plus docs text. Safety: keep behavior unchanged. Verify: docs tests or snapshots still pass. Rollback: revert.',
+  } as any);
+  const raw = (await ctx.planTools.readPlanTool((name?: string) => name || 'doc-tune').execute(
+    { feature: 'doc-tune' } as any,
+    {} as any,
+  )) as string;
+  const parsed = parseToolResponse(raw) as any;
+  const pass =
+    parsed.success === false &&
+    parsed.data?.blockedReason === 'plan_missing_for_read' &&
+    JSON.stringify(parsed.data?.pendingManualTasks) === JSON.stringify(['01-refresh-docs-wording']) &&
+    parsed.data?.retryArgs?.feature === 'doc-tune' &&
+    parsed.data?.retryArgs?.useScaffold === true &&
+    Array.isArray(parsed.hints) &&
+    /warcraft_plan_write/.test(String(parsed.hints?.[0] || '')) &&
+    /read the draft again|approval/i.test(String(parsed.hints?.[1] || '')) &&
+    Array.isArray(parsed.warnings) &&
+    parsed.warnings[0]?.type === 'plan_missing_for_read';
+  return {
+    id: 'plan-read-missing-plan-structured-recovery',
+    pass,
+    detail: pass
+      ? 'warcraft_plan_read returns structured scaffold recovery metadata when pending manual tasks exist but no plan has been written yet'
+      : `response=${JSON.stringify(parsed)}`,
+  };
+}
+
+async function checkPlanWriteReturnsStructuredScaffoldRetryRecovery(): Promise<CheckResult> {
+  const ctx = createWorkspace();
+  ctx.featureService.create('doc-tune');
+  await ctx.taskTools.createTaskTool((name?: string) => name || 'doc-tune').execute({
+    feature: 'doc-tune',
+    name: 'Refresh docs wording',
+    priority: 3,
+    description:
+      'Background: update the README and docs wording for the instant workflow path. Impact: README plus docs text. Safety: keep behavior unchanged. Verify: docs tests or snapshots still pass. Rollback: revert.',
+  } as any);
+  const raw = (await ctx.planTools.writePlanTool((name?: string) => name || 'doc-tune').execute(
+    { feature: 'doc-tune' } as any,
+    {} as any,
+  )) as string;
+  const parsed = parseToolResponse(raw) as any;
+  const pass =
+    parsed.success === false &&
+    parsed.data?.blockedReason === 'plan_content_required_for_manual_tasks' &&
+    JSON.stringify(parsed.data?.pendingManualTasks) === JSON.stringify(['01-refresh-docs-wording']) &&
+    parsed.data?.retryArgs?.feature === 'doc-tune' &&
+    parsed.data?.retryArgs?.useScaffold === true &&
+    Array.isArray(parsed.hints) &&
+    /useScaffold/.test(String(parsed.hints?.[0] || '')) &&
+    /explicit plan markdown/i.test(String(parsed.hints?.[1] || '')) &&
+    Array.isArray(parsed.warnings) &&
+    parsed.warnings[0]?.type === 'plan_content_required_for_manual_tasks';
+  return {
+    id: 'plan-write-scaffold-retry-structured-recovery',
+    pass,
+    detail: pass
+      ? 'warcraft_plan_write returns structured scaffold retry metadata when pending manual tasks already exist and explicit content is omitted'
+      : `response=${JSON.stringify(parsed)}`,
+  };
+}
+
 async function checkPlanWriteReturnsStructuredNoPendingScaffoldRecovery(): Promise<CheckResult> {
   const ctx = createWorkspace();
   ctx.featureService.create('doc-tune');
@@ -2155,6 +2225,8 @@ async function main() {
     checkPlanApproveReturnsStructuredChecklistRecovery(),
     checkPlanApproveRejectsRemainingManualTasks(),
     checkPlanApproveReturnsStructuredBlockedRecovery(),
+    checkPlanReadReturnsStructuredMissingPlanRecovery(),
+    checkPlanWriteReturnsStructuredScaffoldRetryRecovery(),
     checkPlanWriteReturnsStructuredNoPendingScaffoldRecovery(),
     checkPlanWriteReturnsStructuredDiscoveryRecovery(),
     checkPlanWriteCanMaterializeLightweightScaffold(),
