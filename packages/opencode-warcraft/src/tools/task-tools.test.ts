@@ -627,6 +627,47 @@ describe('TaskTools', () => {
       ]);
     });
 
+    it('returns structured continuation metadata when an approved plan has nothing left to expand', async () => {
+      mockFeatureService.feature = {
+        ...mockFeatureService.feature,
+        status: 'approved',
+      };
+      mockPlanService.planResult = {
+        content: '# test-feature\n\nWorkflow Path: lightweight\n\n## Tasks\n\n### 1. Existing Task',
+        status: 'approved',
+      };
+
+      const expandTool = taskTools.expandTaskTool(resolveFeature);
+      const raw = await expandTool.execute({ feature: undefined });
+      const parsed = JSON.parse(raw);
+
+      expect(parsed.success).toBe(false);
+      expect(parsed.error).toContain('No pending manual tasks are available to expand');
+      expect(parsed.hints).toEqual([
+        'There is no remaining manual work to merge into the plan right now.',
+        'Continue with warcraft_tasks_sync using {"feature":"test-feature","mode":"sync"}.',
+      ]);
+      expect(parsed.data).toEqual({
+        blockedReason: 'approved_plan_has_no_pending_manual_tasks_to_expand',
+        taskSyncArgs: { feature: 'test-feature', mode: 'sync' },
+        promotionFlow: [
+          {
+            type: 'tool',
+            tool: 'warcraft_tasks_sync',
+            args: { feature: 'test-feature', mode: 'sync' },
+            purpose: 'Generate or reconcile canonical tasks from the approved plan.',
+          },
+        ],
+      });
+      expect(parsed.warnings).toEqual([
+        {
+          type: 'approved_plan_has_no_pending_manual_tasks_to_expand',
+          severity: 'info',
+          message: 'The approved plan has no remaining manual tasks to merge.',
+        },
+      ]);
+    });
+
     it('returns structured recovery metadata when a requested manual task selection is invalid', async () => {
       mockFeatureService.feature = {
         ...mockFeatureService.feature,

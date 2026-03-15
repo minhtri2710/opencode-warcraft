@@ -83,6 +83,17 @@ function matchesDraftPlanPromotionFlow(flow: unknown, feature: string): boolean 
   );
 }
 
+function matchesApprovedPlanSyncFlow(flow: unknown, feature: string): boolean {
+  return (
+    Array.isArray(flow) &&
+    flow.length === 1 &&
+    flow[0]?.type === 'tool' &&
+    flow[0]?.tool === 'warcraft_tasks_sync' &&
+    flow[0]?.args?.feature === feature &&
+    flow[0]?.args?.mode === 'sync'
+  );
+}
+
 function matchesApprovedSyncFlow(flow: unknown, feature: string): boolean {
   return (
     Array.isArray(flow) &&
@@ -2021,6 +2032,37 @@ async function checkTaskExpandReturnsStructuredNoPendingRecovery(): Promise<Chec
   };
 }
 
+async function checkTaskExpandReturnsStructuredApprovedNoPendingRecovery(): Promise<CheckResult> {
+  const ctx = createWorkspace();
+  ctx.featureService.create('doc-tune');
+  const approvedPlan =
+    '# doc-tune\n\nWorkflow Path: lightweight\n\n## Discovery\n\nImpact: existing plan\nSafety: low\nVerify: tests\nRollback: revert\n\n## Plan Review Checklist\n- [x] Discovery is complete and current\n- [x] Scope and non-goals are explicit\n- [x] Risks, rollout, and verification are defined\n- [x] Tasks and dependencies are actionable\n\n## Tasks\n\n### 1. Existing Task';
+  ctx.planService.write('doc-tune', approvedPlan);
+  ctx.planService.approve('doc-tune', undefined, approvedPlan);
+  const raw = (await ctx.taskTools.expandTaskTool((name?: string) => name || 'doc-tune').execute({
+    feature: 'doc-tune',
+  } as any)) as string;
+  const parsed = parseToolResponse(raw) as any;
+  const pass =
+    parsed.success === false &&
+    parsed.data?.blockedReason === 'approved_plan_has_no_pending_manual_tasks_to_expand' &&
+    parsed.data?.taskSyncArgs?.feature === 'doc-tune' &&
+    parsed.data?.taskSyncArgs?.mode === 'sync' &&
+    matchesApprovedPlanSyncFlow(parsed.data?.promotionFlow, 'doc-tune') &&
+    Array.isArray(parsed.hints) &&
+    /no remaining manual work/i.test(String(parsed.hints?.[0] || '')) &&
+    /warcraft_tasks_sync/.test(String(parsed.hints?.[1] || '')) &&
+    Array.isArray(parsed.warnings) &&
+    parsed.warnings[0]?.type === 'approved_plan_has_no_pending_manual_tasks_to_expand';
+  return {
+    id: 'task-expand-approved-no-pending-structured-recovery',
+    pass,
+    detail: pass
+      ? 'warcraft_task_expand returns continuation metadata when an approved plan has no remaining manual tasks to merge'
+      : `response=${JSON.stringify(parsed)}`,
+  };
+}
+
 async function checkTaskExpandReturnsStructuredSelectionRecovery(): Promise<CheckResult> {
   const ctx = createWorkspace();
   ctx.featureService.create('doc-tune');
@@ -2328,6 +2370,7 @@ async function main() {
     checkTaskExpandReturnsStructuredLightweightRecovery(),
     checkTaskExpandReturnsStructuredNonDraftRecovery(),
     checkTaskExpandReturnsStructuredNoPendingRecovery(),
+    checkTaskExpandReturnsStructuredApprovedNoPendingRecovery(),
     checkTaskExpandReturnsStructuredSelectionRecovery(),
     checkTaskExpandReturnsStructuredDraftDiscoveryRecovery(),
     checkTaskExpandReturnsStructuredDraftRepairRecovery(),

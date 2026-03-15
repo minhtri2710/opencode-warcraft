@@ -11,7 +11,7 @@ import {
 } from 'warcraft-core';
 import { toolError, toolSuccess } from '../types.js';
 import { appendTasksToPlanScaffold, buildPlanScaffold } from './manual-plan-scaffold.js';
-import { buildDraftPlanPromotionFlow, buildPendingManualPromotionFlow } from './promotion-flow.js';
+import { buildApprovedPlanSyncFlow, buildDraftPlanPromotionFlow, buildPendingManualPromotionFlow } from './promotion-flow.js';
 import { resolveFeatureInput, validateTaskInput } from './tool-input.js';
 
 export interface TaskToolsDependencies {
@@ -360,20 +360,39 @@ export class TaskTools {
           .filter((task) => task.origin === 'manual' && task.status === 'pending');
         if (existingPlan && existingPlan.status !== 'planning') {
           const availableManualTasks = pendingManualTasks.map((task) => task.folder);
+          if (availableManualTasks.length === 0) {
+            return toolError(
+              'No pending manual tasks are available to expand. The reviewed plan is already approved.',
+              [
+                'There is no remaining manual work to merge into the plan right now.',
+                `Continue with warcraft_tasks_sync using ${JSON.stringify({ feature, mode: 'sync' })}.`,
+              ],
+              {
+                data: {
+                  blockedReason: 'approved_plan_has_no_pending_manual_tasks_to_expand',
+                  taskSyncArgs: { feature, mode: 'sync' as const },
+                  promotionFlow: buildApprovedPlanSyncFlow({ feature, mode: 'sync' }),
+                },
+                warnings: [
+                  {
+                    type: 'approved_plan_has_no_pending_manual_tasks_to_expand',
+                    severity: 'info',
+                    message: 'The approved plan has no remaining manual tasks to merge.',
+                  },
+                ],
+              },
+            );
+          }
           const planWriteArgs = { feature, content: existingPlan.content };
           const retryTaskExpandArgs =
-            availableManualTasks.length > 0
-              ? mode && mode !== 'auto'
-                ? { feature, tasks: availableManualTasks, mode }
-                : { feature, tasks: availableManualTasks }
-              : null;
+            mode && mode !== 'auto'
+              ? { feature, tasks: availableManualTasks, mode }
+              : { feature, tasks: availableManualTasks };
           return toolError(
             'Only draft plans can be expanded. Use warcraft_plan_write to revise an approved/executing plan directly.',
             [
               `Revise the existing plan with warcraft_plan_write using ${JSON.stringify(planWriteArgs)}.`,
-              retryTaskExpandArgs
-                ? `After the plan is back in draft form, retry warcraft_task_expand with ${JSON.stringify(retryTaskExpandArgs)}.`
-                : 'If more manual work appears after revising the plan, retry warcraft_task_expand once the plan is back in draft form.',
+              `After the plan is back in draft form, retry warcraft_task_expand with ${JSON.stringify(retryTaskExpandArgs)}.`,
             ],
             {
               data: {
