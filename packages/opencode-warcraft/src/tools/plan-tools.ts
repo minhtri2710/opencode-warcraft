@@ -133,6 +133,29 @@ export class PlanTools {
                 },
               );
             }
+            if (existingPlan?.status === 'approved') {
+              return toolError(
+                'No pending manual tasks are available to build a plan scaffold. The reviewed plan is already approved.',
+                [
+                  'The approved plan already covers the promotable work that exists right now.',
+                  `Continue with warcraft_tasks_sync using ${JSON.stringify({ feature, mode: 'sync' })}.`,
+                ],
+                {
+                  data: {
+                    blockedReason: 'approved_plan_has_no_pending_manual_tasks_for_scaffold',
+                    taskSyncArgs: { feature, mode: 'sync' as const },
+                    promotionFlow: buildApprovedPlanSyncFlow({ feature, mode: 'sync' }),
+                  },
+                  warnings: [
+                    {
+                      type: 'approved_plan_has_no_pending_manual_tasks_for_scaffold',
+                      severity: 'info',
+                      message: 'The approved plan has no remaining manual tasks to materialize into a scaffolded draft.',
+                    },
+                  ],
+                },
+              );
+            }
             return toolError('No pending manual tasks are available to build a plan scaffold.');
           }
 

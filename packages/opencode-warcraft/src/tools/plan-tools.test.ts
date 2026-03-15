@@ -215,6 +215,54 @@ describe('PlanTools', () => {
     ]);
   });
 
+  it('returns structured continuation metadata when useScaffold is requested but an approved plan already covers the manual work', async () => {
+    const planService = new MockPlanService();
+    const tool = new PlanTools({
+      featureService: {
+        get: () => ({ name: 'test-feature', workflowRecommendation: 'lightweight' }),
+      } as unknown as FeatureService,
+      planService: {
+        ...planService,
+        read: () => ({ content: '# test-feature\n\nWorkflow Path: lightweight\n\n## Tasks\n\n### 1. Existing Task', status: 'approved' }),
+      } as unknown as PlanService,
+      taskService: {
+        list: () => [],
+      } as unknown as TaskService,
+      captureSession: () => {},
+      updateFeatureMetadata: () => {},
+      workflowGatesMode: 'warn',
+    }).writePlanTool((name) => name ?? 'test-feature');
+
+    const raw = await tool.execute({ feature: 'test-feature', useScaffold: true } as any, {} as any);
+    const parsed = JSON.parse(raw);
+
+    expect(parsed.success).toBe(false);
+    expect(parsed.error).toContain('The reviewed plan is already approved');
+    expect(parsed.hints).toEqual([
+      'The approved plan already covers the promotable work that exists right now.',
+      'Continue with warcraft_tasks_sync using {"feature":"test-feature","mode":"sync"}.',
+    ]);
+    expect(parsed.data).toEqual({
+      blockedReason: 'approved_plan_has_no_pending_manual_tasks_for_scaffold',
+      taskSyncArgs: { feature: 'test-feature', mode: 'sync' },
+      promotionFlow: [
+        {
+          type: 'tool',
+          tool: 'warcraft_tasks_sync',
+          args: { feature: 'test-feature', mode: 'sync' },
+          purpose: 'Generate or reconcile canonical tasks from the approved plan.',
+        },
+      ],
+    });
+    expect(parsed.warnings).toEqual([
+      {
+        type: 'approved_plan_has_no_pending_manual_tasks_for_scaffold',
+        severity: 'info',
+        message: 'The approved plan has no remaining manual tasks to materialize into a scaffolded draft.',
+      },
+    ]);
+  });
+
   it('builds and writes a lightweight scaffold from pending manual tasks', async () => {
     const planService = new MockPlanService();
     const updateCalls: Array<Record<string, unknown>> = [];

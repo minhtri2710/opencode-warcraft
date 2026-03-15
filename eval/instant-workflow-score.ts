@@ -1450,6 +1450,38 @@ async function checkPlanWriteReturnsStructuredScaffoldRetryRecovery(): Promise<C
   };
 }
 
+async function checkPlanWriteReturnsStructuredApprovedNoPendingScaffoldRecovery(): Promise<CheckResult> {
+  const ctx = createWorkspace();
+  ctx.featureService.create('doc-tune');
+  const approvedPlan =
+    '# doc-tune\n\nWorkflow Path: lightweight\n\n## Discovery\n\nImpact: existing plan\nSafety: low\nVerify: tests\nRollback: revert\n\n## Plan Review Checklist\n- [x] Discovery is complete and current\n- [x] Scope and non-goals are explicit\n- [x] Risks, rollout, and verification are defined\n- [x] Tasks and dependencies are actionable\n\n## Tasks\n\n### 1. Existing Task';
+  ctx.planService.write('doc-tune', approvedPlan);
+  ctx.planService.approve('doc-tune', undefined, approvedPlan);
+  const raw = (await ctx.planTools.writePlanTool((name?: string) => name || 'doc-tune').execute(
+    { feature: 'doc-tune', useScaffold: true } as any,
+    {} as any,
+  )) as string;
+  const parsed = parseToolResponse(raw) as any;
+  const pass =
+    parsed.success === false &&
+    parsed.data?.blockedReason === 'approved_plan_has_no_pending_manual_tasks_for_scaffold' &&
+    parsed.data?.taskSyncArgs?.feature === 'doc-tune' &&
+    parsed.data?.taskSyncArgs?.mode === 'sync' &&
+    matchesApprovedPlanSyncFlow(parsed.data?.promotionFlow, 'doc-tune') &&
+    Array.isArray(parsed.hints) &&
+    /approved plan already covers/i.test(String(parsed.hints?.[0] || '')) &&
+    /warcraft_tasks_sync/.test(String(parsed.hints?.[1] || '')) &&
+    Array.isArray(parsed.warnings) &&
+    parsed.warnings[0]?.type === 'approved_plan_has_no_pending_manual_tasks_for_scaffold';
+  return {
+    id: 'plan-write-approved-no-pending-scaffold-structured-recovery',
+    pass,
+    detail: pass
+      ? 'warcraft_plan_write(useScaffold) returns continuation metadata when an approved plan already covers all promotable work'
+      : `response=${JSON.stringify(parsed)}`,
+  };
+}
+
 async function checkPlanWriteReturnsStructuredNoPendingScaffoldRecovery(): Promise<CheckResult> {
   const ctx = createWorkspace();
   ctx.featureService.create('doc-tune');
@@ -2358,6 +2390,7 @@ async function main() {
     checkPlanApproveReturnsStructuredBlockedRecovery(),
     checkPlanReadReturnsStructuredMissingPlanRecovery(),
     checkPlanWriteReturnsStructuredScaffoldRetryRecovery(),
+    checkPlanWriteReturnsStructuredApprovedNoPendingScaffoldRecovery(),
     checkPlanWriteReturnsStructuredNoPendingScaffoldRecovery(),
     checkPlanWriteReturnsStructuredDiscoveryRecovery(),
     checkPlanWriteCanMaterializeLightweightScaffold(),
