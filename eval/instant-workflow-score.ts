@@ -94,6 +94,18 @@ function matchesApprovedSyncFlow(flow: unknown, feature: string): boolean {
   );
 }
 
+function matchesChecklistRecoveryFlow(flow: unknown, feature: string): boolean {
+  return (
+    Array.isArray(flow) &&
+    flow.length === 2 &&
+    flow[0]?.type === 'review' &&
+    /Plan Review Checklist/.test(String(flow[0]?.message || '')) &&
+    flow[1]?.type === 'tool' &&
+    flow[1]?.tool === 'warcraft_plan_approve' &&
+    flow[1]?.args?.feature === feature
+  );
+}
+
 function createWorkspace() {
   const projectRoot = mkdtempSync(path.join(os.tmpdir(), 'instant-workflow-score-'));
   const featureStore = new FilesystemFeatureStore(projectRoot);
@@ -1031,6 +1043,51 @@ async function checkPlanApproveReturnsSyncFlow(): Promise<CheckResult> {
   };
 }
 
+async function checkPlanApproveReturnsStructuredChecklistRecovery(): Promise<CheckResult> {
+  const ctx = createWorkspace();
+  const planTools = new PlanTools({
+    featureService: ctx.featureService,
+    planService: ctx.planService,
+    taskService: ctx.taskService,
+    captureSession: () => {},
+    updateFeatureMetadata: (feature, patch) => {
+      ctx.featureService.patchMetadata(feature, patch as any);
+    },
+    workflowGatesMode: 'enforce',
+  });
+  ctx.featureService.create('doc-tune');
+  ctx.planService.write(
+    'doc-tune',
+    '# doc-tune\n\n## Plan Review Checklist\n- [ ] Discovery is complete and current\n',
+  );
+
+  const raw = (await planTools.approvePlanTool((name?: string) => name || 'doc-tune').execute(
+    { feature: 'doc-tune' } as any,
+    {} as any,
+  )) as string;
+  const parsed = parseToolResponse(raw) as any;
+  const pass =
+    parsed.success === false &&
+    /plan review checklist is incomplete/i.test(String(parsed.error || '')) &&
+    Array.isArray(parsed.hints) &&
+    /Plan Review Checklist/.test(String(parsed.hints?.[0] || '')) &&
+    /retry warcraft_plan_approve/i.test(String(parsed.hints?.[1] || '')) &&
+    parsed.data?.blockedReason === 'plan_review_checklist_incomplete' &&
+    Array.isArray(parsed.data?.reviewChecklistIssues) &&
+    parsed.data.reviewChecklistIssues.length > 0 &&
+    parsed.data?.retryArgs?.feature === 'doc-tune' &&
+    matchesChecklistRecoveryFlow(parsed.data?.promotionFlow, 'doc-tune') &&
+    Array.isArray(parsed.warnings) &&
+    parsed.warnings[0]?.type === 'plan_review_checklist_incomplete';
+  return {
+    id: 'plan-approve-checklist-structured-recovery',
+    pass,
+    detail: pass
+      ? 'warcraft_plan_approve returns structured recovery metadata when the review checklist is incomplete'
+      : `response=${JSON.stringify(parsed)}`,
+  };
+}
+
 async function checkPlanApproveRejectsRemainingManualTasks(): Promise<CheckResult> {
   const ctx = createWorkspace();
   ctx.featureService.create('doc-tune');
@@ -1100,6 +1157,7 @@ async function checkPlanApproveRejectsRemainingManualTasks(): Promise<CheckResul
     (parsed as any).data?.taskExpandArgs?.feature === 'doc-tune' &&
     JSON.stringify((parsed as any).data?.taskExpandArgs?.tasks) === JSON.stringify(['01-tiny-fix']) &&
     (parsed as any).data?.retryArgs?.feature === 'doc-tune' &&
+    matchesPendingManualPromotionFlow((parsed as any).data?.promotionFlow, 'doc-tune', ['01-tiny-fix'], 'lightweight') &&
     Array.isArray((parsed as any).warnings) &&
     (parsed as any).warnings?.[0]?.type === 'manual_tasks_outside_plan';
   return {
@@ -1107,6 +1165,37 @@ async function checkPlanApproveRejectsRemainingManualTasks(): Promise<CheckResul
     pass,
     detail: pass
       ? 'warcraft_plan_approve blocks incomplete drafts that still leave manual tasks outside the reviewed plan'
+      : `response=${JSON.stringify(parsed)}`,
+  };
+}
+
+async function checkPlanWriteReturnsStructuredDiscoveryRecovery(): Promise<CheckResult> {
+  const ctx = createWorkspace();
+  ctx.featureService.create('doc-tune');
+
+  const raw = (await ctx.planTools.writePlanTool((name?: string) => name || 'doc-tune').execute(
+    { feature: 'doc-tune', content: '# doc-tune' } as any,
+    {} as any,
+  )) as string;
+  const parsed = parseToolResponse(raw) as any;
+  const pass =
+    parsed.success === false &&
+    /discovery/i.test(String(parsed.error || '')) &&
+    Array.isArray(parsed.hints) &&
+    /Discovery/.test(String(parsed.hints?.[0] || '')) &&
+    /retry warcraft_plan_write/i.test(String(parsed.hints?.[1] || '')) &&
+    parsed.data?.blockedReason === 'discovery_section_invalid' &&
+    typeof parsed.data?.discoveryError === 'string' &&
+    parsed.data?.generatedFromManualTasks === false &&
+    parsed.data?.sourceTaskCount === 0 &&
+    parsed.data?.retryArgs?.feature === 'doc-tune' &&
+    Array.isArray(parsed.warnings) &&
+    parsed.warnings[0]?.type === 'discovery_section_invalid';
+  return {
+    id: 'plan-write-discovery-structured-recovery',
+    pass,
+    detail: pass
+      ? 'warcraft_plan_write returns structured recovery metadata when discovery validation fails'
       : `response=${JSON.stringify(parsed)}`,
   };
 }
@@ -1712,8 +1801,10 @@ async function main() {
     checkStatusDraftPlanSurfacesRemainingManualPromotion(),
     checkStatusReturnsTaskSyncArgsAfterApproval(),
     checkPlanApproveReturnsSyncFlow(),
+    checkPlanApproveReturnsStructuredChecklistRecovery(),
     checkPlanApproveRejectsRemainingManualTasks(),
     checkPlanApproveReturnsStructuredBlockedRecovery(),
+    checkPlanWriteReturnsStructuredDiscoveryRecovery(),
     checkPlanWriteCanMaterializeLightweightScaffold(),
     checkPlanWriteReturnsPromotionFlow(),
     checkPlanWriteCanMaterializeStandardScaffold(),

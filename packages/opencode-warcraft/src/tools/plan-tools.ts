@@ -9,7 +9,12 @@ import {
 import type { ToolContext } from '../types.js';
 import { toolError, toolSuccess } from '../types.js';
 import { buildPlanScaffold } from './manual-plan-scaffold.js';
-import { buildApprovedPlanSyncFlow, buildDraftPlanPromotionFlow, buildPendingManualPromotionFlow } from './promotion-flow.js';
+import {
+  buildApprovedPlanSyncFlow,
+  buildChecklistApprovalRecoveryFlow,
+  buildDraftPlanPromotionFlow,
+  buildPendingManualPromotionFlow,
+} from './promotion-flow.js';
 import { resolveFeatureInput } from './tool-input.js';
 export interface PlanToolsDependencies {
   featureService: FeatureService;
@@ -94,7 +99,31 @@ export class PlanTools {
 
         const discoveryError = validateDiscoverySection(planContent);
         if (discoveryError) {
-          return toolError(discoveryError);
+          return toolError(
+            discoveryError,
+            [
+              'Update the `## Discovery` section so impact, safety, verification, and rollback details are explicit.',
+              generatedFromManualTasks
+                ? 'If the scaffold came from manual tasks, revise the draft plan content and retry warcraft_plan_write.'
+                : 'Revise the plan content and retry warcraft_plan_write.',
+            ],
+            {
+              data: {
+                blockedReason: 'discovery_section_invalid',
+                discoveryError,
+                generatedFromManualTasks,
+                sourceTaskCount,
+                retryArgs: { feature },
+              },
+              warnings: [
+                {
+                  type: 'discovery_section_invalid',
+                  severity: 'error',
+                  message: 'The plan draft is missing required discovery details.',
+                },
+              ],
+            },
+          );
         }
 
         captureSession(feature, toolContext);
@@ -179,13 +208,35 @@ export class PlanTools {
 
         const checklistResult = validatePlanReviewChecklist(planResult.content);
         if (!checklistResult.ok && workflowGatesMode === 'enforce') {
-          return toolError(formatPlanReviewChecklistIssues(checklistResult.issues));
+          return toolError(
+            formatPlanReviewChecklistIssues(checklistResult.issues),
+            [
+              'Update the `## Plan Review Checklist` so every required item is explicitly checked.',
+              'After revising the checklist, retry warcraft_plan_approve.',
+            ],
+            {
+              data: {
+                blockedReason: 'plan_review_checklist_incomplete',
+                reviewChecklistIssues: checklistResult.issues,
+                retryArgs: { feature },
+                promotionFlow: buildChecklistApprovalRecoveryFlow({ feature }),
+              },
+              warnings: [
+                {
+                  type: 'plan_review_checklist_incomplete',
+                  severity: 'error',
+                  message: 'The reviewed plan is missing required checklist confirmations.',
+                  count: checklistResult.issues.length,
+                },
+              ],
+            },
+          );
         }
 
         if (typeof taskService.previewSync === 'function') {
           const preview = taskService.previewSync(feature);
           if (preview.manual.length > 0) {
-            const taskExpandArgs = {
+            const taskExpandArgs: { feature: string; tasks: string[]; mode: 'lightweight' | 'standard' } = {
               feature,
               tasks: preview.manual,
               mode: detectWorkflowPath(planResult.content) === 'standard' ? 'standard' : 'lightweight',
@@ -203,6 +254,7 @@ export class PlanTools {
                   remainingManualTasks: preview.manual,
                   taskExpandArgs,
                   retryArgs: { feature },
+                  promotionFlow: buildPendingManualPromotionFlow(taskExpandArgs, { feature }, { feature, mode: 'sync' }),
                 },
                 warnings: [
                   {

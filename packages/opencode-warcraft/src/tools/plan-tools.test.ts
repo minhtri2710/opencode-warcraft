@@ -35,6 +35,43 @@ describe('PlanTools', () => {
     expect(planService.written).toHaveLength(0);
   });
 
+  it('returns structured discovery recovery metadata when plan content fails validation', async () => {
+    const planService = new MockPlanService();
+    const tool = new PlanTools({
+      featureService: { get: () => ({ name: 'test-feature', workflowRecommendation: 'lightweight' }) } as unknown as FeatureService,
+      planService: planService as unknown as PlanService,
+      taskService: { list: () => [] } as unknown as TaskService,
+      captureSession: () => {},
+      updateFeatureMetadata: () => {},
+      workflowGatesMode: 'warn',
+    }).writePlanTool((name) => name ?? 'test-feature');
+
+    const raw = await tool.execute({ feature: 'test-feature', content: '# test-feature' } as any, {} as any);
+    const parsed = JSON.parse(raw);
+
+    expect(parsed.success).toBe(false);
+    expect(parsed.error).toContain('Discovery');
+    expect(parsed.hints).toEqual([
+      'Update the `## Discovery` section so impact, safety, verification, and rollback details are explicit.',
+      'Revise the plan content and retry warcraft_plan_write.',
+    ]);
+    expect(parsed.data).toEqual({
+      blockedReason: 'discovery_section_invalid',
+      discoveryError: expect.any(String),
+      generatedFromManualTasks: false,
+      sourceTaskCount: 0,
+      retryArgs: { feature: 'test-feature' },
+    });
+    expect(parsed.warnings).toEqual([
+      {
+        type: 'discovery_section_invalid',
+        severity: 'error',
+        message: 'The plan draft is missing required discovery details.',
+      },
+    ]);
+    expect(planService.written).toHaveLength(0);
+  });
+
   it('builds and writes a lightweight scaffold from pending manual tasks', async () => {
     const planService = new MockPlanService();
     const updateCalls: Array<Record<string, unknown>> = [];
@@ -173,6 +210,62 @@ describe('PlanTools', () => {
     });
   });
 
+  it('returns structured checklist recovery metadata when approval is blocked in enforce mode', async () => {
+    const approveCalls: string[] = [];
+    const tool = new PlanTools({
+      featureService: {} as unknown as FeatureService,
+      planService: {
+        read: () => ({ content: '# test-feature\n\n## Plan Review Checklist\n- [ ] Discovery is complete and current', status: 'planning' }),
+        approve: (feature: string) => {
+          approveCalls.push(feature);
+          return { severity: 'ok', diagnostics: [] };
+        },
+      } as unknown as PlanService,
+      taskService: {
+        previewSync: () => ({ created: [], removed: [], kept: [], reconciled: [], manual: [] }),
+      } as unknown as TaskService,
+      captureSession: () => {},
+      updateFeatureMetadata: () => {},
+      workflowGatesMode: 'enforce',
+    }).approvePlanTool((name) => name ?? 'test-feature');
+
+    const raw = await tool.execute({ feature: 'test-feature' } as any, {} as any);
+    const parsed = JSON.parse(raw);
+
+    expect(parsed.success).toBe(false);
+    expect(parsed.error).toContain('Plan review checklist is incomplete');
+    expect(parsed.hints).toEqual([
+      'Update the `## Plan Review Checklist` so every required item is explicitly checked.',
+      'After revising the checklist, retry warcraft_plan_approve.',
+    ]);
+    expect(parsed.data).toEqual({
+      blockedReason: 'plan_review_checklist_incomplete',
+      reviewChecklistIssues: expect.any(Array),
+      retryArgs: { feature: 'test-feature' },
+      promotionFlow: [
+        {
+          type: 'review',
+          message: 'Finish the required `## Plan Review Checklist` confirmations before attempting approval again.',
+        },
+        {
+          type: 'tool',
+          tool: 'warcraft_plan_approve',
+          args: { feature: 'test-feature' },
+          purpose: 'Retry approval once the reviewed checklist is complete.',
+        },
+      ],
+    });
+    expect(parsed.warnings).toEqual([
+      {
+        type: 'plan_review_checklist_incomplete',
+        severity: 'error',
+        message: 'The reviewed plan is missing required checklist confirmations.',
+        count: expect.any(Number),
+      },
+    ]);
+    expect(approveCalls).toEqual([]);
+  });
+
   it('blocks approval when manual tasks still sit outside the reviewed draft plan', async () => {
     const approveCalls: string[] = [];
     const tool = new PlanTools({
@@ -208,6 +301,30 @@ describe('PlanTools', () => {
       remainingManualTasks: ['01-follow-up'],
       taskExpandArgs: { feature: 'test-feature', tasks: ['01-follow-up'], mode: 'lightweight' },
       retryArgs: { feature: 'test-feature' },
+      promotionFlow: [
+        {
+          type: 'tool',
+          tool: 'warcraft_task_expand',
+          args: { feature: 'test-feature', tasks: ['01-follow-up'], mode: 'lightweight' },
+          purpose: 'Promote the pending manual tasks into a reviewed draft plan.',
+        },
+        {
+          type: 'review',
+          message: 'Review or refine the drafted plan before approval so the reviewed path stays intentional.',
+        },
+        {
+          type: 'tool',
+          tool: 'warcraft_plan_approve',
+          args: { feature: 'test-feature' },
+          purpose: 'Approve the reviewed plan once it is ready to execute.',
+        },
+        {
+          type: 'tool',
+          tool: 'warcraft_tasks_sync',
+          args: { feature: 'test-feature', mode: 'sync' },
+          purpose: 'Generate or reconcile canonical tasks from the approved plan.',
+        },
+      ],
     });
     expect(parsed.warnings).toEqual([
       {

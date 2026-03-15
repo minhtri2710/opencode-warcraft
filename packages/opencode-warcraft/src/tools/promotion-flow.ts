@@ -90,3 +90,18 @@ export function buildApprovedPlanSyncFlow(taskSyncArgs: TaskSyncArgs): Promotion
     },
   ];
 }
+
+export function buildChecklistApprovalRecoveryFlow(planApproveArgs: PlanApproveArgs): PromotionFlowStep[] {
+  return [
+    {
+      type: 'review',
+      message: 'Finish the required `## Plan Review Checklist` confirmations before attempting approval again.',
+    },
+    {
+      type: 'tool',
+      tool: 'warcraft_plan_approve',
+      args: planApproveArgs,
+      purpose: 'Retry approval once the reviewed checklist is complete.',
+    },
+  ];
+}
