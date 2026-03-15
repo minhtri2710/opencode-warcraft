@@ -1092,6 +1092,57 @@ async function checkSyncTasksReturnsStructuredApprovalRecovery(): Promise<CheckR
   };
 }
 
+async function checkSyncTasksReturnsStructuredLightweightRecovery(): Promise<CheckResult> {
+  const ctx = createWorkspace();
+  const enforceTaskTools = new TaskTools({
+    featureService: ctx.featureService,
+    planService: ctx.planService,
+    taskService: ctx.taskService,
+    workflowGatesMode: 'enforce',
+    validateTaskStatus,
+    eventLogger: createNoopEventLogger(),
+  });
+  ctx.featureService.create('doc-tune');
+  const lightweightPlan = '# doc-tune\n\nWorkflow Path: lightweight\n\n### 1. Existing Task';
+  ctx.planService.write('doc-tune', lightweightPlan);
+  const approvedPlan = ctx.planService.approve('doc-tune', undefined, lightweightPlan);
+  if (approvedPlan.severity === 'fatal') {
+    return {
+      id: 'task-sync-lightweight-structured-recovery',
+      pass: false,
+      detail: `approval failed unexpectedly: ${JSON.stringify(approvedPlan)}`,
+    };
+  }
+  const raw = (await enforceTaskTools.syncTasksTool((name?: string) => name || 'doc-tune').execute({
+    feature: 'doc-tune',
+    mode: 'sync',
+  } as any)) as string;
+  const parsed = parseToolResponse(raw) as any;
+  const pass =
+    parsed.success === false &&
+    parsed.data?.blockedReason === 'lightweight_plan_invalid_for_sync' &&
+    Array.isArray(parsed.data?.validationIssues) &&
+    parsed.data.validationIssues.length > 0 &&
+    parsed.data?.planWriteArgs?.feature === 'doc-tune' &&
+    parsed.data?.planWriteArgs?.content === lightweightPlan &&
+    parsed.data?.planApproveArgs?.feature === 'doc-tune' &&
+    parsed.data?.taskSyncArgs?.feature === 'doc-tune' &&
+    parsed.data?.taskSyncArgs?.mode === 'sync' &&
+    matchesDraftPlanPromotionFlow(parsed.data?.promotionFlow, 'doc-tune') &&
+    Array.isArray(parsed.hints) &&
+    /warcraft_plan_write/.test(String(parsed.hints?.[0] || '')) &&
+    /warcraft_tasks_sync/.test(String(parsed.hints?.[1] || '')) &&
+    Array.isArray(parsed.warnings) &&
+    parsed.warnings[0]?.type === 'lightweight_plan_invalid_for_sync';
+  return {
+    id: 'task-sync-lightweight-structured-recovery',
+    pass,
+    detail: pass
+      ? 'warcraft_tasks_sync returns structured lightweight-plan recovery metadata when enforce-mode guardrails block sync'
+      : `response=${JSON.stringify(parsed)}`,
+  };
+}
+
 async function checkPlanApproveReturnsStructuredMissingPlanRecovery(): Promise<CheckResult> {
   const ctx = createWorkspace();
   ctx.featureService.create('doc-tune');
@@ -2220,6 +2271,7 @@ async function main() {
     checkStatusReturnsTaskSyncArgsAfterApproval(),
     checkSyncTasksReturnsStructuredMissingPlanRecovery(),
     checkSyncTasksReturnsStructuredApprovalRecovery(),
+    checkSyncTasksReturnsStructuredLightweightRecovery(),
     checkPlanApproveReturnsStructuredMissingPlanRecovery(),
     checkPlanApproveReturnsSyncFlow(),
     checkPlanApproveReturnsStructuredChecklistRecovery(),

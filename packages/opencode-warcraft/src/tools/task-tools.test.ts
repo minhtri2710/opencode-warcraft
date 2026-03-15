@@ -1087,6 +1087,69 @@ describe('TaskTools', () => {
       ]);
     });
 
+    it('returns structured lightweight recovery metadata when sync is blocked by invalid lightweight guardrails in enforce mode', async () => {
+      mockPlanService.planResult = {
+        content: '# test-feature\n\nWorkflow Path: lightweight\n\n### 1. Existing Task',
+        status: 'approved',
+      };
+
+      const enforceTaskTools = new TaskTools({
+        featureService: mockFeatureService as unknown as FeatureService,
+        planService: mockPlanService as unknown as PlanService,
+        taskService: mockTaskService as unknown as TaskService,
+        workflowGatesMode: 'enforce',
+        validateTaskStatus,
+        eventLogger: createNoopEventLogger(),
+      });
+
+      const tool = enforceTaskTools.syncTasksTool(resolveFeature);
+      const result = await tool.execute({ feature: undefined, mode: 'sync' });
+      const parsed = JSON.parse(result as string);
+
+      expect(parsed.success).toBe(false);
+      expect(parsed.error).toContain('Lightweight workflow requirements are not satisfied');
+      expect(parsed.hints).toEqual([
+        'Revise the lightweight plan with warcraft_plan_write using {"feature":"test-feature","content":"# test-feature\\n\\nWorkflow Path: lightweight\\n\\n### 1. Existing Task"}.',
+        'After fixing or broadening the draft, re-approve it and retry warcraft_tasks_sync.',
+      ]);
+      expect(parsed.data).toEqual({
+        blockedReason: 'lightweight_plan_invalid_for_sync',
+        validationIssues: expect.any(Array),
+        planWriteArgs: {
+          feature: 'test-feature',
+          content: '# test-feature\n\nWorkflow Path: lightweight\n\n### 1. Existing Task',
+        },
+        planApproveArgs: { feature: 'test-feature' },
+        taskSyncArgs: { feature: 'test-feature', mode: 'sync' },
+        promotionFlow: [
+          {
+            type: 'review',
+            message: 'Review or refine the drafted plan before approval so the reviewed path stays intentional.',
+          },
+          {
+            type: 'tool',
+            tool: 'warcraft_plan_approve',
+            args: { feature: 'test-feature' },
+            purpose: 'Approve the reviewed plan once it is ready to execute.',
+          },
+          {
+            type: 'tool',
+            tool: 'warcraft_tasks_sync',
+            args: { feature: 'test-feature', mode: 'sync' },
+            purpose: 'Generate or reconcile canonical tasks from the approved plan.',
+          },
+        ],
+      });
+      expect(parsed.warnings).toEqual([
+        {
+          type: 'lightweight_plan_invalid_for_sync',
+          severity: 'error',
+          message: 'The approved lightweight plan no longer satisfies lightweight workflow guardrails.',
+          count: expect.any(Number),
+        },
+      ]);
+    });
+
     it('preview surfaces reconciliations', async () => {
       mockTaskService.previewResult = {
         created: [],

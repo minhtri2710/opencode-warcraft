@@ -95,4 +95,5 @@ The benchmark should reward real workflow improvements, not just prompt edits. I
 - Extended `warcraft_plan_approve` for the no-plan case when pending manual work exists, so an early approval attempt now returns machine-readable promotion/retry flow instead of only a missing-plan error.
 - Extended `warcraft_plan_write` when content is omitted but pending manual tasks already exist, so the tool now returns an exact `{ useScaffold: true }` retry handoff instead of only saying content is required.
 - Extended `warcraft_plan_read` for the no-plan case when pending manual work exists, so it now returns an exact scaffold-materialization handoff instead of only a missing-plan error.
+- Extended `warcraft_tasks_sync` lightweight-gate failures in enforce mode, so invalid approved lightweight plans now return machine-readable revision/approve/retry handoff instead of only a prose guardrail error.
 - Latest direction in progress: any further structured-failure work should stay narrowly focused on blockers with a genuinely actionable recovery path; avoid adding metadata to low-value failures that do not offer a clear next command.

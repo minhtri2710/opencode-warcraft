@@ -1,3 +1,2 @@
-- Remaining structured-recovery work is now very thin. Only pursue another blocker if it can return a genuinely valuable exact next command or continuation flow.
-- Plausible remaining candidate: `warcraft_tasks_sync` lightweight-gate failures currently return prose only in enforce mode; inspect whether that blocker can safely return exact revision/retry args without guessing or encouraging invalid lightweight plans.
-- If that path feels ambiguous or benchmark-only, stop rather than decorating more generic errors.
+- Remaining structured-recovery work is extremely thin. Only pursue another blocker if it can return a genuinely valuable exact next command or continuation flow.
+- Plausible remaining candidate: inspect whether any other plan-tool or task-tool prose-only blocker still maps to a safe exact repair command without guessing. If not, stop rather than decorating generic dead ends.

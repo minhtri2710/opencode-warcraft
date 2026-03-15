@@ -159,7 +159,32 @@ export class TaskTools {
             const issueBlock = lightweightIssues.map((issue) => `- ${issue}`).join('\n');
             const message = `Lightweight workflow requirements are not satisfied:\n${issueBlock}`;
             if (workflowGatesMode === 'enforce') {
-              return toolError(message);
+              const planWriteArgs = { feature, content: planResult.content };
+              return toolError(
+                message,
+                [
+                  `Revise the lightweight plan with warcraft_plan_write using ${JSON.stringify(planWriteArgs)}.`,
+                  'After fixing or broadening the draft, re-approve it and retry warcraft_tasks_sync.',
+                ],
+                {
+                  data: {
+                    blockedReason: 'lightweight_plan_invalid_for_sync',
+                    validationIssues: lightweightIssues,
+                    planWriteArgs,
+                    planApproveArgs: { feature },
+                    taskSyncArgs: { feature, mode: 'sync' as const },
+                    promotionFlow: buildDraftPlanPromotionFlow({ feature }, { feature, mode: 'sync' }),
+                  },
+                  warnings: [
+                    {
+                      type: 'lightweight_plan_invalid_for_sync',
+                      severity: 'error',
+                      message: 'The approved lightweight plan no longer satisfies lightweight workflow guardrails.',
+                      count: lightweightIssues.length,
+                    },
+                  ],
+                },
+              );
             }
             warning = `\nWarning (mode=${workflowGatesMode}): ${message}`;
           }
