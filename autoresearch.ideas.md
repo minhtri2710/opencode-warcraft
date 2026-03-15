@@ -1,3 +1,0 @@
-- Remaining structured-recovery work is nearly exhausted. Only pursue another blocker if it can return a genuinely valuable exact next command or continuation flow.
-- At this point, most remaining prose-only errors look like generic dead ends or internal failures without a safe exact repair command. Validate that before changing anything else.
-- If no blocker clearly beats that bar, stop rather than decorating more generic errors for benchmark-only gain.
