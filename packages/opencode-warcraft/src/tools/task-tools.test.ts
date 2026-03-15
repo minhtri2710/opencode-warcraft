@@ -575,6 +575,58 @@ describe('TaskTools', () => {
       expect(mockFeatureService.patchCalls).toContainEqual({ workflowPath: 'lightweight' });
     });
 
+    it('returns structured recovery metadata when expansion is attempted against a non-draft plan', async () => {
+      mockFeatureService.feature = {
+        ...mockFeatureService.feature,
+        status: 'approved',
+      };
+      mockPlanService.planResult = {
+        content: '# test-feature\n\nWorkflow Path: lightweight\n\n## Tasks\n\n### 1. Existing Task',
+        status: 'approved',
+      };
+
+      const createTool = taskTools.createTaskTool(resolveFeature);
+      await createTool.execute({
+        name: 'Tiny Fix',
+        description: 'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
+        order: 1,
+        feature: undefined,
+        priority: 3,
+      });
+
+      const expandTool = taskTools.expandTaskTool(resolveFeature);
+      const raw = await expandTool.execute({ feature: undefined, mode: 'lightweight' });
+      const parsed = JSON.parse(raw);
+
+      expect(parsed.success).toBe(false);
+      expect(parsed.error).toContain('Only draft plans can be expanded');
+      expect(parsed.hints).toEqual([
+        'Revise the existing plan with warcraft_plan_write using {"feature":"test-feature","content":"# test-feature\n\nWorkflow Path: lightweight\n\n## Tasks\n\n### 1. Existing Task"}.'.replace(/\n/g, '\\n'),
+        'After the plan is back in draft form, retry warcraft_task_expand with {"feature":"test-feature","tasks":["01-tiny-fix"],"mode":"lightweight"}.',
+      ]);
+      expect(parsed.data).toEqual({
+        blockedReason: 'existing_plan_not_draft',
+        currentPlanStatus: 'approved',
+        planWriteArgs: {
+          feature: 'test-feature',
+          content: '# test-feature\n\nWorkflow Path: lightweight\n\n## Tasks\n\n### 1. Existing Task',
+        },
+        retryTaskExpandArgs: {
+          feature: 'test-feature',
+          tasks: ['01-tiny-fix'],
+          mode: 'lightweight',
+        },
+      });
+      expect(parsed.warnings).toEqual([
+        {
+          type: 'existing_plan_not_draft',
+          severity: 'error',
+          message: 'Manual-task expansion only works against draft plans.',
+          count: 1,
+        },
+      ]);
+    });
+
     it('returns structured recovery metadata when a requested manual task selection is invalid', async () => {
       mockFeatureService.feature = {
         ...mockFeatureService.feature,

@@ -1676,6 +1676,49 @@ async function checkTaskExpandReturnsStructuredLightweightRecovery(): Promise<Ch
   };
 }
 
+async function checkTaskExpandReturnsStructuredNonDraftRecovery(): Promise<CheckResult> {
+  const ctx = createWorkspace();
+  ctx.featureService.create('doc-tune');
+  const existingPlanContent =
+    '# doc-tune\n\nWorkflow Path: lightweight\n\n## Discovery\n\nImpact: existing plan\nSafety: low\nVerify: tests\nRollback: revert\n\n## Plan Review Checklist\n- [x] Discovery is complete and current\n- [x] Scope and non-goals are explicit\n- [x] Risks, rollout, and verification are defined\n- [x] Tasks and dependencies are actionable\n\n## Tasks\n\n### 1. Existing Task';
+  ctx.planService.write('doc-tune', existingPlanContent);
+  ctx.planService.approve('doc-tune', undefined, existingPlanContent);
+  await ctx.taskTools.createTaskTool((name?: string) => name || 'doc-tune').execute({
+    feature: 'doc-tune',
+    name: 'Tiny Fix',
+    priority: 3,
+    description:
+      'Background: tiny change. Impact: prompt only. Safety: low. Verify: prompt tests. Rollback: revert.',
+  } as any);
+
+  const raw = (await ctx.taskTools.expandTaskTool((name?: string) => name || 'doc-tune').execute({
+    feature: 'doc-tune',
+    mode: 'lightweight',
+  } as any)) as string;
+  const parsed = parseToolResponse(raw) as any;
+  const pass =
+    parsed.success === false &&
+    parsed.data?.blockedReason === 'existing_plan_not_draft' &&
+    parsed.data?.currentPlanStatus === 'approved' &&
+    parsed.data?.planWriteArgs?.feature === 'doc-tune' &&
+    /Existing Task/.test(String(parsed.data?.planWriteArgs?.content || '')) &&
+    parsed.data?.retryTaskExpandArgs?.feature === 'doc-tune' &&
+    JSON.stringify(parsed.data?.retryTaskExpandArgs?.tasks) === JSON.stringify(['01-tiny-fix']) &&
+    parsed.data?.retryTaskExpandArgs?.mode === 'lightweight' &&
+    Array.isArray(parsed.hints) &&
+    /warcraft_plan_write/.test(String(parsed.hints?.[0] || '')) &&
+    /warcraft_task_expand/.test(String(parsed.hints?.[1] || '')) &&
+    Array.isArray(parsed.warnings) &&
+    parsed.warnings[0]?.type === 'existing_plan_not_draft';
+  return {
+    id: 'task-expand-non-draft-structured-recovery',
+    pass,
+    detail: pass
+      ? 'warcraft_task_expand returns structured recovery metadata when expansion is attempted against a non-draft plan'
+      : `response=${JSON.stringify(parsed)}`,
+  };
+}
+
 async function checkTaskExpandReturnsStructuredNoPendingRecovery(): Promise<CheckResult> {
   const ctx = createWorkspace();
   ctx.featureService.create('doc-tune');
@@ -1970,6 +2013,7 @@ async function main() {
     checkTaskExpandReturnsPromotionFlow(),
     checkTaskExpandReturnsFollowUpExpansionForRemainingManualTasks(),
     checkTaskExpandReturnsStructuredLightweightRecovery(),
+    checkTaskExpandReturnsStructuredNonDraftRecovery(),
     checkTaskExpandReturnsStructuredNoPendingRecovery(),
     checkTaskExpandReturnsStructuredSelectionRecovery(),
     checkTaskExpandReturnsStructuredDraftRepairRecovery(),

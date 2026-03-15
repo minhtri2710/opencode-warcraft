@@ -268,13 +268,44 @@ export class TaskTools {
         const feature = resolution.feature;
 
         const existingPlan = planService.read(feature);
-        if (existingPlan && existingPlan.status !== 'planning') {
-          return toolError('Only draft plans can be expanded. Use warcraft_plan_write to revise an approved/executing plan directly.');
-        }
-
         const pendingManualTasks = taskService
           .list(feature)
           .filter((task) => task.origin === 'manual' && task.status === 'pending');
+        if (existingPlan && existingPlan.status !== 'planning') {
+          const availableManualTasks = pendingManualTasks.map((task) => task.folder);
+          const planWriteArgs = { feature, content: existingPlan.content };
+          const retryTaskExpandArgs =
+            availableManualTasks.length > 0
+              ? mode && mode !== 'auto'
+                ? { feature, tasks: availableManualTasks, mode }
+                : { feature, tasks: availableManualTasks }
+              : null;
+          return toolError(
+            'Only draft plans can be expanded. Use warcraft_plan_write to revise an approved/executing plan directly.',
+            [
+              `Revise the existing plan with warcraft_plan_write using ${JSON.stringify(planWriteArgs)}.`,
+              retryTaskExpandArgs
+                ? `After the plan is back in draft form, retry warcraft_task_expand with ${JSON.stringify(retryTaskExpandArgs)}.`
+                : 'If more manual work appears after revising the plan, retry warcraft_task_expand once the plan is back in draft form.',
+            ],
+            {
+              data: {
+                blockedReason: 'existing_plan_not_draft',
+                currentPlanStatus: existingPlan.status,
+                planWriteArgs,
+                retryTaskExpandArgs,
+              },
+              warnings: [
+                {
+                  type: 'existing_plan_not_draft',
+                  severity: 'error',
+                  message: 'Manual-task expansion only works against draft plans.',
+                  count: availableManualTasks.length,
+                },
+              ],
+            },
+          );
+        }
         if (pendingManualTasks.length === 0) {
           if (existingPlan?.status === 'planning') {
             return toolError(
