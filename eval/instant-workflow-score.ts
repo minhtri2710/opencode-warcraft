@@ -2066,6 +2066,43 @@ async function checkTaskExpandReturnsStructuredSelectionRecovery(): Promise<Chec
   };
 }
 
+async function checkTaskExpandReturnsStructuredDraftDiscoveryRecovery(): Promise<CheckResult> {
+  const ctx = createWorkspace();
+  ctx.featureService.create('doc-tune');
+  ctx.planService.write('doc-tune', '# doc-tune\n\nWorkflow Path: lightweight\n\n## Tasks\n\n### 1. Existing Task');
+  await ctx.taskTools.createTaskTool((name?: string) => name || 'doc-tune').execute({
+    feature: 'doc-tune',
+    name: 'Second Tiny Fix',
+    priority: 3,
+    description:
+      'Background: second tiny change. Impact: help text only. Safety: low. Verify: prompt tests. Rollback: revert.',
+  } as any);
+  const raw = (await ctx.taskTools.expandTaskTool((name?: string) => name || 'doc-tune').execute({
+    feature: 'doc-tune',
+    tasks: ['01-second-tiny-fix'],
+  } as any)) as string;
+  const parsed = parseToolResponse(raw) as any;
+  const pass =
+    parsed.success === false &&
+    parsed.data?.blockedReason === 'draft_plan_discovery_section_invalid' &&
+    parsed.data?.discoveryError &&
+    parsed.data?.repairPlanWriteArgs?.feature === 'doc-tune' &&
+    /Second Tiny Fix/.test(String(parsed.data?.repairPlanWriteArgs?.content || '')) &&
+    JSON.stringify(parsed.data?.affectedManualTasks) === JSON.stringify(['01-second-tiny-fix']) &&
+    Array.isArray(parsed.hints) &&
+    /warcraft_plan_write/.test(String(parsed.hints?.[0] || '')) &&
+    /warcraft_plan_approve|warcraft_task_expand/.test(String(parsed.hints?.[1] || '')) &&
+    Array.isArray(parsed.warnings) &&
+    parsed.warnings[0]?.type === 'draft_plan_discovery_section_invalid';
+  return {
+    id: 'task-expand-draft-discovery-structured-recovery',
+    pass,
+    detail: pass
+      ? 'warcraft_task_expand returns structured repair metadata when an existing draft plan is missing discovery details'
+      : `response=${JSON.stringify(parsed)}`,
+  };
+}
+
 async function checkTaskExpandReturnsStructuredDraftRepairRecovery(): Promise<CheckResult> {
   const ctx = createWorkspace();
   ctx.featureService.create('doc-tune');
@@ -2292,6 +2329,7 @@ async function main() {
     checkTaskExpandReturnsStructuredNonDraftRecovery(),
     checkTaskExpandReturnsStructuredNoPendingRecovery(),
     checkTaskExpandReturnsStructuredSelectionRecovery(),
+    checkTaskExpandReturnsStructuredDraftDiscoveryRecovery(),
     checkTaskExpandReturnsStructuredDraftRepairRecovery(),
     checkTaskExpandCanMergeIntoDraftPlan(),
     checkPromptsMentionInstantPath(),

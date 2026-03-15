@@ -879,6 +879,56 @@ describe('TaskTools', () => {
       ]);
     });
 
+    it('returns structured recovery metadata when an existing draft plan is missing required discovery details', async () => {
+      mockFeatureService.feature = {
+        ...mockFeatureService.feature,
+        status: 'planning',
+      };
+      mockPlanService.planResult = {
+        content: '# test-feature\n\nWorkflow Path: lightweight\n\n## Tasks\n\n### 1. Existing Task',
+        status: 'planning',
+      };
+
+      const createTool = taskTools.createTaskTool(resolveFeature);
+      await createTool.execute({
+        name: 'Second Tiny Fix',
+        description: 'Background: second tiny change. Impact: help text only. Safety: low. Verify: prompt tests. Rollback: revert.',
+        order: 2,
+        feature: undefined,
+        priority: 3,
+      });
+
+      const expandTool = taskTools.expandTaskTool(resolveFeature);
+      const raw = await expandTool.execute({ feature: undefined, tasks: ['02-second-tiny-fix'] });
+      const parsed = JSON.parse(raw);
+      const expectedMergedContent =
+        '# test-feature\n\nWorkflow Path: lightweight\n\n## Tasks\n\n### 1. Existing Task\n\n### 2. Second Tiny Fix\n\n**Depends on**: none\n\n**What to do**:\n- Carry forward the intent from manual task `02-second-tiny-fix`.\n- second tiny change. help text only.\n- Add explicit file targets, references, and guardrails before approval.\n\n**References**:\n- Existing manual task: `02-second-tiny-fix`\n\n**Verify**:\n- [ ] prompt tests.';
+
+      expect(parsed.success).toBe(false);
+      expect(parsed.error).toContain('Discovery section required before planning');
+      expect(parsed.hints).toEqual([
+        `Repair the merged draft with warcraft_plan_write using ${JSON.stringify({ feature: 'test-feature', content: expectedMergedContent })} and add the required \`## Discovery\` details.`,
+        'After writing the repaired draft, continue with warcraft_plan_approve or warcraft_task_expand depending on whether more manual tasks remain.',
+      ]);
+      expect(parsed.data).toEqual({
+        blockedReason: 'draft_plan_discovery_section_invalid',
+        discoveryError: expect.any(String),
+        repairPlanWriteArgs: {
+          feature: 'test-feature',
+          content: expectedMergedContent,
+        },
+        affectedManualTasks: ['02-second-tiny-fix'],
+      });
+      expect(parsed.warnings).toEqual([
+        {
+          type: 'draft_plan_discovery_section_invalid',
+          severity: 'error',
+          message: 'The existing draft plan is missing required discovery details, so merged manual work cannot be finalized yet.',
+          count: 1,
+        },
+      ]);
+    });
+
     it('can merge selected manual tasks into an existing draft plan', async () => {
       mockFeatureService.feature = {
         ...mockFeatureService.feature,

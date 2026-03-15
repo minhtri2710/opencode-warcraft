@@ -522,6 +522,35 @@ export class TaskTools {
 
         const discoveryError = validateDiscoverySection(planScaffold);
         if (discoveryError) {
+          if (existingPlan) {
+            const repairPlanWriteArgs = {
+              feature,
+              content: planScaffold,
+            };
+            return toolError(
+              discoveryError,
+              [
+                `Repair the merged draft with warcraft_plan_write using ${JSON.stringify(repairPlanWriteArgs)} and add the required \`## Discovery\` details.`,
+                'After writing the repaired draft, continue with warcraft_plan_approve or warcraft_task_expand depending on whether more manual tasks remain.',
+              ],
+              {
+                data: {
+                  blockedReason: 'draft_plan_discovery_section_invalid',
+                  discoveryError,
+                  repairPlanWriteArgs,
+                  affectedManualTasks: selectedTasks.map((task) => task.folder),
+                },
+                warnings: [
+                  {
+                    type: 'draft_plan_discovery_section_invalid',
+                    severity: 'error',
+                    message: 'The existing draft plan is missing required discovery details, so merged manual work cannot be finalized yet.',
+                    count: selectedTasks.length,
+                  },
+                ],
+              },
+            );
+          }
           return toolError(discoveryError);
         }
 

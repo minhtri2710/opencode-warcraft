@@ -1,2 +1,3 @@
-- Remaining structured-recovery work is extremely thin. Only pursue another blocker if it can return a genuinely valuable exact next command or continuation flow.
-- Plausible remaining candidate: inspect whether any other plan-tool or task-tool prose-only blocker still maps to a safe exact repair command without guessing. If not, stop rather than decorating generic dead ends.
+- Remaining structured-recovery work is close to exhausted. Only pursue another blocker if it can return a genuinely valuable exact next command or continuation flow.
+- Candidate to inspect next: the remaining prose-only blockers in task/plan tools now look either generic dead ends or internal-failure cases. Validate that before extending anything else.
+- If no blocker clears that bar, stop rather than decorating more generic errors for benchmark-only gain.
