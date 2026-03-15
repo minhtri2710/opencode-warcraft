@@ -1642,6 +1642,51 @@ async function checkTaskExpandReturnsStructuredLightweightRecovery(): Promise<Ch
   };
 }
 
+async function checkTaskExpandReturnsStructuredDraftRepairRecovery(): Promise<CheckResult> {
+  const ctx = createWorkspace();
+  ctx.featureService.create('doc-tune');
+  ctx.planService.write(
+    'doc-tune',
+    '# doc-tune\n\nWorkflow Path: lightweight\n\n## Discovery\n\nImpact: existing plan\nSafety: low\nVerify: tests\nRollback: revert',
+  );
+  const createTask = ctx.taskTools.createTaskTool((name?: string) => name || 'doc-tune');
+  await createTask.execute({
+    feature: 'doc-tune',
+    name: 'Second Tiny Fix',
+    priority: 3,
+    description:
+      'Background: second tiny change. Impact: help text only. Safety: low. Verify: prompt tests. Rollback: revert.',
+  } as any);
+
+  const raw = (await ctx.taskTools.expandTaskTool((name?: string) => name || 'doc-tune').execute({
+    feature: 'doc-tune',
+    tasks: ['01-second-tiny-fix'],
+  } as any)) as string;
+  const parsed = parseToolResponse(raw) as any;
+  const pass =
+    parsed.success === false &&
+    /## Tasks section/.test(String(parsed.error || '')) &&
+    Array.isArray(parsed.hints) &&
+    /warcraft_plan_write/.test(String(parsed.hints?.[0] || '')) &&
+    /retry warcraft_task_expand/i.test(String(parsed.hints?.[1] || '')) &&
+    parsed.data?.blockedReason === 'draft_plan_tasks_section_missing' &&
+    parsed.data?.requiredSection === '## Tasks' &&
+    parsed.data?.repairPlanWriteArgs?.feature === 'doc-tune' &&
+    /## Tasks/.test(String(parsed.data?.repairPlanWriteArgs?.content || '')) &&
+    parsed.data?.retryTaskExpandArgs?.feature === 'doc-tune' &&
+    JSON.stringify(parsed.data?.retryTaskExpandArgs?.tasks) === JSON.stringify(['01-second-tiny-fix']) &&
+    parsed.data?.retryTaskExpandArgs?.mode === 'lightweight' &&
+    Array.isArray(parsed.warnings) &&
+    parsed.warnings[0]?.type === 'draft_plan_tasks_section_missing';
+  return {
+    id: 'task-expand-draft-repair-structured-recovery',
+    pass,
+    detail: pass
+      ? 'warcraft_task_expand returns structured repair metadata when an existing draft plan is missing a tasks section'
+      : `response=${JSON.stringify(parsed)}`,
+  };
+}
+
 async function checkTaskExpandCanMergeIntoDraftPlan(): Promise<CheckResult> {
   const ctx = createWorkspace();
   ctx.featureService.create('doc-tune');
@@ -1813,6 +1858,7 @@ async function main() {
     checkTaskExpandReturnsPromotionFlow(),
     checkTaskExpandReturnsFollowUpExpansionForRemainingManualTasks(),
     checkTaskExpandReturnsStructuredLightweightRecovery(),
+    checkTaskExpandReturnsStructuredDraftRepairRecovery(),
     checkTaskExpandCanMergeIntoDraftPlan(),
     checkPromptsMentionInstantPath(),
     checkBeadsModeManualBriefPersistence(),

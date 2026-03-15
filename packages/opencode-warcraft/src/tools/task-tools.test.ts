@@ -667,6 +667,59 @@ describe('TaskTools', () => {
       ]);
     });
 
+    it('returns structured recovery metadata when an existing draft plan is missing a tasks section', async () => {
+      mockFeatureService.feature = {
+        ...mockFeatureService.feature,
+        status: 'planning',
+      };
+      mockPlanService.planResult = {
+        content: '# test-feature\n\nWorkflow Path: lightweight\n\n## Discovery\n\nImpact: existing plan\nSafety: low\nVerify: tests\nRollback: revert',
+        status: 'planning',
+      };
+
+      const createTool = taskTools.createTaskTool(resolveFeature);
+      await createTool.execute({
+        name: 'Second Tiny Fix',
+        description: 'Background: second tiny change. Impact: help text only. Safety: low. Verify: prompt tests. Rollback: revert.',
+        order: 2,
+        feature: undefined,
+        priority: 3,
+      });
+
+      const expandTool = taskTools.expandTaskTool(resolveFeature);
+      const raw = await expandTool.execute({ feature: undefined, tasks: ['02-second-tiny-fix'] });
+      const parsed = JSON.parse(raw);
+
+      expect(parsed.success).toBe(false);
+      expect(parsed.error).toContain('## Tasks section');
+      expect(parsed.hints).toEqual([
+        'Repair the draft with warcraft_plan_write using {"feature":"test-feature","content":"# test-feature\n\nWorkflow Path: lightweight\n\n## Discovery\n\nImpact: existing plan\nSafety: low\nVerify: tests\nRollback: revert\n\n## Tasks\n"} so the plan contains a `## Tasks` section.'.replace(/\n/g, '\\n'),
+        'Then retry warcraft_task_expand with {"feature":"test-feature","tasks":["02-second-tiny-fix"],"mode":"lightweight"}.',
+      ]);
+      expect(parsed.data).toEqual({
+        blockedReason: 'draft_plan_tasks_section_missing',
+        requiredSection: '## Tasks',
+        repairPlanWriteArgs: {
+          feature: 'test-feature',
+          content:
+            '# test-feature\n\nWorkflow Path: lightweight\n\n## Discovery\n\nImpact: existing plan\nSafety: low\nVerify: tests\nRollback: revert\n\n## Tasks\n',
+        },
+        retryTaskExpandArgs: {
+          feature: 'test-feature',
+          tasks: ['02-second-tiny-fix'],
+          mode: 'lightweight',
+        },
+      });
+      expect(parsed.warnings).toEqual([
+        {
+          type: 'draft_plan_tasks_section_missing',
+          severity: 'error',
+          message: 'The existing draft plan is missing a `## Tasks` section, so pending manual tasks cannot be merged into it.',
+          count: 1,
+        },
+      ]);
+    });
+
     it('can merge selected manual tasks into an existing draft plan', async () => {
       mockFeatureService.feature = {
         ...mockFeatureService.feature,

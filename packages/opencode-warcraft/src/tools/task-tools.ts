@@ -309,11 +309,41 @@ export class TaskTools {
           ? appendTasksToPlanScaffold(existingPlan.content, selectedTasks)
           : buildPlanScaffold(feature, planScaffoldMode, selectedTasks);
         if (!planScaffold) {
-          return toolError(
-            existingPlan
-              ? 'Failed to merge the selected manual tasks into the existing draft plan. Ensure the plan still contains a ## Tasks section.'
-              : 'Failed to build a reviewed plan scaffold from the selected manual tasks.',
-          );
+          if (existingPlan) {
+            const repairPlanWriteArgs = {
+              feature,
+              content: `${existingPlan.content.trimEnd()}\n\n## Tasks\n`,
+            };
+            const retryTaskExpandArgs = {
+              feature,
+              tasks: selectedTasks.map((task) => task.folder),
+              mode: planScaffoldMode,
+            };
+            return toolError(
+              'Failed to merge the selected manual tasks into the existing draft plan. Ensure the plan still contains a ## Tasks section.',
+              [
+                `Repair the draft with warcraft_plan_write using ${JSON.stringify(repairPlanWriteArgs)} so the plan contains a \`## Tasks\` section.`,
+                `Then retry warcraft_task_expand with ${JSON.stringify(retryTaskExpandArgs)}.`,
+              ],
+              {
+                data: {
+                  blockedReason: 'draft_plan_tasks_section_missing',
+                  requiredSection: '## Tasks',
+                  repairPlanWriteArgs,
+                  retryTaskExpandArgs,
+                },
+                warnings: [
+                  {
+                    type: 'draft_plan_tasks_section_missing',
+                    severity: 'error',
+                    message: 'The existing draft plan is missing a `## Tasks` section, so pending manual tasks cannot be merged into it.',
+                    count: selectedTasks.length,
+                  },
+                ],
+              },
+            );
+          }
+          return toolError('Failed to build a reviewed plan scaffold from the selected manual tasks.');
         }
 
         const discoveryError = validateDiscoverySection(planScaffold);
